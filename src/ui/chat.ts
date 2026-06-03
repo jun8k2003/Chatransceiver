@@ -28,6 +28,7 @@ export class ChatWindowUI {
   private recordingTimerEl: HTMLSpanElement;
   private dictationPreviewEl: HTMLDivElement;
   private stopRecBtnEl: HTMLButtonElement;
+  private previewBtnEl: HTMLButtonElement;
   private sendRecBtnEl: HTMLButtonElement;
   private cancelRecBtnEl: HTMLButtonElement;
 
@@ -35,6 +36,7 @@ export class ChatWindowUI {
   private onStartTalk: () => void;
   private onStopTalk: () => void;
   private onSendAudio: () => void;
+  private onPreviewAudio: () => void;
   private onCancelTalk: () => void;
   private onPlayMessage: (messageId: string) => void;
   private onRevokeMessage: (messageId: string) => void;
@@ -46,6 +48,7 @@ export class ChatWindowUI {
     onStartTalk: () => void,
     onStopTalk: () => void,
     onSendAudio: () => void,
+    onPreviewAudio: () => void,
     onCancelTalk: () => void,
     onPlayMessage: (messageId: string) => void,
     onRevokeMessage: (messageId: string) => void,
@@ -55,6 +58,7 @@ export class ChatWindowUI {
     this.onStartTalk = onStartTalk;
     this.onStopTalk = onStopTalk;
     this.onSendAudio = onSendAudio;
+    this.onPreviewAudio = onPreviewAudio;
     this.onCancelTalk = onCancelTalk;
     this.onPlayMessage = onPlayMessage;
     this.onRevokeMessage = onRevokeMessage;
@@ -73,11 +77,12 @@ export class ChatWindowUI {
 
     // 録音モーダルのバインド
     this.modalEl = document.getElementById('recordingModal') as HTMLDivElement;
-    this.recordingTimerEl = this.modalEl.querySelector('#recordingTimer') as HTMLSpanElement;
-    this.dictationPreviewEl = this.modalEl.querySelector('#recordingDictationPreview') as HTMLDivElement;
-    this.stopRecBtnEl = this.modalEl.querySelector('.btn-modal-stop') as HTMLButtonElement;
-    this.sendRecBtnEl = this.modalEl.querySelector('.btn-modal-send') as HTMLButtonElement;
-    this.cancelRecBtnEl = this.modalEl.querySelector('.btn-modal-cancel') as HTMLButtonElement;
+    this.recordingTimerEl = document.getElementById('recordingTimer') as HTMLSpanElement;
+    this.dictationPreviewEl = document.getElementById('recordingDictationPreview') as HTMLDivElement;
+    this.stopRecBtnEl = document.querySelector('.btn-modal-stop') as HTMLButtonElement;
+    this.previewBtnEl = document.querySelector('.btn-modal-preview') as HTMLButtonElement;
+    this.sendRecBtnEl = document.querySelector('.btn-modal-send') as HTMLButtonElement;
+    this.cancelRecBtnEl = document.querySelector('.btn-modal-cancel') as HTMLButtonElement;
 
     // レベルメーターバーのバインド
     const meterContainer = this.modalEl.querySelector('.meter-container') as HTMLDivElement;
@@ -113,6 +118,11 @@ export class ChatWindowUI {
     // 録音モーダル - 録音停止
     this.stopRecBtnEl.addEventListener('click', () => {
       this.onStopTalk();
+    });
+
+    // 録音モーダル - プレビュー
+    this.previewBtnEl.addEventListener('click', () => {
+      this.onPreviewAudio();
     });
 
     // 録音モーダル - 送信
@@ -296,11 +306,20 @@ export class ChatWindowUI {
    */
   showRecordingModal(): void {
     this.modalEl.classList.add('show');
-    // メーターのリセット
+    this.stopRecBtnEl.disabled = false;
+    this.previewBtnEl.disabled = true;
+    this.sendRecBtnEl.disabled = false;
+    this.cancelRecBtnEl.disabled = false;
+    
+    this.stopRecBtnEl.style.display = '';
+    this.previewBtnEl.style.display = '';
+    this.sendRecBtnEl.style.display = '';
+    this.cancelRecBtnEl.style.display = '';
+
+    this.dictationPreviewEl.textContent = '認識中...';
+    // メーターの初期化
     this.updateMicLevel(0);
     this.updateRecordingTimer('00:15');
-    this.updateDictationPreview('');
-    this.stopRecBtnEl.style.display = 'block';
 
     // ステータス表示のリセット
     const statusTextEl = this.modalEl.querySelector('.recording-status span:nth-child(2)') as HTMLSpanElement;
@@ -308,6 +327,7 @@ export class ChatWindowUI {
     if (statusTextEl) statusTextEl.textContent = '音声録音中...';
     if (dotEl) dotEl.classList.remove('stopped');
   }
+
 
   updateRecordingTimer(text: string): void {
     if (this.recordingTimerEl) this.recordingTimerEl.textContent = text;
@@ -318,7 +338,8 @@ export class ChatWindowUI {
   }
 
   hideStopButton(): void {
-    this.stopRecBtnEl.style.display = 'none';
+    this.stopRecBtnEl.disabled = true;
+    this.previewBtnEl.disabled = false;
     
     // ステータス表示の更新
     const statusTextEl = this.modalEl.querySelector('.recording-status span:nth-child(2)') as HTMLSpanElement;

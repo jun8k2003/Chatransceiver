@@ -61,6 +61,7 @@ export class App {
       () => this.handleStartTalk(),
       () => this.handleStopTalk(),
       () => this.handleSendAudio(),
+      () => this.handlePreviewAudio(),
       () => this.handleCancelTalk(),
       (msgId) => this.handlePlayMessage(msgId),
       (msgId) => this.handleRevokeMessage(msgId),
@@ -527,7 +528,6 @@ export class App {
     if (this.recordingTimerId) { clearTimeout(this.recordingTimerId); this.recordingTimerId = null; }
     if (this.recordingCountdownId) { clearInterval(this.recordingCountdownId); this.recordingCountdownId = null; }
     this.state.isRecording = false;
-    this.playbackQueue.resume();
   }
 
   /**
@@ -612,6 +612,7 @@ export class App {
     }
 
     this.uiController.hideRecordingModal();
+    this.playbackQueue.resume();
 
     if (!this.recordedAudioBlob) return;
 
@@ -642,6 +643,18 @@ export class App {
     this.uiController.hideRecordingModal();
     this.audioManager.stopRecording().catch(() => {});
     this.audioManager.stopDictation().catch(() => {});
+    this.playbackQueue.resume();
+  }
+
+  /**
+   * 録音した音声のプレビュー再生
+   */
+  private handlePreviewAudio(): void {
+    if (this.recordedAudioBlob) {
+      this.audioManager.playBlob(this.recordedAudioBlob).catch(err => {
+        console.error('Failed to play preview audio:', err);
+      });
+    }
   }
 
   /**

@@ -46,7 +46,7 @@ export class AudioManager {
     // マイクストリームの取得（OSデフォルトマイク）
     this.micStream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        autoGainControl: false,
+        autoGainControl: true,
         echoCancellation: true,
         noiseSuppression: true
       }
@@ -135,6 +135,16 @@ export class AudioManager {
       this.audioContext = null;
     }
     this.analyser = null;
+  }
+
+  /**
+   * Blobから音声を直接再生する（プレビュー用）
+   */
+  playBlob(blob: Blob): Promise<void> {
+    const url = URL.createObjectURL(blob);
+    return this.playAudio(url).finally(() => {
+      URL.revokeObjectURL(url);
+    });
   }
 
   /**

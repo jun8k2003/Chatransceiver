@@ -664,26 +664,21 @@ body.resizing-v * {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: var(--transition-normal);
+  transition: all 0.3s ease;
   font-size: 18px;
+  flex: 6;
+  border-radius: 22px;
 }
 
 .btn-talk-trigger:hover {
   background: var(--color-accent);
   color: #fff;
   border-color: var(--color-accent);
-  transform: scale(1.05);
-}
-
-.message-input-container {
-  flex: 1;
-  position: relative;
-  display: flex;
-  gap: 8px;
+  transform: scale(1.02);
 }
 
 .chat-input {
-  flex: 1;
+  flex: 3;
   padding: 12px 16px;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -691,7 +686,7 @@ body.resizing-v * {
   color: var(--color-text-primary);
   font-family: var(--font-family);
   font-size: 14px;
-  transition: var(--transition-normal);
+  transition: all 0.3s ease;
 }
 
 .chat-input:focus {
@@ -700,9 +695,9 @@ body.resizing-v * {
 }
 
 .btn-send-message {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  flex: 1;
+  height: 44px;
+  border-radius: 22px;
   background: var(--color-accent);
   border: none;
   color: #fff;
@@ -710,12 +705,22 @@ body.resizing-v * {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: var(--transition-normal);
+  transition: all 0.3s ease;
 }
 
 .btn-send-message:hover {
   background: var(--color-accent-hover);
   transform: scale(1.05);
+}
+
+.chat-footer:has(.chat-input:focus) .btn-talk-trigger {
+  flex: 1;
+}
+.chat-footer:has(.chat-input:focus) .chat-input {
+  flex: 8;
+}
+.chat-footer:has(.chat-input:focus) .btn-send-message {
+  flex: 1;
 }
 
 /* ========================================================
@@ -864,9 +869,17 @@ body.resizing-v * {
   font-weight: 500;
   cursor: pointer;
   transition: var(--transition-normal);
-  font-size: 14px;
+  font-size: 13px;
+  white-space: nowrap;
+  padding: 12px 8px;
   text-align: center;
   border: none;
+}
+
+.btn-modal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
 }
 
 .btn-modal-stop {

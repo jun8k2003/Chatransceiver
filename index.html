@@ -115,16 +115,14 @@
           <!-- プレースホルダーまたはメッセージバブルが動的に挿入されます -->
         </div>
 
-        <!-- 送信フッター (発話ボタン ＆ テキスト入力) -->
         <footer class="chat-footer">
           <!-- 音声発話（録音）トリガーボタン -->
           <button class="btn-talk-trigger" title="発話する">🎙️</button>
           
-          <!-- テキストメッセージ入力エリア (DEC-018) -->
-          <div class="message-input-container">
-            <input type="text" class="chat-input" placeholder="メッセージを入力..." disabled />
-            <button class="btn-send-message" disabled>➔</button>
-          </div>
+          <!-- テキストメッセージ入力エリア -->
+          <input type="text" class="chat-input" placeholder="メッセージを入力..." disabled />
+          
+          <button class="btn-send-message" disabled>➔</button>
         </footer>
       </section>
 
@@ -146,12 +144,11 @@
           <!-- 20本のバーがJavaScriptで動的生成されます -->
         </div>
         
-        <div class="recording-actions" style="flex-direction: column; gap: 10px;">
-          <button class="btn-modal btn-modal-stop" style="background-color: var(--color-danger); color: white; width: 100%;">録音を停止する</button>
-          <div style="display: flex; gap: 10px; width: 100%;">
-            <button class="btn-modal btn-modal-send" style="flex: 1;">送信</button>
-            <button class="btn-modal btn-modal-cancel" style="flex: 1;">キャンセル</button>
-          </div>
+        <div class="recording-actions" style="display: grid; grid-template-columns: 3fr 2fr; gap: 12px; width: 100%;">
+          <button class="btn-modal btn-modal-stop" style="background-color: var(--color-danger); color: white;">停止</button>
+          <button class="btn-modal btn-modal-preview" style="background-color: var(--color-accent); color: white;" disabled>▶ プレビュー</button>
+          <button class="btn-modal btn-modal-send">送信</button>
+          <button class="btn-modal btn-modal-cancel">キャンセル</button>
         </div>
       </div>
     </div>
