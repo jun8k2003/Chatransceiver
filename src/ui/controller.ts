@@ -1,0 +1,330 @@
+import { CommunitySelectorUI } from './community';
+import { UserListUI } from './users';
+import type { MemberItem } from './users';
+import { GroupListUI } from './groups';
+import type { GroupItem } from './groups';
+import { ChatWindowUI } from './chat';
+import type { MessageItem } from './chat';
+
+export interface UIState {
+  currentUser: { id: string; name: string } | null;
+  currentCommunity: { id: string; slug: string; name: string } | null;
+  activeChatHistoryId: string | null;
+  selectedUserIds: string[];
+  members: MemberItem[];
+  groups: GroupItem[];
+  messages: MessageItem[];
+  playingUserId?: string;
+  playingGroupId?: string;
+  autoplayEnabled: boolean;
+}
+
+/**
+ * UIController (src/ui/controller.ts)
+ * 画面上のすべてのビューコンポーネント（ペイン、ヘッダー、モーダル）を統括し、
+ * アプリのグローバルステートに応じたリアクティブな描画と相互同期を管理します。
+ */
+export class UIController {
+  private communitySelector: CommunitySelectorUI;
+  private userList: UserListUI;
+  private groupList: GroupListUI;
+  private chatWindow: ChatWindowUI;
+
+  // ログインUIの要素
+  private loginScreenEl: HTMLDivElement;
+  private authErrorMessageEl: HTMLDivElement;
+  private headerUserNicknameEl: HTMLSpanElement;
+
+  // 環境設定関連の要素
+  private settingsModalEl: HTMLDivElement;
+  private settingsNicknameInput: HTMLInputElement;
+  private settingsAutoplayCheck: HTMLInputElement;
+  private settingsSaveBtn: HTMLButtonElement;
+  private settingsCancelBtn: HTMLButtonElement;
+  private settingsLeaveContainerEl: HTMLDivElement;
+  private settingsCurrentCommunityNameEl: HTMLElement;
+
+  constructor(
+    onConnectCommunity: (slug: string) => void,
+    onDisconnectCommunity: () => void,
+    onLeaveCommunity: () => void,
+    onUserCheckChange: (selectedUserIds: string[]) => void,
+    onGroupSelect: (groupId: string | null) => void,
+    onSendText: (text: string) => void,
+    onStartTalk: () => void,
+    onStopTalk: () => void,
+    onCancelTalk: () => void,
+    onPlayMessage: (messageId: string) => void,
+    onSignInWithGoogle: () => Promise<void>,
+    onSignOut: () => Promise<void>,
+    onBackToSidebar: () => void,
+    onSaveSettings: (nickname: string, autoplay: boolean) => void
+  ) {
+    // ログインUI
+    this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
+    this.authErrorMessageEl = document.getElementById('authErrorMessage') as HTMLDivElement;
+    this.headerUserNicknameEl = document.getElementById('userNickname') as HTMLSpanElement;
+    const btnAuthGoogle = document.getElementById('btnAuthGoogle') as HTMLButtonElement;
+
+    const showAuthError = (msg: string) => {
+      this.authErrorMessageEl.textContent = msg;
+      this.authErrorMessageEl.style.display = 'block';
+    };
+
+    const clearAuthError = () => {
+      this.authErrorMessageEl.textContent = '';
+      this.authErrorMessageEl.style.display = 'none';
+    };
+
+    const btnSignOut = document.getElementById('btnSignOut');
+    if (btnSignOut) {
+      btnSignOut.addEventListener('click', async () => {
+        this.settingsModalEl.classList.remove('show');
+        await onSignOut();
+      });
+    }
+
+    // Google認証ボタン押下イベント
+    btnAuthGoogle.addEventListener('click', async () => {
+      btnAuthGoogle.disabled = true;
+      btnAuthGoogle.textContent = 'Googleへ接続中...';
+      clearAuthError();
+
+      try {
+        await onSignInWithGoogle();
+      } catch (err: any) {
+        console.error('Google authentication error:', err);
+        showAuthError(err.message || '認証に失敗しました。');
+        btnAuthGoogle.disabled = false;
+        btnAuthGoogle.textContent = 'Google でログイン';
+      }
+    });
+
+    // 各UIパーツクラスの初期化
+    this.communitySelector = new CommunitySelectorUI(
+      'communityConnector',
+      onConnectCommunity,
+      onDisconnectCommunity
+    );
+
+    this.userList = new UserListUI('userPane', onUserCheckChange);
+    this.groupList = new GroupListUI('groupPane', onGroupSelect);
+    
+    this.chatWindow = new ChatWindowUI(
+      'chatPane',
+      onSendText,
+      onStartTalk,
+      onStopTalk,
+      onCancelTalk,
+      onPlayMessage,
+      onBackToSidebar
+    );
+
+    // ヘッダーの設定ボタン
+    const settingsBtn = document.querySelector('.btn-settings') as HTMLButtonElement;
+    
+    // 設定モーダルのバインド
+    this.settingsModalEl = document.getElementById('settingsModal') as HTMLDivElement;
+    this.settingsNicknameInput = this.settingsModalEl.querySelector('#settingsNickname') as HTMLInputElement;
+    this.settingsAutoplayCheck = this.settingsModalEl.querySelector('#settingsAutoplay') as HTMLInputElement;
+    this.settingsSaveBtn = this.settingsModalEl.querySelector('.btn-settings-save') as HTMLButtonElement;
+    this.settingsCancelBtn = this.settingsModalEl.querySelector('.btn-settings-cancel') as HTMLButtonElement;
+    this.settingsLeaveContainerEl = this.settingsModalEl.querySelector('#settingsLeaveContainer') as HTMLDivElement;
+    this.settingsCurrentCommunityNameEl = this.settingsModalEl.querySelector('#settingsCurrentCommunityName') as HTMLElement;
+    const btnSettingsLeave = this.settingsModalEl.querySelector('#btnSettingsLeave') as HTMLButtonElement;
+
+    if (btnSettingsLeave) {
+      btnSettingsLeave.addEventListener('click', () => {
+        if (confirm('本当にこのコミュニティから退会しますか？（参加履歴からも削除されます）')) {
+          this.settingsModalEl.classList.remove('show');
+          onLeaveCommunity();
+        }
+      });
+    }
+
+    // 設定ボタンクリック時にモーダルを表示
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        this.settingsModalEl.classList.add('show');
+      });
+    }
+
+    // キャンセルボタン
+    this.settingsCancelBtn.addEventListener('click', () => {
+      this.settingsModalEl.classList.remove('show');
+    });
+
+    // 保存ボタン
+    this.settingsSaveBtn.addEventListener('click', () => {
+      const nickname = this.settingsNicknameInput.value.trim();
+      const autoplay = this.settingsAutoplayCheck.checked;
+      if (nickname) {
+        onSaveSettings(nickname, autoplay);
+        this.settingsModalEl.classList.remove('show');
+      }
+    });
+
+    // マイク権限URLコピーボタン (DEC-008)
+    const btnCopyMicUrl = this.settingsModalEl.querySelector('#btnCopyMicUrl') as HTMLButtonElement;
+    const inputMicUrl = this.settingsModalEl.querySelector('#settingsMicUrl') as HTMLInputElement;
+    if (btnCopyMicUrl && inputMicUrl) {
+      btnCopyMicUrl.addEventListener('click', () => {
+        navigator.clipboard.writeText(inputMicUrl.value).then(() => {
+          const originalText = btnCopyMicUrl.textContent;
+          btnCopyMicUrl.textContent = '✅';
+          setTimeout(() => { btnCopyMicUrl.textContent = originalText; }, 2000);
+        }).catch(err => {
+          console.error('Failed to copy text: ', err);
+          alert('コピーに失敗しました。');
+        });
+      });
+    }
+
+    // スピーカー/音声権限URLコピーボタン
+    const btnCopySoundUrl = this.settingsModalEl.querySelector('#btnCopySoundUrl') as HTMLButtonElement;
+    const inputSoundUrl = this.settingsModalEl.querySelector('#settingsSoundUrl') as HTMLInputElement;
+    if (btnCopySoundUrl && inputSoundUrl) {
+      btnCopySoundUrl.addEventListener('click', () => {
+        navigator.clipboard.writeText(inputSoundUrl.value).then(() => {
+          const originalText = btnCopySoundUrl.textContent;
+          btnCopySoundUrl.textContent = '✅';
+          setTimeout(() => { btnCopySoundUrl.textContent = originalText; }, 2000);
+        }).catch(err => {
+          console.error('Failed to copy text: ', err);
+          alert('コピーに失敗しました。');
+        });
+      });
+    }
+  }
+
+  /**
+   * アプリ状態（State）に基づく画面全体の再描画 (DEC-012)
+   */
+  render(state: UIState): void {
+    // 1. ログイン画面の表示・非表示切り替え
+    if (!state.currentUser) {
+      this.loginScreenEl.style.display = 'flex';
+      return;
+    } else {
+      this.loginScreenEl.style.display = 'none';
+      this.headerUserNicknameEl.textContent = state.currentUser.name;
+      
+      // 設定画面の初期値をセット（入力中以外の時に値を同期）
+      if (document.activeElement !== this.settingsNicknameInput) {
+        this.settingsNicknameInput.value = state.currentUser.name;
+      }
+      this.settingsAutoplayCheck.checked = state.autoplayEnabled;
+      
+      // 退会コントロールの表示制御
+      if (state.currentCommunity) {
+        this.settingsLeaveContainerEl.style.display = 'block';
+        this.settingsCurrentCommunityNameEl.textContent = state.currentCommunity.name;
+      } else {
+        this.settingsLeaveContainerEl.style.display = 'none';
+        this.settingsCurrentCommunityNameEl.textContent = '-';
+      }
+    }
+
+    // モバイル用表示切り替えクラスの制御 (has-active-chat)
+    const containerEl = document.querySelector('.app-container') as HTMLElement;
+    if (containerEl) {
+      const isChatActive = !!state.activeChatHistoryId || (state.selectedUserIds.length >= 2);
+      if (isChatActive) {
+        containerEl.classList.add('has-active-chat');
+      } else {
+        containerEl.classList.remove('has-active-chat');
+      }
+    }
+
+    // 2. コミュニティ接続状態の更新
+    const isConnected = !!state.currentCommunity;
+    this.communitySelector.updateConnectionState(
+      isConnected,
+      state.currentCommunity?.slug
+    );
+
+    if (!isConnected) {
+      // 未接続時はプレースホルダーと空リストを描画
+      this.userList.render([], [], state.playingUserId);
+      this.groupList.render([], null, state.playingGroupId);
+      this.chatWindow.render([], '', 'unconnected');
+      return;
+    }
+
+    // コミュニティ履歴への保存
+    if (state.currentCommunity) {
+      this.communitySelector.saveToHistory(
+        state.currentCommunity.slug,
+        state.currentCommunity.name
+      );
+    }
+
+    // 3. 個別チャット一覧 (左ペイン) の描画
+    this.userList.render(state.members, state.selectedUserIds, state.playingUserId);
+
+    // 4. グループチャット一覧 (中央ペイン) の描画
+    this.groupList.render(
+      state.groups,
+      state.activeChatHistoryId,
+      state.playingGroupId
+    );
+
+    // 5. 右ペイン (チャットウィンドウ) の描画
+    if (state.activeChatHistoryId) {
+      // 既存チャットルームのアクティブ時
+      let roomTitle = '';
+      let roomMembers = '';
+      if (state.activeChatHistoryId.startsWith('room_g')) {
+        const group = state.groups.find(g => g.id === state.activeChatHistoryId);
+        roomTitle = group ? group.name : 'グループチャット';
+        roomMembers = group ? `${group.memberCount} 人のメンバー` : '';
+      } else {
+        const targetUserId = state.activeChatHistoryId.replace('room_u', 'u'); // room_u1 -> u1 に対応するため
+        const member = state.members.find(m => m.id === targetUserId);
+        roomTitle = member ? member.name : '個別チャット';
+        roomMembers = member ? (member.isOnline ? '● オンライン' : 'オフライン') : '';
+      }
+      this.chatWindow.render(state.messages, state.currentUser.id, 'chat', undefined, roomTitle, roomMembers);
+    } else if (state.selectedUserIds.length >= 2) {
+      // 新規グループ作成中プレースホルダー時 (DEC-011)
+      const selectedNames = state.members
+        .filter((m) => state.selectedUserIds.includes(m.id))
+        .map((m) => m.name)
+        .join(', ');
+
+      this.chatWindow.render(
+        [],
+        state.currentUser.id,
+        'placeholder',
+        {
+          title: '👥 新規グループチャットを作成中...',
+          subtitle: `メンバー: ${selectedNames}<br>最初のボイスまたはテキストを送信すると、このメンバーで新しいグループチャットが開始され、一覧に追加されます。`
+        }
+      );
+    } else {
+      // 何も選択されていない時
+      this.chatWindow.render(
+        [],
+        state.currentUser.id,
+        'placeholder',
+        {
+          title: '💬 チャットを開始しましょう',
+          subtitle: '左ペインから話したいメンバーをチェック（複数選択可）するか、グループを選択してください。'
+        }
+      );
+    }
+  }
+
+  // 録音ダイアログ制御の委譲
+  showRecordingModal(): void { this.chatWindow.showRecordingModal(); }
+  hideRecordingModal(): void { this.chatWindow.hideRecordingModal(); }
+  updateMicLevel(level: number): void { this.chatWindow.updateMicLevel(level); }
+  showMicError(siteUrl: string): void { this.chatWindow.showMicError(siteUrl); }
+  
+  /**
+   * コミュニティ退出時に履歴ドロップダウンから削除
+   */
+  handleCommunityLeave(slug: string): void {
+    this.communitySelector.removeFromHistory(slug);
+  }
+}

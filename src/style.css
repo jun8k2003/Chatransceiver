@@ -1,0 +1,1095 @@
+/* Google Fonts の導入 */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+
+:root {
+  --font-family: 'Outfit', 'Noto Sans JP', sans-serif;
+  
+  /* カラー定義 */
+  --bg-main: #0b0d19;
+  --bg-panel: rgba(18, 20, 38, 0.6);
+  --bg-input: rgba(30, 35, 62, 0.8);
+  --border-color: rgba(255, 255, 255, 0.08);
+  
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  
+  --color-accent: #3b82f6; /* ブルー */
+  --color-accent-hover: #2563eb;
+  --color-success: #10b981; /* グリーン（送信・録音中） */
+  --color-danger: #ef4444; /* レッド（未読・警告） */
+  
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+  --glass-blur: blur(16px);
+  --transition-normal: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-main);
+  color: var(--color-text-primary);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* スクロールバーのカスタマイズ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ========================================================
+   ヘッダー（最上部接続コントロール）
+   ======================================================== */
+.app-header {
+  height: 65px;
+  background-color: rgba(11, 13, 25, 0.8);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: var(--glass-blur);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 100;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 編集可能コンボボックス (Community Selector) */
+.community-connector {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.combobox-container {
+  position: relative;
+  width: 280px;
+}
+
+.combobox-input {
+  width: 100%;
+  padding: 10px 36px 10px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: 14px;
+  transition: var(--transition-normal);
+}
+
+.combobox-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.combobox-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: var(--transition-normal);
+}
+
+.combobox-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 100%;
+  background: #181b2f;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: var(--shadow-lg);
+  display: none;
+}
+
+.combobox-dropdown.show {
+  display: block;
+}
+
+.dropdown-item {
+  padding: 10px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: var(--transition-normal);
+  display: flex;
+  justify-content: space-between;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-accent);
+}
+
+.btn-connect {
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: var(--font-family);
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+
+.btn-connect:hover {
+  background: var(--color-accent-hover);
+}
+
+.btn-leave {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  display: none; /* 接続時のみ表示 */
+}
+
+.btn-leave:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* ユーザーセッション情報 */
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-nickname {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-settings {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  transition: var(--transition-normal);
+}
+
+.btn-settings:hover {
+  color: var(--color-text-primary);
+}
+
+/* ========================================================
+   メインレイアウト (2カラム・上下分割構成)
+   ======================================================== */
+.app-container {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - 65px);
+  position: relative;
+}
+
+/* 左サイドバー */
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: none;
+}
+
+/* 各ペインの共通定義 */
+.pane {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-panel);
+  backdrop-filter: var(--glass-blur);
+  /* 描画のチラつきを抑えるためのGPUハードウェアアクセラレーション有効化 */
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.sidebar .pane {
+  border-right: none;
+}
+
+.sidebar .user-pane {
+  height: 50%;
+  min-height: 100px;
+}
+
+.sidebar .group-pane {
+  flex: 1;
+  min-height: 100px;
+}
+
+/* スプリッタースタイル */
+.splitter-h {
+  width: 6px;
+  cursor: col-resize;
+  background-color: var(--border-color);
+  transition: background-color 0.2s;
+  z-index: 10;
+  height: 100%;
+}
+.splitter-h:hover,
+.splitter-h.resizing {
+  background-color: var(--color-accent);
+}
+
+.splitter-v {
+  height: 6px;
+  cursor: row-resize;
+  background-color: var(--border-color);
+  transition: background-color 0.2s;
+  z-index: 10;
+  width: 100%;
+}
+.splitter-v:hover,
+.splitter-v.resizing {
+  background-color: var(--color-accent);
+}
+
+/* リサイズ時の選択無効・カーソル固定用クラス */
+body.resizing-h,
+body.resizing-h * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.resizing-v,
+body.resizing-v * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
+.pane-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pane-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.pane-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+}
+
+/* 右ペイン: チャットウィンドウ (残り幅) */
+.chat-pane {
+  flex: 1;
+  border-right: none;
+  background-color: rgba(9, 10, 18, 0.4);
+}
+
+/* ========================================================
+   リストアイテム (ユーザー・グループのUI)
+   ======================================================== */
+.list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: var(--transition-normal);
+  border-left: 3px solid transparent;
+}
+
+.list-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.list-item.selected {
+  background: rgba(59, 130, 246, 0.08);
+  border-left-color: var(--color-accent);
+}
+
+.item-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.item-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.item-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.item-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.item-status {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* 再生中インジケータ (🔊) */
+.playing-indicator {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.list-item.playing .playing-indicator {
+  display: flex;
+}
+
+.wave-bar {
+  width: 2px;
+  height: 12px;
+  background: var(--color-success);
+  animation: bounce 0.8s ease-in-out infinite alternate;
+}
+.wave-bar:nth-child(2) { animation-delay: 0.2s; }
+.wave-bar:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+  0% { height: 3px; }
+  100% { height: 14px; }
+}
+
+/* 未読バッジ */
+.unread-badge {
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 2px 6px;
+  min-width: 18px;
+  text-align: center;
+  display: none;
+}
+
+.list-item.unread .unread-badge {
+  display: block;
+}
+
+/* 美しいチェックボックス */
+.checkbox-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--color-text-muted);
+  border-radius: 4px;
+  position: relative;
+  transition: var(--transition-normal);
+}
+
+.checkbox-wrapper input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.checkbox-wrapper input:checked ~ .checkbox-custom {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.checkbox-wrapper input:checked ~ .checkbox-custom::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+/* グループチャット用のラジオ・単一チェック */
+.group-pane .checkbox-custom {
+  border-radius: 50%;
+}
+.group-pane .checkbox-wrapper input:checked ~ .checkbox-custom::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  transform: none;
+}
+
+/* ========================================================
+   右ペイン: チャットウィンドウ
+   ======================================================== */
+.chat-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(11, 13, 25, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-room-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-room-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.chat-room-members-text {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* メッセージバブル */
+.message-bubble {
+  max-width: 65%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: flex-start;
+}
+
+.message-bubble.outgoing {
+  align-self: flex-end;
+}
+
+.message-sender {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  padding: 0 4px;
+}
+
+.message-body {
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.message-bubble.incoming .message-body {
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-top-left-radius: 4px;
+}
+
+.message-bubble.outgoing .message-body {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #fff;
+  border-top-right-radius: 4px;
+}
+
+/* メッセージ再生ボタン (▶) */
+.btn-play-msg {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-normal);
+  font-size: 10px;
+}
+
+.btn-play-msg:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+.message-text {
+  flex: 1;
+}
+
+.message-time {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  align-self: flex-end;
+  padding: 0 4px;
+}
+
+.message-bubble.outgoing .message-time {
+  align-self: flex-end;
+}
+
+/* ========================================================
+   チャット送信フッター (テキスト ＆ 発話ボタン)
+   ======================================================== */
+.chat-footer {
+  padding: 16px 24px;
+  background: rgba(11, 13, 25, 0.5);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-talk-trigger {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-normal);
+  font-size: 18px;
+}
+
+.btn-talk-trigger:hover {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+  transform: scale(1.05);
+}
+
+.message-input-container {
+  flex: 1;
+  position: relative;
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 22px;
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: 14px;
+  transition: var(--transition-normal);
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.btn-send-message {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-normal);
+}
+
+.btn-send-message:hover {
+  background: var(--color-accent-hover);
+  transform: scale(1.05);
+}
+
+/* ========================================================
+   新規作成時 / 未接続時のプレースホルダー表示
+   ======================================================== */
+.chat-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  gap: 16px;
+  text-align: center;
+  padding: 40px;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  color: var(--color-text-muted);
+}
+
+.placeholder-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.placeholder-subtitle {
+  font-size: 13px;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* ========================================================
+   録音モーダルダイアログ
+   ======================================================== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(5, 7, 16, 0.7);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.modal-overlay.show {
+  display: flex;
+  opacity: 1;
+}
+
+.modal-content {
+  background: #15182a;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 30px;
+  width: 360px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  box-shadow: var(--shadow-lg);
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
+}
+
+.modal-overlay.show .modal-content {
+  transform: scale(1);
+}
+
+.recording-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* マイク入力レベルメーター */
+.meter-container {
+  width: 100%;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.meter-bar {
+  width: 4px;
+  height: 5px;
+  background: var(--color-success);
+  border-radius: 2px;
+  transition: height 0.05s ease;
+}
+
+.recording-status {
+  font-size: 12px;
+  color: var(--color-success);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--color-success);
+  border-radius: 50%;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+
+.recording-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.btn-modal {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  font-family: var(--font-family);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-normal);
+  font-size: 14px;
+  text-align: center;
+  border: none;
+}
+
+.btn-modal-stop {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.btn-modal-stop:hover {
+  background: #dc2626;
+}
+
+.btn-modal-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-modal-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+}
+
+/* ========================================================
+   ログイン画面 (Full Screen Overlay)
+   ======================================================== */
+.login-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-main);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background: rgba(18, 20, 38, 0.4);
+  border: 1px solid var(--border-color);
+  backdrop-filter: var(--glass-blur);
+  border-radius: 24px;
+  padding: 40px;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  gap: 24px;
+}
+
+.login-logo {
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.btn-google-login {
+  width: 100%;
+  padding: 12px 24px;
+  border-radius: 12px;
+  background: #fff;
+  color: #0b0d19;
+  border: none;
+  font-family: var(--font-family);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: var(--transition-normal);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-google-login:hover {
+  background: #f1f5f9;
+  transform: translateY(-1px);
+}
+
+/* モック用のログインプロンプト */
+.mock-login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mock-input {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: 14px;
+  outline: none;
+  transition: var(--transition-normal);
+}
+
+.mock-input:focus {
+  border-color: var(--color-accent);
+}
+
+.btn-mock-login {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  font-family: var(--font-family);
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+
+.btn-mock-login:hover {
+  background: var(--color-accent-hover);
+}
+
+/* 環境設定用スタイル */
+.settings-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.settings-group label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  width: 100%;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 12px;
+  margin-bottom: 8px;
+}
+
+.btn-settings-save {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn-settings-save:hover {
+  background: var(--color-accent-hover);
+}
+
+/* ========================================================
+   レスポンシブデザイン (スマートフォン対応 ＆ ウィンドウ縮小)
+   ======================================================== */
+@media (max-width: 768px) {
+  /* 左右スプリッターを無効化 */
+  .splitter-h {
+    display: none !important;
+  }
+
+  /* ヘッダーの要素調整 */
+  .app-header {
+    padding: 12px 16px;
+    height: auto;
+    min-height: 65px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .community-connector {
+    width: 100%;
+    order: 3;
+    justify-content: space-between;
+  }
+
+  .combobox-container {
+    width: calc(100% - 150px);
+    max-width: 100%;
+  }
+
+  /* メインレイアウト */
+  .app-container {
+    height: calc(100vh - 120px); /* 2段ヘッダーに対応 */
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 100% !important; /* 横幅いっぱいに */
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    transition: transform var(--transition-normal);
+  }
+
+  .chat-pane {
+    width: 100% !important;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 20;
+    transform: translateX(100%); /* 初期は画面の右外へ隠す */
+    transition: transform var(--transition-normal);
+    background-color: var(--bg-main);
+  }
+
+  /* チャットがアクティブなときの状態 */
+  .app-container.has-active-chat .sidebar {
+    transform: translateX(-100%); /* 左外に隠す */
+  }
+
+  .app-container.has-active-chat .chat-pane {
+    transform: translateX(0); /* 画面内にスライドイン */
+  }
+
+  /* モバイル用戻るボタンの表示 */
+  .btn-back-to-sidebar {
+    display: flex !important;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    padding: 8px 12px;
+    font-family: var(--font-family);
+    font-size: 13px;
+    cursor: pointer;
+    margin-right: 12px;
+    transition: var(--transition-normal);
+    font-weight: 500;
+  }
+
+  .btn-back-to-sidebar:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* モーダル調整 */
+  .modal-content {
+    width: 90%;
+    max-width: 360px;
+    padding: 20px;
+  }
+
+  /* ログインカード調整 */
+  .login-card {
+    width: 90%;
+    padding: 24px;
+  }
+}

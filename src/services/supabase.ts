@@ -1,0 +1,551 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+export interface SupabaseUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface SupabaseCommunity {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface SupabaseMember {
+  id: string;
+  name: string;
+  userNumber: number;
+  isOnline: boolean;
+  unreadCount?: number;
+  latestUnreadTime?: number;
+}
+
+export interface SupabaseGroup {
+  id: string;
+  name: string;
+  memberCount: number;
+  unreadCount: number;
+  latestUnreadTime?: number;
+}
+
+export interface SupabaseMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  audioUrl?: string;
+  textContent: string;
+  createdAt: Date;
+}
+
+export class SupabaseService {
+  /**
+   * Google でログイン (OAuth)
+   * @param redirectTo リダイレクト先URL (省略可能)
+   */
+  async signInWithGoogle(redirectTo?: string): Promise<void> {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectTo
+      }
+    });
+
+    if (error) throw error;
+    // OAuthの場合、ここでリダイレクトが発生するため戻り値は通常処理されません
+  }
+
+  /**
+   * サインアウト
+   */
+  async signOut(): Promise<void> {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  }
+
+  /**
+   * 現在のセッションユーザー情報を取得
+   */
+  async getCurrentUser(): Promise<SupabaseUser | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', user.id)
+      .single();
+
+    return {
+      id: user.id,
+      name: profile?.name || user.user_metadata?.name || 'No Name',
+      email: user.email || ''
+    };
+  }
+
+  /**
+   * ニックネームの更新
+   */
+  async updateNickname(userId: string, newName: string): Promise<void> {
+    const { error } = await supabase
+      .from('users')
+      .update({ name: newName })
+      .eq('id', userId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * コミュニティへの接続（参加していない場合は所属メンバーに自動追加）
+   */
+  async connectCommunity(userId: string, slug: string): Promise<SupabaseCommunity> {
+    // 1. コミュニティが存在するか確認
+    let { data: community, error: cError } = await supabase
+      .from('communities')
+      .select('*')
+      .eq('slug', slug)
+      .single();
+
+    if (cError || !community) {
+      // 無ければ自動でモック用のコミュニティを自動作成（手軽にテストできるようにするため）
+      const newCommunity = {
+        name: `${slug.toUpperCase()} コミュニティ`,
+        slug: slug,
+        invite_code: 'code_' + slug
+      };
+      
+      const { data, error } = await supabase
+        .from('communities')
+        .insert(newCommunity)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      community = data;
+    }
+
+    // 2. コミュニティに既に参加しているか確認
+    const { data: membership, error: membershipError } = await supabase
+      .from('community_members')
+      .select('*')
+      .eq('community_id', community.id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (membershipError && membershipError.code !== 'PGRST116') {
+      console.warn('Membership check error:', membershipError);
+    }
+
+    if (!membership) {
+      // 3. 参加していない場合はメンバーに追加（user_number は自動採番または連番）
+      // 現在のコミュニティメンバー数をカウントして user_number を決定する
+      const { count } = await supabase
+        .from('community_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('community_id', community.id);
+      
+      const nextNumber = (count || 0) + 1;
+
+      const { error: joinError } = await supabase
+        .from('community_members')
+        .insert({
+          community_id: community.id,
+          user_id: userId,
+          user_number: nextNumber
+        });
+
+      // エラー23505は「すでに存在する（重複）」エラー。この場合は既に参加しているとみなして無視する
+      if (joinError && joinError.code !== '23505') {
+        throw joinError;
+      }
+    }
+
+    return {
+      id: community.id,
+      name: community.name,
+      slug: community.slug
+    };
+  }
+
+  /**
+   * コミュニティからの退出 (メンバーシップ削除)
+   */
+  async leaveCommunity(userId: string, communityId: string): Promise<void> {
+    const { error } = await supabase
+      .from('community_members')
+      .delete()
+      .eq('community_id', communityId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Failed to leave community in DB:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * コミュニティ所属メンバーの取得
+   */
+  async getCommunityMembers(communityId: string, currentUserId: string): Promise<SupabaseMember[]> {
+    const { data, error } = await supabase
+      .from('community_members')
+      .select('user_number, users(id, name)')
+      .eq('community_id', communityId);
+
+    if (error) throw error;
+
+    // 自分自身は個別チャット一覧に表示させない（DEC-021）
+    const others = (data || []).filter((item: any) => item.users.id !== currentUserId);
+
+    return others.map((item: any) => {
+      const u = item.users;
+      return {
+        id: u.id,
+        name: u.name,
+        userNumber: item.user_number,
+        isOnline: true // 簡易表示
+      };
+    });
+  }
+
+  /**
+   * コミュニティ内のグループチャット一覧を取得
+   */
+  async getCommunityGroups(communityId: string, userId: string): Promise<SupabaseGroup[]> {
+    // 自分が参加しているグループルームを取得
+    const { data, error } = await supabase
+      .from('chat_room_members')
+      .select('room_id, chat_rooms(id, type, community_id)')
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    const groupRooms = (data || [])
+      .filter((item: any) => item.chat_rooms && item.chat_rooms.type === 'group' && item.chat_rooms.community_id === communityId)
+      .map((item: any) => item.chat_rooms);
+
+    const result: SupabaseGroup[] = [];
+
+    for (const room of groupRooms) {
+      // グループ名およびメンバー数を取得
+      const { data: members, error: mErr } = await supabase
+        .from('chat_room_members')
+        .select('users(name)')
+        .eq('room_id', room.id);
+
+      if (mErr) continue;
+      
+      // メンバー数が2人以下のグループ（自分だけ、または1対1）は個別チャットと重複するため表示しない
+      if (!members || members.length <= 2) {
+        continue;
+      }
+
+      const groupName = (members || []).map((m: any) => m.users?.name).join(', ');
+      
+      // 未読数をカウントし、最新の未読メッセージ日時を取得
+      const { data: inboxData } = await supabase
+        .from('user_inboxes')
+        .select('messages!inner(created_at)')
+        .eq('room_id', room.id)
+        .eq('user_id', userId)
+        .eq('is_read', false);
+
+      const unreadCount = inboxData?.length || 0;
+      let latestUnreadTime = 0;
+      if (inboxData && inboxData.length > 0) {
+        latestUnreadTime = Math.max(...inboxData.map((d: any) => new Date(d.messages.created_at).getTime()));
+      }
+
+      result.push({
+        id: room.id,
+        name: groupName || '名称未設定グループ',
+        memberCount: members?.length || 0,
+        unreadCount: unreadCount,
+        latestUnreadTime: latestUnreadTime || undefined
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * ユーザーの個別チャットごとの未読メッセージ数を取得します。
+   */
+  async getUnreadIndividualCounts(userId: string): Promise<Record<string, { count: number; latestTime: number }>> {
+    const { data, error } = await supabase
+      .from('user_inboxes')
+      .select('messages!inner(sender_id, created_at), chat_rooms!inner(type)')
+      .eq('user_id', userId)
+      .eq('is_read', false)
+      .eq('chat_rooms.type', 'individual');
+
+    if (error) {
+      console.error('Failed to get unread individual counts:', error);
+      return {};
+    }
+
+    const result: Record<string, { count: number; latestTime: number }> = {};
+    (data || []).forEach((item: any) => {
+      const senderId = item.messages?.sender_id;
+      const createdAt = new Date(item.messages?.created_at).getTime();
+      if (senderId) {
+        if (!result[senderId]) {
+          result[senderId] = { count: 0, latestTime: 0 };
+        }
+        result[senderId].count++;
+        result[senderId].latestTime = Math.max(result[senderId].latestTime, createdAt);
+      }
+    });
+
+    return result;
+  }
+
+  /**
+   * 特定ユーザーとの1対1チャットルームのIDを取得または作成
+   */
+  async getOrCreateIndividualRoom(communityId: string, currentUserId: string, targetUserId: string): Promise<string> {
+    // 自分と相手の両方が含まれる individual タイプのチャットルームを検索
+    const { data: myRooms, error: err1 } = await supabase
+      .from('chat_room_members')
+      .select('room_id, chat_rooms(id, type, community_id)')
+      .eq('user_id', currentUserId);
+
+    if (err1) throw err1;
+
+    const indRooms = (myRooms || [])
+      .filter((r: any) => r.chat_rooms && r.chat_rooms.type === 'individual' && r.chat_rooms.community_id === communityId)
+      .map((r: any) => r.room_id);
+
+    if (indRooms.length > 0) {
+      // それらの部屋の中から、相手も入っている部屋を検索
+      const { data: match } = await supabase
+        .from('chat_room_members')
+        .select('room_id')
+        .in('room_id', indRooms)
+        .eq('user_id', targetUserId)
+        .maybeSingle();
+
+      if (match) return match.room_id;
+    }
+
+    // 見つからなければ新規作成
+    // 1. ルーム作成
+    const { data: newRoom, error: err3 } = await supabase
+      .from('chat_rooms')
+      .insert({
+        type: 'individual',
+        community_id: communityId
+      })
+      .select()
+      .single();
+
+    if (err3) throw err3;
+
+    // 2. メンバー追加（自分と相手）
+    const { error: err4 } = await supabase
+      .from('chat_room_members')
+      .insert([
+        { room_id: newRoom.id, user_id: currentUserId },
+        { room_id: newRoom.id, user_id: targetUserId }
+      ]);
+
+    if (err4) throw err4;
+
+    return newRoom.id;
+  }
+
+  /**
+   * 複数選択されたメンバーでグループチャットを作成
+   */
+  async createGroupRoom(communityId: string, currentUserId: string, memberUserIds: string[]): Promise<string> {
+    // 全メンバーリスト（自分を含む）
+    const allUserIds = Array.from(new Set([currentUserId, ...memberUserIds]));
+
+    // 1. ルーム作成
+    const { data: newRoom, error: err1 } = await supabase
+      .from('chat_rooms')
+      .insert({
+        type: 'group',
+        community_id: communityId
+      })
+      .select()
+      .single();
+
+    if (err1) throw err1;
+
+    // 2. メンバーの紐付け
+    const inserts = allUserIds.map((uid) => ({ room_id: newRoom.id, user_id: uid }));
+    const { error: err2 } = await supabase
+      .from('chat_room_members')
+      .insert(inserts);
+
+    if (err2) throw err2;
+
+    return newRoom.id;
+  }
+
+  /**
+   * 指定したルームの過去メッセージ履歴を取得
+   */
+  async getRoomMessages(roomId: string): Promise<SupabaseMessage[]> {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, sender_id, audio_url, text_content, created_at, users(name)')
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      senderId: item.sender_id,
+      senderName: item.users?.name || 'No Name',
+      audioUrl: item.audio_url || undefined,
+      textContent: item.text_content || '',
+      createdAt: new Date(item.created_at)
+    }));
+  }
+
+  /**
+   * メッセージ送信（音声アップロード対応）
+   */
+  async sendMessage(roomId: string, senderId: string, text: string, audioBlob?: Blob): Promise<SupabaseMessage> {
+    let audioUrl: string | undefined = undefined;
+
+    if (audioBlob) {
+      // 1. 音声ファイルを Storage バケット `voice-messages` にアップロード
+      const fileName = `${senderId}/${Date.now()}.webm`;
+      const { error: uploadError } = await supabase.storage
+        .from('voice-messages')
+        .upload(fileName, audioBlob, {
+          contentType: 'audio/webm',
+          cacheControl: '3600'
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 公開URLを取得
+      const { data } = supabase.storage
+        .from('voice-messages')
+        .getPublicUrl(fileName);
+        
+      audioUrl = data.publicUrl;
+    }
+
+    // 2. メッセージを messages テーブルに挿入
+    const { data: newMsg, error: insertError } = await supabase
+      .from('messages')
+      .insert({
+        room_id: roomId,
+        sender_id: senderId,
+        audio_url: audioUrl || null,
+        text_content: text
+      })
+      .select('id, sender_id, audio_url, text_content, created_at, users(name)')
+      .single();
+
+    if (insertError) throw insertError;
+
+    return {
+      id: newMsg.id,
+      senderId: newMsg.sender_id,
+      senderName: (newMsg.users as any)?.name || 'No Name',
+      audioUrl: newMsg.audio_url || undefined,
+      textContent: newMsg.text_content || '',
+      createdAt: new Date(newMsg.created_at)
+    };
+  }
+
+  /**
+   * 自分宛てのインボックス (新着自動再生トリガー) をリアルタイム購読
+   */
+  subscribeInbox(userId: string, onNewInboxItem: (inboxItem: any) => void): any {
+    return supabase
+      .channel(`inbox:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'user_inboxes',
+          filter: `user_id=eq.${userId}`
+        },
+        async (payload) => {
+          // メッセージ詳細を取得する
+          const { data: msg, error } = await supabase
+            .from('messages')
+            .select('id, room_id, sender_id, audio_url, text_content, users(name)')
+            .eq('id', payload.new.message_id)
+            .single();
+
+          if (!error && msg) {
+            onNewInboxItem({
+              id: msg.id,
+              roomId: msg.room_id,
+              senderId: msg.sender_id,
+              senderName: (msg.users as any)?.name || 'No Name',
+              audioUrl: msg.audio_url,
+              textContent: msg.text_content
+            });
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  /**
+   * 特定のチャットルームの新着メッセージをリアルタイム購読
+   */
+  subscribeRoomMessages(roomId: string, onNewMessage: (msg: SupabaseMessage) => void): any {
+    return supabase
+      .channel(`room:${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${roomId}`
+        },
+        async (payload) => {
+          // 送信者名を含むメッセージ詳細を取得
+          const { data: msg, error } = await supabase
+            .from('messages')
+            .select('id, sender_id, audio_url, text_content, created_at, users(name)')
+            .eq('id', payload.new.id)
+            .single();
+
+          if (!error && msg) {
+            onNewMessage({
+              id: msg.id,
+              senderId: msg.sender_id,
+              senderName: (msg.users as any)?.name || 'No Name',
+              audioUrl: msg.audio_url || undefined,
+              textContent: msg.text_content || '',
+              createdAt: new Date(msg.created_at)
+            });
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  /**
+   * インボックスアイテム（未読メッセージ）を既読にする
+   */
+  async markAsRead(roomId: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('user_inboxes')
+      .update({ is_read: true })
+      .eq('room_id', roomId)
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (error) console.error('Failed to mark inbox items as read:', error);
+  }
+}
