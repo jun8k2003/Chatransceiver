@@ -40,6 +40,7 @@ export interface SupabaseMessage {
   senderName: string;
   audioUrl?: string;
   textContent: string;
+  isRevoked?: boolean;
   createdAt: Date;
 }
 
@@ -177,10 +178,10 @@ export class SupabaseService {
    */
   async leaveCommunity(userId: string, communityId: string): Promise<void> {
     const { error } = await supabase
-      .from('community_members')
-      .delete()
-      .eq('community_id', communityId)
-      .eq('user_id', userId);
+      .rpc('leave_community_and_cleanup', {
+        p_user_id: userId,
+        p_community_id: communityId
+      });
 
     if (error) {
       console.error('Failed to leave community in DB:', error);
@@ -395,7 +396,7 @@ export class SupabaseService {
   async getRoomMessages(roomId: string): Promise<SupabaseMessage[]> {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, sender_id, audio_url, text_content, created_at, users(name)')
+      .select('id, sender_id, audio_url, text_content, is_revoked, created_at, users(name)')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true });
 
@@ -407,6 +408,7 @@ export class SupabaseService {
       senderName: item.users?.name || 'No Name',
       audioUrl: item.audio_url || undefined,
       textContent: item.text_content || '',
+      isRevoked: item.is_revoked || false,
       createdAt: new Date(item.created_at)
     }));
   }
@@ -446,7 +448,7 @@ export class SupabaseService {
         audio_url: audioUrl || null,
         text_content: text
       })
-      .select('id, sender_id, audio_url, text_content, created_at, users(name)')
+      .select('id, sender_id, audio_url, text_content, is_revoked, created_at, users(name)')
       .single();
 
     if (insertError) throw insertError;
@@ -457,8 +459,51 @@ export class SupabaseService {
       senderName: (newMsg.users as any)?.name || 'No Name',
       audioUrl: newMsg.audio_url || undefined,
       textContent: newMsg.text_content || '',
+      isRevoked: newMsg.is_revoked || false,
       createdAt: new Date(newMsg.created_at)
     };
+  }
+
+  /**
+   * 発言の取り消し
+   */
+  async revokeMessage(messageId: string, currentUserId: string): Promise<void> {
+    // まず対象メッセージを取得
+    const { data: msg, error: fetchError } = await supabase
+      .from('messages')
+      .select('audio_url, sender_id')
+      .eq('id', messageId)
+      .single();
+
+    if (fetchError) throw fetchError;
+    if (msg.sender_id !== currentUserId) throw new Error('Unauthorized');
+
+    // Storageから音声ファイルの実体を削除
+    if (msg.audio_url) {
+      // URLからファイルパスを抽出 (例: https://.../voice-messages/USER_ID/TIME.webm -> USER_ID/TIME.webm)
+      const parts = msg.audio_url.split('/voice-messages/');
+      if (parts.length === 2) {
+        const filePath = parts[1].split('?')[0]; // クエリパラメータがあれば除去
+        const { error: removeError } = await supabase.storage
+          .from('voice-messages')
+          .remove([filePath]);
+        if (removeError) {
+          console.error('Failed to remove audio file from storage:', removeError);
+        }
+      }
+    }
+
+    // DBレコードを取り消し状態に更新
+    const { error: updateError } = await supabase
+      .from('messages')
+      .update({
+        is_revoked: true,
+        text_content: null,
+        audio_url: null
+      })
+      .eq('id', messageId);
+
+    if (updateError) throw updateError;
   }
 
   /**
@@ -501,34 +546,42 @@ export class SupabaseService {
   /**
    * 特定のチャットルームの新着メッセージをリアルタイム購読
    */
-  subscribeRoomMessages(roomId: string, onNewMessage: (msg: SupabaseMessage) => void): any {
+  subscribeRoomMessages(roomId: string, onNewMessage: (msg: SupabaseMessage) => void, onUpdateMessage?: (msg: SupabaseMessage) => void): any {
     return supabase
       .channel(`room:${roomId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
           filter: `room_id=eq.${roomId}`
         },
         async (payload) => {
+          const recordId = payload.eventType === 'DELETE' ? payload.old.id : payload.new.id;
+          
           // 送信者名を含むメッセージ詳細を取得
           const { data: msg, error } = await supabase
             .from('messages')
-            .select('id, sender_id, audio_url, text_content, created_at, users(name)')
-            .eq('id', payload.new.id)
+            .select('id, sender_id, audio_url, text_content, is_revoked, created_at, users(name)')
+            .eq('id', recordId)
             .single();
 
           if (!error && msg) {
-            onNewMessage({
+            const transformedMsg = {
               id: msg.id,
               senderId: msg.sender_id,
               senderName: (msg.users as any)?.name || 'No Name',
               audioUrl: msg.audio_url || undefined,
               textContent: msg.text_content || '',
+              isRevoked: msg.is_revoked || false,
               createdAt: new Date(msg.created_at)
-            });
+            };
+            if (payload.eventType === 'INSERT') {
+              onNewMessage(transformedMsg);
+            } else if (payload.eventType === 'UPDATE' && onUpdateMessage) {
+              onUpdateMessage(transformedMsg);
+            }
           }
         }
       )

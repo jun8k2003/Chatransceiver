@@ -48,6 +48,7 @@ erDiagram
         uuid sender_id FK
         text audio_url
         text text_content
+        boolean is_revoked
         timestamptz created_at
     }
 
@@ -119,6 +120,7 @@ Table messages {
   sender_id uuid [ref: > users.id, note: '退出時はNULL許容（元メンバー扱い）']
   audio_url text [note: '音声ファイルパス。テキストメッセージ時はNULL']
   text_content text [note: 'ディクテーションまたは直接入力のテキスト']
+  is_revoked boolean [default: false]
   created_at timestamptz [default: `now()`]
 }
 
@@ -237,6 +239,12 @@ create policy "Authenticated users can view messages"
 -- メンバー：自分自身を送信者としてメッセージを投稿可能
 create policy "Users can post messages"
   on messages for insert
+  with check (auth.uid() = sender_id);
+
+-- 送信者本人：自分自身のメッセージを取り消し可能
+create policy "Users can revoke their own messages"
+  on messages for update
+  using (auth.uid() = sender_id)
   with check (auth.uid() = sender_id);
 
 --------------------------------------------------

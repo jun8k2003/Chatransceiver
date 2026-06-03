@@ -63,6 +63,7 @@ export class App {
       () => this.handleSendAudio(),
       () => this.handleCancelTalk(),
       (msgId) => this.handlePlayMessage(msgId),
+      (msgId) => this.handleRevokeMessage(msgId),
       () => this.handleMobileGoToChat(),
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
@@ -449,12 +450,35 @@ export class App {
       this.roomSubscription.unsubscribe();
     }
 
-    this.roomSubscription = this.supabaseService.subscribeRoomMessages(roomId, (msg) => {
-      if (!this.state.messages.some(m => m.id === msg.id)) {
-        this.state.messages.push(msg);
-        this.updateUI();
+    this.roomSubscription = this.supabaseService.subscribeRoomMessages(
+      roomId,
+      (msg) => {
+        if (!this.state.messages.some(m => m.id === msg.id)) {
+          this.state.messages.push(msg);
+          this.updateUI();
+        }
+      },
+      (updatedMsg) => {
+        const index = this.state.messages.findIndex(m => m.id === updatedMsg.id);
+        if (index !== -1) {
+          this.state.messages[index] = updatedMsg;
+          this.updateUI();
+        }
       }
-    });
+    );
+  }
+
+  /**
+   * 発言の取り消し (送信者自身による)
+   */
+  private async handleRevokeMessage(messageId: string): Promise<void> {
+    if (!this.state.currentUser) return;
+    try {
+      await this.supabaseService.revokeMessage(messageId, this.state.currentUser.id);
+    } catch (e) {
+      console.error('Failed to revoke message:', e);
+      alert('メッセージの取り消しに失敗しました。');
+    }
   }
 
   /**
