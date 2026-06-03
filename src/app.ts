@@ -83,7 +83,12 @@ export class App {
     }
 
     // URL フラグメントまたはパラメータによる直接接続チェック (DEC-017)
-    let communitySlug = window.location.hash.replace('#', '');
+    let communitySlug = '';
+    const hash = window.location.hash.replace('#', '');
+    if (hash.startsWith('community=')) {
+      communitySlug = hash.replace('community=', '');
+    }
+    
     if (!communitySlug) {
       const urlParams = new URLSearchParams(window.location.search);
       communitySlug = urlParams.get('c') || '';
@@ -197,7 +202,7 @@ export class App {
       // URLの更新 (フラグメントで画面リロード時にここに戻れるようにする)
       const url = new URL(window.location.href);
       url.searchParams.delete('c'); // 古いパラメータがあれば削除
-      url.hash = slug;
+      url.hash = `community=${slug}`;
       window.history.replaceState({}, '', url.toString());
 
       // リアルタイムインボックスの購読
