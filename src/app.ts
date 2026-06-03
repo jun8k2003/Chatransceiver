@@ -81,9 +81,13 @@ export class App {
       this.state.autoplayEnabled = savedAutoplay === 'true';
     }
 
-    // URL パラメータによる直接接続チェック (DEC-017)
-    const urlParams = new URLSearchParams(window.location.search);
-    let communitySlug = urlParams.get('c');
+    // URL フラグメントまたはパラメータによる直接接続チェック (DEC-017)
+    let communitySlug = window.location.hash.replace('#', '');
+    if (!communitySlug) {
+      const urlParams = new URLSearchParams(window.location.search);
+      communitySlug = urlParams.get('c') || '';
+    }
+
     if (!communitySlug) {
       // URLパラメータがない場合は、ローカルストレージから直前の接続コミュニティを読み込む
       const savedCommunity = localStorage.getItem('chatransceiver_current_community');
@@ -189,6 +193,12 @@ export class App {
       this.state.currentCommunity = comm;
       localStorage.setItem('chatransceiver_current_community', JSON.stringify(comm));
 
+      // URLの更新 (フラグメントで画面リロード時にここに戻れるようにする)
+      const url = new URL(window.location.href);
+      url.searchParams.delete('c'); // 古いパラメータがあれば削除
+      url.hash = slug;
+      window.history.replaceState({}, '', url.toString());
+
       // リアルタイムインボックスの購読
       if (this.inboxSubscription) {
         this.inboxSubscription.unsubscribe();
@@ -291,6 +301,12 @@ export class App {
 
     this.state.currentCommunity = null;
     localStorage.removeItem('chatransceiver_current_community');
+
+    // URLフラグメント/パラメータの削除
+    const url = new URL(window.location.href);
+    url.searchParams.delete('c');
+    url.hash = '';
+    window.history.replaceState({}, '', url.toString());
 
     this.state.activeChatHistoryId = null;
     this.state.selectedUserIds = [];
