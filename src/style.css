@@ -869,6 +869,12 @@ body.resizing-v * {
   border: none;
 }
 
+.btn-modal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
 .btn-modal-stop {
   background: var(--color-danger);
   color: #fff;
