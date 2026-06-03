@@ -4,6 +4,7 @@ export interface MessageItem {
   senderId: string;
   audioUrl?: string;     // 音声データパス（存在しない場合はテキストのみ）
   textContent: string;   // 文字起こし、または直接入力テキスト
+  isRevoked?: boolean;
   createdAt: Date;
 }
 
@@ -36,6 +37,7 @@ export class ChatWindowUI {
   private onSendAudio: () => void;
   private onCancelTalk: () => void;
   private onPlayMessage: (messageId: string) => void;
+  private onRevokeMessage: (messageId: string) => void;
   private onBackToSidebar: () => void;
 
   constructor(
@@ -46,6 +48,7 @@ export class ChatWindowUI {
     onSendAudio: () => void,
     onCancelTalk: () => void,
     onPlayMessage: (messageId: string) => void,
+    onRevokeMessage: (messageId: string) => void,
     onBackToSidebar: () => void
   ) {
     this.onSendText = onSendText;
@@ -54,6 +57,7 @@ export class ChatWindowUI {
     this.onSendAudio = onSendAudio;
     this.onCancelTalk = onCancelTalk;
     this.onPlayMessage = onPlayMessage;
+    this.onRevokeMessage = onRevokeMessage;
     this.onBackToSidebar = onBackToSidebar;
 
     const container = document.getElementById(containerId);
@@ -209,27 +213,49 @@ export class ChatWindowUI {
     messages.forEach((msg) => {
       const isOutgoing = msg.senderId === currentUserId;
       const bubbleEl = document.createElement('div');
-      bubbleEl.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
+      bubbleEl.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'} ${msg.isRevoked ? 'message-revoked' : ''}`;
       
       const timeStr = msg.createdAt.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-      // 音声再生ボタン (▶) の表示判定。音声URLが空のテキストメッセージでもTTS再生用として表示 (DEC-018)
-      const playBtnHtml = `<button class="btn-play-msg" data-msg-id="${msg.id}">▶</button>`;
+      if (msg.isRevoked) {
+        bubbleEl.innerHTML = `
+          <span class="message-sender">${isOutgoing ? 'あなた' : msg.senderName}</span>
+          <div class="message-body">
+            <span class="message-text">この発言は取り消しされました。</span>
+          </div>
+          <span class="message-time">${timeStr}</span>
+        `;
+      } else {
+        // 音声再生ボタン (▶) の表示判定。音声URLが空のテキストメッセージでもTTS再生用として表示 (DEC-018)
+        const playBtnHtml = `<button class="btn-play-msg" data-msg-id="${msg.id}">▶</button>`;
+        const deleteBtnHtml = isOutgoing ? `<button class="btn-delete-msg" data-msg-id="${msg.id}" title="発言を取り消す">🗑️</button>` : '';
 
-      bubbleEl.innerHTML = `
-        <span class="message-sender">${isOutgoing ? 'あなた' : msg.senderName}</span>
-        <div class="message-body">
-          ${playBtnHtml}
-          <span class="message-text">${msg.textContent}</span>
-        </div>
-        <span class="message-time">${timeStr}</span>
-      `;
+        bubbleEl.innerHTML = `
+          <span class="message-sender">${isOutgoing ? 'あなた' : msg.senderName}</span>
+          <div class="message-body">
+            ${playBtnHtml}
+            <span class="message-text">${msg.textContent}</span>
+            ${deleteBtnHtml}
+          </div>
+          <span class="message-time">${timeStr}</span>
+        `;
 
-      // 再生ボタンのクリックイベント
-      const playBtn = bubbleEl.querySelector('.btn-play-msg') as HTMLButtonElement;
-      playBtn.addEventListener('click', () => {
-        this.onPlayMessage(msg.id);
-      });
+        // 再生ボタンのクリックイベント
+        const playBtn = bubbleEl.querySelector('.btn-play-msg') as HTMLButtonElement;
+        playBtn.addEventListener('click', () => {
+          this.onPlayMessage(msg.id);
+        });
+
+        // 削除ボタンのクリックイベント
+        if (isOutgoing) {
+          const deleteBtn = bubbleEl.querySelector('.btn-delete-msg') as HTMLButtonElement;
+          deleteBtn.addEventListener('click', () => {
+            if (window.confirm("発言を取り消しますか。")) {
+              this.onRevokeMessage(msg.id);
+            }
+          });
+        }
+      }
 
       this.messagesEl.appendChild(bubbleEl);
     });

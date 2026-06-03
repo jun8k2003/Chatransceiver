@@ -61,6 +61,7 @@ export class UIController {
     onSendAudio: () => void,
     onCancelTalk: () => void,
     onPlayMessage: (messageId: string) => void,
+    onRevokeMessage: (messageId: string) => void,
     onMobileGoToChat: () => void,
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
@@ -125,6 +126,7 @@ export class UIController {
       onSendAudio,
       onCancelTalk,
       onPlayMessage,
+      onRevokeMessage,
       onBackToSidebar
     );
 

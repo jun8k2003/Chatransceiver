@@ -92,6 +92,7 @@ create table public.messages (
   sender_id uuid references public.users on delete set null,
   audio_url text,
   text_content text,
+  is_revoked boolean default false,
   created_at timestamptz default now() not null
 );
 
@@ -150,6 +151,7 @@ create policy "Users can leave rooms" on public.chat_room_members for delete usi
 -- 3.6. messages ポリシー
 create policy "Authenticated users can view messages" on public.messages for select using (auth.role() = 'authenticated');
 create policy "Users can post messages" on public.messages for insert with check (auth.uid() = sender_id);
+create policy "Users can revoke their own messages" on public.messages for update using (auth.uid() = sender_id) with check (auth.uid() = sender_id);
 
 -- 3.7. user_inboxes ポリシー
 create policy "Users can manage their own inbox" on public.user_inboxes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -210,6 +212,56 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row
   execute function public.handle_new_user_profile();
+
+-- ========================================================
+-- 6. 退出時クリーンナップ用のストアドプロシージャ
+-- ========================================================
+-- コミュニティ退出時、自分が含まれる全ルームとそれに紐づく全メッセージ、
+-- および Storage上の音声ファイルを一括で完全削除する関数
+create or replace function public.leave_community_and_cleanup(p_user_id UUID, p_community_id UUID)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_room_ids UUID[];
+  v_audio_paths TEXT[];
+begin
+  -- 1. ユーザーが参加している、対象コミュニティ内のすべてのルームIDを取得
+  select array_agg(cr.id) into v_room_ids
+  from public.chat_rooms cr
+  join public.chat_room_members crm on cr.id = crm.room_id
+  where cr.community_id = p_community_id
+    and crm.user_id = p_user_id;
+
+  if v_room_ids is not null then
+    -- 2. 削除対象のルームに含まれる全メッセージの音声ファイルパスを抽出
+    -- (URLからバケット名以下のパス部分を抽出します)
+    select array_agg(
+      split_part(audio_url, '/voice-messages/', 2)
+    ) into v_audio_paths
+    from public.messages
+    where room_id = any(v_room_ids)
+      and audio_url is not null;
+
+    -- 3. Supabase Storage から実体ファイルを削除
+    if v_audio_paths is not null then
+      delete from storage.objects
+      where bucket_id = 'voice-messages'
+        and name = any(v_audio_paths);
+    end if;
+
+    -- 4. 対象のルームをすべて削除 (CASCADEにより紐づくデータも削除)
+    delete from public.chat_rooms
+    where id = any(v_room_ids);
+  end if;
+
+  -- 5. 最後にコミュニティのメンバーから対象ユーザーを削除
+  delete from public.community_members
+  where community_id = p_community_id
+    and user_id = p_user_id;
+end;
+$$;
 ```
 
 貼り付けた後、画面右下の **「Run」** ボタンをクリックします。
