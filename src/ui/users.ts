@@ -70,6 +70,11 @@ export class UserListUI {
       // 初回文字をアイコン表示用に使用
       const firstChar = member.name.charAt(0).toUpperCase();
       
+      // オンラインインジケーター
+      const onlineIndicatorHtml = member.isOnline 
+        ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:var(--color-success); margin-left:6px; box-shadow:0 0 4px var(--color-success);" title="オンライン"></span>` 
+        : '';
+      
       // 目立つ赤色 (#ef4444) のチャットアイコン(SVG)と未読数を表示
       const badgeHtml = member.unreadCount ? 
         `<span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; color: #ef4444; font-size: 11px; font-weight: bold;" title="${member.unreadCount}件の未読">
@@ -81,7 +86,7 @@ export class UserListUI {
         <div class="item-info">
           <div class="item-avatar">${firstChar}</div>
           <div class="item-details" style="position: relative; width: 100%;">
-            <span class="item-name">#${member.userNumber} ${member.name} ${badgeHtml}</span>
+            <span class="item-name" style="display:flex; align-items:center;">#${member.userNumber} ${member.name} ${onlineIndicatorHtml} ${badgeHtml}</span>
           </div>
         </div>
         

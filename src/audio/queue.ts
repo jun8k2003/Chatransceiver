@@ -18,6 +18,7 @@ export interface QueueItem {
 export class AudioPlaybackQueue {
   private queue: QueueItem[] = [];
   private isPlaying = false;
+  private isPaused = false;
   private audioManager: AudioManager;
 
   constructor(audioManager: AudioManager) {
@@ -36,8 +37,8 @@ export class AudioPlaybackQueue {
 
     this.queue.push(item);
 
-    // 再生中でなければ再生を開始する
-    if (!this.isPlaying) {
+    // 再生中でなく、かつ一時停止中でなければ再生を開始する
+    if (!this.isPlaying && !this.isPaused) {
       this.playNext();
     }
   }
@@ -46,7 +47,7 @@ export class AudioPlaybackQueue {
    * 次のアイテムの再生実行
    */
   private async playNext(): Promise<void> {
-    if (this.queue.length === 0) {
+    if (this.queue.length === 0 || this.isPaused) {
       this.isPlaying = false;
       return;
     }
@@ -77,6 +78,23 @@ export class AudioPlaybackQueue {
       }
 
       // 次のアイテムを再生
+      this.playNext();
+    }
+  }
+
+  /**
+   * キューの再生を一時停止する（現在再生中のものはそのまま最後まで再生させる、または停止させる）
+   */
+  pause(): void {
+    this.isPaused = true;
+  }
+
+  /**
+   * キューの再生を再開する
+   */
+  resume(): void {
+    this.isPaused = false;
+    if (!this.isPlaying && this.queue.length > 0) {
       this.playNext();
     }
   }

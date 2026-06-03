@@ -44,7 +44,13 @@ export class AudioManager {
     this.audioChunks = [];
 
     // マイクストリームの取得（OSデフォルトマイク）
-    this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    this.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        autoGainControl: false,
+        echoCancellation: true,
+        noiseSuppression: true
+      }
+    });
 
     // Web Audio API で音量レベルメーターを設定
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -77,8 +83,8 @@ export class AudioManager {
     
     updateLevel();
 
-    // 録音開始
-    this.mediaRecorder = new MediaRecorder(this.micStream);
+    // 録音開始 (32kbpsで通信量を削減)
+    this.mediaRecorder = new MediaRecorder(this.micStream, { audioBitsPerSecond: 32000 });
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         this.audioChunks.push(event.data);

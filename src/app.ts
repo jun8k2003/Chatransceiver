@@ -18,6 +18,7 @@ export class App {
   // Realtime 監視サブスクリプションの参照
   private inboxSubscription: any = null;
   private roomSubscription: any = null;
+  private presenceSubscription: any = null;
 
   // アプリケーション・グローバルステート
   private state: UIState = {
@@ -30,11 +31,18 @@ export class App {
     messages: [],
     playingUserId: undefined,
     playingGroupId: undefined,
-    autoplayEnabled: true
+    autoplayEnabled: true,
+    isRecording: false,
+    mobileChatForceOpen: false
   };
 
-  // 本物のUUIDとモック用IDの紐付け・Realtime配信用マップ
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
+
+  // 録音モーダル関連の状態
+  private recordingTimerId: number | null = null;
+  private recordingCountdownId: number | null = null;
+  private recordedAudioBlob: Blob | null = null;
+  private recordedDictationText: string = '';
 
   constructor() {
     this.audioManager = new AudioManager();
@@ -51,8 +59,10 @@ export class App {
       (text) => this.handleSendText(text),
       () => this.handleStartTalk(),
       () => this.handleStopTalk(),
+      () => this.handleSendAudio(),
       () => this.handleCancelTalk(),
       (msgId) => this.handlePlayMessage(msgId),
+      () => this.handleMobileGoToChat(),
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
@@ -187,6 +197,21 @@ export class App {
         (inboxItem) => this.handleNewInboxItem(inboxItem)
       );
 
+      // Presenceの購読開始 (オンライン状況同期)
+      if (this.presenceSubscription) {
+        this.presenceSubscription.unsubscribe();
+      }
+      this.presenceSubscription = this.supabaseService.subscribeCommunityPresence(
+        slug,
+        this.state.currentUser.id,
+        (onlineUserIds) => {
+          this.state.members.forEach(m => {
+            m.isOnline = onlineUserIds.includes(m.id);
+          });
+          this.updateUI();
+        }
+      );
+
       // コミュニティデータのロード
       await this.loadCommunityData();
 
@@ -254,6 +279,10 @@ export class App {
     if (this.roomSubscription) {
       this.roomSubscription.unsubscribe();
       this.roomSubscription = null;
+    }
+    if (this.presenceSubscription) {
+      this.presenceSubscription.unsubscribe();
+      this.presenceSubscription = null;
     }
 
     this.state.currentCommunity = null;
@@ -416,6 +445,11 @@ export class App {
     try {
       let roomId = this.state.activeChatHistoryId;
 
+      if (!roomId && this.state.selectedUserIds.length === 0) {
+        alert('送信先を選択してください。');
+        return;
+      }
+
       if (!roomId) {
         // 新規グループの自動作成 (最初の送信時) (DEC-011)
         roomId = await this.supabaseService.createGroupRoom(
@@ -437,9 +471,24 @@ export class App {
   }
 
   /**
+   * 録音状態のリセット
+   */
+  private clearRecordingState(): void {
+    if (this.recordingTimerId) { clearTimeout(this.recordingTimerId); this.recordingTimerId = null; }
+    if (this.recordingCountdownId) { clearInterval(this.recordingCountdownId); this.recordingCountdownId = null; }
+    this.state.isRecording = false;
+    this.playbackQueue.resume();
+  }
+
+  /**
    * 音声発話開始 (録音開始ボタン)
    */
   private handleStartTalk(): void {
+    this.state.isRecording = true;
+    this.playbackQueue.pause();
+    this.recordedAudioBlob = null;
+    this.recordedDictationText = '';
+
     this.uiController.showRecordingModal();
     
     // 録音と同時に音声認識（ディクテーション）も開始する
@@ -450,45 +499,88 @@ export class App {
     }).catch((err) => {
       console.error('Microphone recording error:', err);
       this.uiController.showMicError(window.location.origin);
+      this.clearRecordingState();
+      this.uiController.hideRecordingModal();
     });
+
+    let timeLeft = 15;
+    this.uiController.updateRecordingTimer(`00:${timeLeft.toString().padStart(2, '0')}`);
+    
+    this.recordingCountdownId = window.setInterval(() => {
+      timeLeft--;
+      if (timeLeft >= 0) {
+        this.uiController.updateRecordingTimer(`00:${timeLeft.toString().padStart(2, '0')}`);
+      }
+    }, 1000);
+
+    this.recordingTimerId = window.setTimeout(() => {
+      if (this.state.isRecording) {
+        this.handleStopTalk();
+      }
+    }, 15000);
   }
 
   /**
-   * 音声発話停止 (録音完了送信ボタン)
+   * 音声発話停止 (録音を停止し、送信待機)
    */
   private async handleStopTalk(): Promise<void> {
-    this.uiController.hideRecordingModal();
-
-    if (!this.state.currentUser || !this.state.currentCommunity) return;
+    if (!this.state.isRecording) return;
+    this.clearRecordingState();
 
     try {
-      const audioBlob = await this.audioManager.stopRecording();
+      this.recordedAudioBlob = await this.audioManager.stopRecording();
       
       // 音声認識を停止し、結果を受け取る
       const recognizedText = await this.audioManager.stopDictation();
-
-      try {
-        let roomId = this.state.activeChatHistoryId;
-
-        if (!roomId) {
-          // 新規グループの自動作成 (最初の送信時) (DEC-011)
-          roomId = await this.supabaseService.createGroupRoom(
-            this.state.currentCommunity.id,
-            this.state.currentUser.id,
-            this.state.selectedUserIds
-          );
-          this.state.activeChatHistoryId = roomId;
-          this.subscribeRoomMessages(roomId);
-          await this.loadCommunityData();
-        }
-
-        const text = recognizedText || '（音声メッセージ）';
-        await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, text, audioBlob);
-      } catch (e) {
-        console.error('Failed to send audio message:', e);
-      }
+      this.recordedDictationText = recognizedText || '（音声メッセージ）';
+      
+      this.uiController.updateDictationPreview(this.recordedDictationText);
+      this.uiController.hideRecordingStopButton();
     } catch (error) {
-      console.error('Failed to stop recording / send:', error);
+      console.error('Failed to stop recording:', error);
+      this.uiController.hideRecordingModal();
+    }
+  }
+
+  /**
+   * 音声メッセージの送信
+   */
+  private async handleSendAudio(): Promise<void> {
+    if (!this.state.currentUser || !this.state.currentCommunity) return;
+
+    let roomId = this.state.activeChatHistoryId;
+    if (!roomId && this.state.selectedUserIds.length === 0) {
+      alert('送信先を選択してください。');
+      this.clearRecordingState();
+      this.uiController.hideRecordingModal();
+      return;
+    }
+
+    // もしまだ録音中であれば、強制的に録音を終了させてから送信へ進む
+    if (this.state.isRecording) {
+      await this.handleStopTalk();
+    }
+
+    this.uiController.hideRecordingModal();
+
+    if (!this.recordedAudioBlob) return;
+
+    try {
+      if (!roomId) {
+        // 新規グループの自動作成
+        roomId = await this.supabaseService.createGroupRoom(
+          this.state.currentCommunity.id,
+          this.state.currentUser.id,
+          this.state.selectedUserIds
+        );
+        this.state.activeChatHistoryId = roomId;
+        this.subscribeRoomMessages(roomId);
+        await this.loadCommunityData();
+      }
+
+      await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob);
+    } catch (e) {
+      console.error('Failed to send audio message:', e);
     }
   }
 
@@ -496,8 +588,10 @@ export class App {
    * 録音キャンセル
    */
   private handleCancelTalk(): void {
+    this.clearRecordingState();
     this.uiController.hideRecordingModal();
     this.audioManager.stopRecording().catch(() => {});
+    this.audioManager.stopDictation().catch(() => {});
   }
 
   /**
@@ -553,9 +647,18 @@ export class App {
   }
 
   /**
-   * モバイル用：チャット画面から一覧（サイドバー）に戻る
+   * モバイル用: 手動でチャットペインへスライドする
+   */
+  private handleMobileGoToChat(): void {
+    this.state.mobileChatForceOpen = true;
+    this.updateUI();
+  }
+
+  /**
+   * モバイル用: サイドバー（リスト）へ戻る
    */
   private handleBackToSidebar(): void {
+    this.state.mobileChatForceOpen = false;
     this.state.activeChatHistoryId = null;
     this.state.selectedUserIds = [];
     this.state.messages = [];

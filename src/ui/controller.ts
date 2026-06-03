@@ -17,6 +17,8 @@ export interface UIState {
   playingUserId?: string;
   playingGroupId?: string;
   autoplayEnabled: boolean;
+  isRecording: boolean;
+  mobileChatForceOpen: boolean;
 }
 
 /**
@@ -44,6 +46,9 @@ export class UIController {
   private settingsLeaveContainerEl: HTMLDivElement;
   private settingsCurrentCommunityNameEl: HTMLElement;
 
+  // モバイル用 チャットへ移動ボタン
+  private btnMobileGoToChat: HTMLButtonElement;
+
   constructor(
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
@@ -53,8 +58,10 @@ export class UIController {
     onSendText: (text: string) => void,
     onStartTalk: () => void,
     onStopTalk: () => void,
+    onSendAudio: () => void,
     onCancelTalk: () => void,
     onPlayMessage: (messageId: string) => void,
+    onMobileGoToChat: () => void,
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
@@ -115,6 +122,7 @@ export class UIController {
       onSendText,
       onStartTalk,
       onStopTalk,
+      onSendAudio,
       onCancelTalk,
       onPlayMessage,
       onBackToSidebar
@@ -132,6 +140,14 @@ export class UIController {
     this.settingsLeaveContainerEl = this.settingsModalEl.querySelector('#settingsLeaveContainer') as HTMLDivElement;
     this.settingsCurrentCommunityNameEl = this.settingsModalEl.querySelector('#settingsCurrentCommunityName') as HTMLElement;
     const btnSettingsLeave = this.settingsModalEl.querySelector('#btnSettingsLeave') as HTMLButtonElement;
+
+    // モバイル用ボタン
+    this.btnMobileGoToChat = document.getElementById('btnMobileGoToChat') as HTMLButtonElement;
+    if (this.btnMobileGoToChat) {
+      this.btnMobileGoToChat.addEventListener('click', () => {
+        onMobileGoToChat();
+      });
+    }
 
     if (btnSettingsLeave) {
       btnSettingsLeave.addEventListener('click', () => {
@@ -225,15 +241,22 @@ export class UIController {
       }
     }
 
-    // モバイル用表示切り替えクラスの制御 (has-active-chat)
+    // モバイル用表示切り替えクラスの制御 (has-active-chat) とフローティングボタンの表示
     const containerEl = document.querySelector('.app-container') as HTMLElement;
+    
+    // チャットが「開ける状態」かどうか（何かしら選択されているか）
+    const canOpenChat = !!state.activeChatHistoryId || (state.selectedUserIds.length > 0);
+
     if (containerEl) {
-      const isChatActive = !!state.activeChatHistoryId || (state.selectedUserIds.length >= 2);
-      if (isChatActive) {
+      if (state.mobileChatForceOpen) {
         containerEl.classList.add('has-active-chat');
       } else {
         containerEl.classList.remove('has-active-chat');
       }
+    }
+
+    if (this.btnMobileGoToChat) {
+      this.btnMobileGoToChat.disabled = !canOpenChat;
     }
 
     // 2. コミュニティ接続状態の更新
@@ -306,7 +329,7 @@ export class UIController {
       this.chatWindow.render(
         [],
         state.currentUser.id,
-        'placeholder',
+        'empty',
         {
           title: '💬 チャットを開始しましょう',
           subtitle: '左ペインから話したいメンバーをチェック（複数選択可）するか、グループを選択してください。'
@@ -319,6 +342,9 @@ export class UIController {
   showRecordingModal(): void { this.chatWindow.showRecordingModal(); }
   hideRecordingModal(): void { this.chatWindow.hideRecordingModal(); }
   updateMicLevel(level: number): void { this.chatWindow.updateMicLevel(level); }
+  updateRecordingTimer(text: string): void { this.chatWindow.updateRecordingTimer(text); }
+  updateDictationPreview(text: string): void { this.chatWindow.updateDictationPreview(text); }
+  hideRecordingStopButton(): void { this.chatWindow.hideStopButton(); }
   showMicError(siteUrl: string): void { this.chatWindow.showMicError(siteUrl); }
   
   /**

@@ -24,12 +24,16 @@ export class ChatWindowUI {
   // モーダル関連の要素
   private modalEl: HTMLDivElement;
   private meterBars: HTMLDivElement[] = [];
+  private recordingTimerEl: HTMLSpanElement;
+  private dictationPreviewEl: HTMLDivElement;
   private stopRecBtnEl: HTMLButtonElement;
+  private sendRecBtnEl: HTMLButtonElement;
   private cancelRecBtnEl: HTMLButtonElement;
 
   private onSendText: (text: string) => void;
   private onStartTalk: () => void;
   private onStopTalk: () => void;
+  private onSendAudio: () => void;
   private onCancelTalk: () => void;
   private onPlayMessage: (messageId: string) => void;
   private onBackToSidebar: () => void;
@@ -39,6 +43,7 @@ export class ChatWindowUI {
     onSendText: (text: string) => void,
     onStartTalk: () => void,
     onStopTalk: () => void,
+    onSendAudio: () => void,
     onCancelTalk: () => void,
     onPlayMessage: (messageId: string) => void,
     onBackToSidebar: () => void
@@ -46,6 +51,7 @@ export class ChatWindowUI {
     this.onSendText = onSendText;
     this.onStartTalk = onStartTalk;
     this.onStopTalk = onStopTalk;
+    this.onSendAudio = onSendAudio;
     this.onCancelTalk = onCancelTalk;
     this.onPlayMessage = onPlayMessage;
     this.onBackToSidebar = onBackToSidebar;
@@ -63,7 +69,10 @@ export class ChatWindowUI {
 
     // 録音モーダルのバインド
     this.modalEl = document.getElementById('recordingModal') as HTMLDivElement;
+    this.recordingTimerEl = this.modalEl.querySelector('#recordingTimer') as HTMLSpanElement;
+    this.dictationPreviewEl = this.modalEl.querySelector('#recordingDictationPreview') as HTMLDivElement;
     this.stopRecBtnEl = this.modalEl.querySelector('.btn-modal-stop') as HTMLButtonElement;
+    this.sendRecBtnEl = this.modalEl.querySelector('.btn-modal-send') as HTMLButtonElement;
     this.cancelRecBtnEl = this.modalEl.querySelector('.btn-modal-cancel') as HTMLButtonElement;
 
     // レベルメーターバーのバインド
@@ -97,9 +106,14 @@ export class ChatWindowUI {
       this.onStartTalk();
     });
 
-    // 録音モーダル - 録音完了送信
+    // 録音モーダル - 録音停止
     this.stopRecBtnEl.addEventListener('click', () => {
       this.onStopTalk();
+    });
+
+    // 録音モーダル - 送信
+    this.sendRecBtnEl.addEventListener('click', () => {
+      this.onSendAudio();
     });
 
     // 録音モーダル - キャンセル
@@ -125,13 +139,13 @@ export class ChatWindowUI {
    * チャット履歴全体の描画
    * @param messages メッセージ一覧
    * @param currentUserId 自分のユーザーID (送受信バブルの左右振分け用)
-   * @param state 画面表示タイプ ('unconnected' | 'placeholder' | 'chat')
+   * @param state 画面表示タイプ ('unconnected' | 'placeholder' | 'empty' | 'chat')
    * @param placeholderConfig 新規作成プレースホルダー用データ
    */
   render(
     messages: MessageItem[],
     currentUserId: string,
-    state: 'unconnected' | 'placeholder' | 'chat',
+    state: 'unconnected' | 'placeholder' | 'empty' | 'chat',
     placeholderConfig?: { title: string; subtitle: string },
     roomTitle?: string,
     roomMembers?: string
@@ -147,7 +161,7 @@ export class ChatWindowUI {
         'コミュニティ未接続',
         '最上部のコンボボックスにコミュニティIDを入力するか、履歴から選択して「接続する」を押してください。'
       );
-      this.toggleInputs(false);
+      this.toggleInputs(false, 'unconnected');
       return;
     }
 
@@ -161,6 +175,19 @@ export class ChatWindowUI {
         placeholderConfig.subtitle
       );
       this.toggleInputs(true);
+      return;
+    }
+
+    // 2.5 未選択時プレースホルダー
+    if (state === 'empty' && placeholderConfig) {
+      this.roomTitleEl.textContent = placeholderConfig.title;
+      this.roomMembersEl.textContent = '';
+      this.showPlaceholder(
+        '💬',
+        placeholderConfig.title,
+        placeholderConfig.subtitle
+      );
+      this.toggleInputs(false, 'empty');
       return;
     }
 
@@ -221,12 +248,14 @@ export class ChatWindowUI {
     `;
   }
 
-  private toggleInputs(enabled: boolean): void {
+  private toggleInputs(enabled: boolean, emptyType?: 'unconnected' | 'empty'): void {
     this.inputEl.disabled = !enabled;
     this.sendBtnEl.disabled = !enabled;
     this.talkBtnEl.disabled = !enabled;
     if (!enabled) {
-      this.inputEl.placeholder = 'コミュニティへ接続してください';
+      this.inputEl.placeholder = emptyType === 'unconnected' 
+        ? 'コミュニティへ接続してください' 
+        : 'チャット相手を選択してください';
     } else {
       this.inputEl.placeholder = 'メッセージを入力...';
     }
@@ -243,6 +272,33 @@ export class ChatWindowUI {
     this.modalEl.classList.add('show');
     // メーターのリセット
     this.updateMicLevel(0);
+    this.updateRecordingTimer('00:15');
+    this.updateDictationPreview('');
+    this.stopRecBtnEl.style.display = 'block';
+
+    // ステータス表示のリセット
+    const statusTextEl = this.modalEl.querySelector('.recording-status span:nth-child(2)') as HTMLSpanElement;
+    const dotEl = this.modalEl.querySelector('.status-dot') as HTMLSpanElement;
+    if (statusTextEl) statusTextEl.textContent = '音声録音中...';
+    if (dotEl) dotEl.classList.remove('stopped');
+  }
+
+  updateRecordingTimer(text: string): void {
+    if (this.recordingTimerEl) this.recordingTimerEl.textContent = text;
+  }
+
+  updateDictationPreview(text: string): void {
+    if (this.dictationPreviewEl) this.dictationPreviewEl.textContent = text;
+  }
+
+  hideStopButton(): void {
+    this.stopRecBtnEl.style.display = 'none';
+    
+    // ステータス表示の更新
+    const statusTextEl = this.modalEl.querySelector('.recording-status span:nth-child(2)') as HTMLSpanElement;
+    const dotEl = this.modalEl.querySelector('.status-dot') as HTMLSpanElement;
+    if (statusTextEl) statusTextEl.textContent = '録音停止（未送信）';
+    if (dotEl) dotEl.classList.add('stopped');
   }
 
   /**

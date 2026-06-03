@@ -12,6 +12,7 @@ export class CommunitySelectorUI {
   private inputEl: HTMLInputElement;
   private dropdownEl: HTMLDivElement;
   private connectBtnEl: HTMLButtonElement;
+  private disconnectBtnEl: HTMLButtonElement;
   private arrowEl: HTMLElement;
   
   private onConnect: (slug: string) => void;
@@ -34,11 +35,11 @@ export class CommunitySelectorUI {
     this.inputEl = container.querySelector('.combobox-input') as HTMLInputElement;
     this.dropdownEl = container.querySelector('.combobox-dropdown') as HTMLDivElement;
     this.connectBtnEl = container.querySelector('.btn-connect') as HTMLButtonElement;
-    const disconnectBtnEl = container.querySelector('.btn-disconnect') as HTMLButtonElement;
+    this.disconnectBtnEl = container.querySelector('.btn-disconnect') as HTMLButtonElement;
 
-    // 切断ボタンのイベント登録（クラスプロパティとして保持しなくてもイベントだけ登録すればOK）
-    if (disconnectBtnEl) {
-      disconnectBtnEl.addEventListener('click', () => {
+    // 切断ボタンのイベント登録
+    if (this.disconnectBtnEl) {
+      this.disconnectBtnEl.addEventListener('click', () => {
         this.onDisconnect();
       });
     }
@@ -197,12 +198,14 @@ export class CommunitySelectorUI {
       this.inputEl.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
       this.arrowEl.style.display = 'none';
       this.connectBtnEl.style.display = 'none';
+      if (this.disconnectBtnEl) this.disconnectBtnEl.style.display = 'block';
     } else {
       this.inputEl.value = '';
       this.inputEl.readOnly = false;
       this.inputEl.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
       this.arrowEl.style.display = 'flex';
       this.connectBtnEl.style.display = 'block';
+      if (this.disconnectBtnEl) this.disconnectBtnEl.style.display = 'none';
     }
   }
 }
