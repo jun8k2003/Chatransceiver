@@ -366,12 +366,13 @@ export class App {
         console.error('Failed to select individual chat:', e);
       }
     } else {
-      // 複数人選択 (新規グループの自動判定)
+      // 複数人選択 (既存グループの自動判定)
+      const expectedMembers = [...userIds, this.state.currentUser!.id];
       const matchedGroup = this.state.groups.find((group) => {
         const members = this.groupMembersMap[group.id] || [];
         return (
-          members.length === userIds.length &&
-          members.every((m) => userIds.includes(m))
+          members.length === expectedMembers.length &&
+          members.every((m) => expectedMembers.includes(m))
         );
       });
 
@@ -401,7 +402,7 @@ export class App {
 
     if (groupId) {
       const members = this.groupMembersMap[groupId] || [];
-      this.state.selectedUserIds = [...members];
+      this.state.selectedUserIds = members.filter(id => id !== this.state.currentUser!.id);
       
       const messages = await this.supabaseService.getRoomMessages(groupId);
       this.state.messages = messages;
