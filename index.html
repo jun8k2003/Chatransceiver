@@ -65,6 +65,12 @@
       
       <!-- 左サイドバー (上下分割) -->
       <aside class="sidebar" id="appSidebar">
+        <!-- モバイル用 チャット画面へ遷移するヘッダー -->
+        <div id="mobileSidebarHeader" class="mobile-sidebar-header">
+          <div style="flex: 1;"></div>
+          <button id="btnMobileGoToChat" class="btn-mobile-nav" disabled>チャット履歴 →</button>
+        </div>
+
         <!-- 左上ペイン: 個別チャット一覧 (ユーザー一覧) -->
         <section id="userPane" class="pane user-pane">
           <div class="pane-header">
@@ -96,7 +102,7 @@
       <section id="chatPane" class="pane chat-pane">
         <div class="chat-header">
           <!-- モバイル用戻るボタン -->
-          <button class="btn-back-to-sidebar" style="display: none;">← 一覧</button>
+          <button class="btn-back-to-sidebar btn-mobile-nav" style="display: none;">← 一覧</button>
           
           <div class="chat-room-info">
             <h3 class="chat-room-title">-</h3>
@@ -130,17 +136,22 @@
         <div class="recording-status">
           <span class="status-dot"></span>
           <span>音声録音中...</span>
+          <span id="recordingTimer" style="margin-left:10px; font-variant-numeric: tabular-nums;">00:15</span>
         </div>
         <p class="recording-title">話しかけてください</p>
+        <div id="recordingDictationPreview" style="margin: 10px 0; min-height: 24px; font-size: 14px; color: var(--color-text-secondary); text-align: center; word-break: break-all;"></div>
         
         <!-- マイク入力レベルメーター -->
         <div class="meter-container">
           <!-- 20本のバーがJavaScriptで動的生成されます -->
         </div>
         
-        <div class="recording-actions">
-          <button class="btn-modal btn-modal-stop">録音終了 (送信)</button>
-          <button class="btn-modal btn-modal-cancel">キャンセル</button>
+        <div class="recording-actions" style="flex-direction: column; gap: 10px;">
+          <button class="btn-modal btn-modal-stop" style="background-color: var(--color-danger); color: white; width: 100%;">録音を停止する</button>
+          <div style="display: flex; gap: 10px; width: 100%;">
+            <button class="btn-modal btn-modal-send" style="flex: 1;">送信</button>
+            <button class="btn-modal btn-modal-cancel" style="flex: 1;">キャンセル</button>
+          </div>
         </div>
       </div>
     </div>

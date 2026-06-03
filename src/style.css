@@ -34,7 +34,7 @@ body {
   font-family: var(--font-family);
   background-color: var(--bg-main);
   color: var(--color-text-primary);
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -158,7 +158,8 @@ body {
   color: var(--color-accent);
 }
 
-.btn-connect {
+.btn-connect,
+.btn-disconnect {
   background: var(--color-accent);
   color: #fff;
   border: none;
@@ -171,7 +172,8 @@ body {
   transition: var(--transition-normal);
 }
 
-.btn-connect:hover {
+.btn-connect:hover,
+.btn-disconnect:hover {
   background: var(--color-accent-hover);
 }
 
@@ -222,8 +224,12 @@ body {
 .app-container {
   display: flex;
   flex: 1;
-  height: calc(100vh - 65px);
+  height: calc(100dvh - 65px);
   position: relative;
+}
+
+.mobile-sidebar-header {
+  display: none;
 }
 
 /* 左サイドバー */
@@ -721,7 +727,7 @@ body.resizing-v * {
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
   background: rgba(5, 7, 16, 0.7);
   backdrop-filter: blur(8px);
   z-index: 1000;
@@ -743,7 +749,8 @@ body.resizing-v * {
   border-radius: 20px;
   padding: 30px;
   width: 360px;
-  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -802,6 +809,11 @@ body.resizing-v * {
   animation: pulse 1s infinite alternate;
 }
 
+.status-dot.stopped {
+  animation: none;
+  background-color: var(--color-text-secondary);
+}
+
 @keyframes pulse {
   0% { transform: scale(0.8); opacity: 0.5; }
   100% { transform: scale(1.2); opacity: 1; }
@@ -854,7 +866,7 @@ body.resizing-v * {
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
   background-color: var(--bg-main);
   z-index: 2000;
   display: flex;
@@ -1023,7 +1035,7 @@ body.resizing-v * {
 
   /* メインレイアウト */
   .app-container {
-    height: calc(100vh - 120px); /* 2段ヘッダーに対応 */
+    height: calc(100dvh - 120px); /* 2段ヘッダーに対応 */
     position: relative;
     overflow: hidden;
   }
@@ -1059,8 +1071,8 @@ body.resizing-v * {
     transform: translateX(0); /* 画面内にスライドイン */
   }
 
-  /* モバイル用戻るボタンの表示 */
-  .btn-back-to-sidebar {
+  /* モバイル用ナビゲーションボタン（ヘッダー部） */
+  .btn-mobile-nav {
     display: flex !important;
     align-items: center;
     background: rgba(255, 255, 255, 0.05);
@@ -1071,13 +1083,29 @@ body.resizing-v * {
     font-family: var(--font-family);
     font-size: 13px;
     cursor: pointer;
-    margin-right: 12px;
     transition: var(--transition-normal);
     font-weight: 500;
   }
 
-  .btn-back-to-sidebar:hover {
+  .btn-mobile-nav:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
+  }
+
+  .btn-mobile-nav:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .chat-header .btn-mobile-nav {
+    margin-right: 12px;
+  }
+
+  .mobile-sidebar-header {
+    display: flex !important;
+    justify-content: flex-end;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-card);
   }
 
   /* モーダル調整 */

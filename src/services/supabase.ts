@@ -208,7 +208,7 @@ export class SupabaseService {
         id: u.id,
         name: u.name,
         userNumber: item.user_number,
-        isOnline: true // 簡易表示
+        isOnline: false // Presenceで後から更新される
       };
     });
   }
@@ -547,5 +547,29 @@ export class SupabaseService {
       .eq('is_read', false);
 
     if (error) console.error('Failed to mark inbox items as read:', error);
+  }
+
+  /**
+   * コミュニティ内のオンラインステータスをPresenceで監視
+   */
+  subscribeCommunityPresence(communitySlug: string, currentUserId: string, onPresenceSync: (onlineUserIds: string[]) => void): any {
+    const channel = supabase.channel(`community_presence:${communitySlug}`);
+    
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        // 各クライアントの状態を取り出し、ユニークなユーザーIDのリストを作る
+        const onlineUserIds = Object.values(state).flatMap((presences: any[]) => 
+          presences.map(p => p.user_id)
+        );
+        onPresenceSync([...new Set(onlineUserIds)]);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: currentUserId });
+        }
+      });
+      
+    return channel;
   }
 }
