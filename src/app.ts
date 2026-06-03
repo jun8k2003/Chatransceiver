@@ -19,6 +19,7 @@ export class App {
   private inboxSubscription: any = null;
   private roomSubscription: any = null;
   private presenceSubscription: any = null;
+  private currentOnlineUserIds: string[] = [];
 
   // アプリケーション・グローバルステート
   private state: UIState = {
@@ -205,6 +206,7 @@ export class App {
         slug,
         this.state.currentUser.id,
         (onlineUserIds) => {
+          this.currentOnlineUserIds = onlineUserIds;
           this.state.members.forEach(m => {
             m.isOnline = onlineUserIds.includes(m.id);
           });
@@ -245,6 +247,7 @@ export class App {
         const info = unreadIndividual[m.id];
         m.unreadCount = info?.count || 0;
         m.latestUnreadTime = info?.latestTime || 0;
+        m.isOnline = this.currentOnlineUserIds.includes(m.id);
       });
 
       this.state.members = members;
@@ -283,6 +286,7 @@ export class App {
     if (this.presenceSubscription) {
       this.presenceSubscription.unsubscribe();
       this.presenceSubscription = null;
+      this.currentOnlineUserIds = [];
     }
 
     this.state.currentCommunity = null;
