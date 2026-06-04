@@ -131,10 +131,15 @@
     <!-- 4. 録音モーダルダイアログ (DEC-006 / 音量レベルメーター) -->
     <div id="recordingModal" class="modal-overlay">
       <div class="modal-content">
-        <div class="recording-status">
-          <span class="status-dot"></span>
-          <span>音声録音中...</span>
-          <span id="recordingTimer" style="margin-left:10px; font-variant-numeric: tabular-nums;">00:15</span>
+        <div class="recording-status-container" style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%;">
+          <div class="recording-status">
+            <span class="status-dot"></span>
+            <span id="recordingStatusText">音声録音中...</span>
+            <span id="recordingTimer" style="margin-left:10px; font-variant-numeric: tabular-nums;">00:15</span>
+          </div>
+          <div style="width: 140px; height: 2px; background: rgba(255,255,255,0.1); border-radius: 1px; overflow: hidden;">
+            <div id="recordingProgressBar" style="width: 0%; height: 100%; background: var(--color-success); transition: width 0.1s linear;"></div>
+          </div>
         </div>
         <p class="recording-title">話しかけてください</p>
         <div id="recordingDictationPreview" style="margin: 10px 0; min-height: 24px; font-size: 14px; color: var(--color-text-secondary); text-align: center; word-break: break-all;"></div>
@@ -171,6 +176,15 @@
             <span class="checkbox-custom"></span>
             <span class="checkbox-label" style="margin-left: 10px; font-size: 14px;">音声新着時の自動再生を有効にする</span>
           </label>
+        </div>
+        
+        <!-- テーマ設定 -->
+        <div class="settings-group" style="margin-top: 15px; width: 100%;">
+          <label for="settingsTheme" style="margin-bottom: 8px; display: block;">カラーテーマ</label>
+          <select id="settingsTheme" class="mock-input" style="cursor: pointer;">
+            <option value="dark">ダークモード (標準)</option>
+            <option value="light">ライトモード</option>
+          </select>
         </div>
         
         <!-- マイク権限設定URLコピー (DEC-008) -->

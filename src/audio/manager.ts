@@ -158,19 +158,25 @@ export class AudioManager {
 
       const audio = new Audio(url);
       this.activeAudioElement = audio;
+      this.activeAudioResolve = resolve;
 
       audio.onended = () => {
         this.activeAudioElement = null;
-        resolve();
+        if (this.activeAudioResolve) {
+          this.activeAudioResolve();
+          this.activeAudioResolve = null;
+        }
       };
 
       audio.onerror = (e) => {
         this.activeAudioElement = null;
+        this.activeAudioResolve = null;
         reject(e);
       };
 
       audio.play().catch((err) => {
         this.activeAudioElement = null;
+        this.activeAudioResolve = null;
         reject(err);
       });
     });
@@ -207,6 +213,8 @@ export class AudioManager {
     });
   }
 
+  private activeAudioResolve: (() => void) | null = null;
+
   /**
    * 現在実行中のすべての再生・音声読み上げを即座に停止する
    */
@@ -215,6 +223,10 @@ export class AudioManager {
     if (this.activeAudioElement) {
       this.activeAudioElement.pause();
       this.activeAudioElement = null;
+    }
+    if (this.activeAudioResolve) {
+      this.activeAudioResolve();
+      this.activeAudioResolve = null;
     }
     // 音声合成の読み上げ停止
     if ('speechSynthesis' in window) {

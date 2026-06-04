@@ -128,6 +128,7 @@ alter table public.user_inboxes enable row level security;
 
 -- 3.1. users ポリシー
 create policy "Users can read all user profiles" on public.users for select using (true);
+create policy "Users can insert their own profile" on public.users for insert with check (auth.uid() = id);
 create policy "Users can update their own profile" on public.users for update using (auth.uid() = id);
 
 -- 3.2. communities ポリシー (誰でもコミュニティを作成・検索できる)

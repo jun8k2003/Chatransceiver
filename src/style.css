@@ -24,6 +24,19 @@
   --transition-normal: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+body.theme-light {
+  --bg-main: #f1f5f9;
+  --bg-panel: rgba(255, 255, 255, 0.85);
+  --bg-input: rgba(248, 250, 252, 0.9);
+  --border-color: rgba(0, 0, 0, 0.08);
+  
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -38,6 +51,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* スクロールバーのカスタマイズ */
@@ -54,6 +68,13 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+body.theme-light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+body.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
 }
 
 /* ========================================================

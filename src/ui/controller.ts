@@ -19,6 +19,7 @@ export interface UIState {
   autoplayEnabled: boolean;
   isRecording: boolean;
   mobileChatForceOpen: boolean;
+  theme: 'light' | 'dark';
 }
 
 /**
@@ -41,6 +42,7 @@ export class UIController {
   private settingsModalEl: HTMLDivElement;
   private settingsNicknameInput: HTMLInputElement;
   private settingsAutoplayCheck: HTMLInputElement;
+  private settingsThemeSelect: HTMLSelectElement;
   private settingsSaveBtn: HTMLButtonElement;
   private settingsCancelBtn: HTMLButtonElement;
   private settingsLeaveContainerEl: HTMLDivElement;
@@ -59,15 +61,16 @@ export class UIController {
     onStartTalk: () => void,
     onStopTalk: () => void,
     onSendAudio: () => void,
-    onPreviewAudio: () => void,
+    onPreviewAudio: () => Promise<void>,
     onCancelTalk: () => void,
-    onPlayMessage: (messageId: string) => void,
+    onPlayMessage: (messageId: string) => Promise<void>,
+    onStopPlayback: () => void,
     onRevokeMessage: (messageId: string) => void,
     onMobileGoToChat: () => void,
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean) => void
+    onSaveSettings: (nickname: string, autoplay: boolean, theme: 'light'|'dark') => void
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -128,6 +131,7 @@ export class UIController {
       onPreviewAudio,
       onCancelTalk,
       onPlayMessage,
+      onStopPlayback,
       onRevokeMessage,
       onBackToSidebar
     );
@@ -137,8 +141,9 @@ export class UIController {
     
     // 設定モーダルのバインド
     this.settingsModalEl = document.getElementById('settingsModal') as HTMLDivElement;
-    this.settingsNicknameInput = this.settingsModalEl.querySelector('#settingsNickname') as HTMLInputElement;
-    this.settingsAutoplayCheck = this.settingsModalEl.querySelector('#settingsAutoplay') as HTMLInputElement;
+    this.settingsNicknameInput = document.getElementById('settingsNickname') as HTMLInputElement;
+    this.settingsAutoplayCheck = document.getElementById('settingsAutoplay') as HTMLInputElement;
+    this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
     this.settingsSaveBtn = this.settingsModalEl.querySelector('.btn-settings-save') as HTMLButtonElement;
     this.settingsCancelBtn = this.settingsModalEl.querySelector('.btn-settings-cancel') as HTMLButtonElement;
     this.settingsLeaveContainerEl = this.settingsModalEl.querySelector('#settingsLeaveContainer') as HTMLDivElement;
@@ -174,13 +179,15 @@ export class UIController {
       this.settingsModalEl.classList.remove('show');
     });
 
-    // 保存ボタン
+    // 環境設定モーダル保存
     this.settingsSaveBtn.addEventListener('click', () => {
-      const nickname = this.settingsNicknameInput.value.trim();
+      const newNickname = this.settingsNicknameInput.value.trim();
       const autoplay = this.settingsAutoplayCheck.checked;
-      if (nickname) {
-        onSaveSettings(nickname, autoplay);
-        this.settingsModalEl.classList.remove('show');
+      const theme = this.settingsThemeSelect.value as 'light' | 'dark';
+      if (newNickname) {
+        onSaveSettings(newNickname, autoplay, theme);
+      } else {
+        alert('ニックネームを入力してください。');
       }
     });
 
@@ -234,6 +241,7 @@ export class UIController {
         this.settingsNicknameInput.value = state.currentUser.name;
       }
       this.settingsAutoplayCheck.checked = state.autoplayEnabled;
+      this.settingsThemeSelect.value = state.theme;
       
       // 退会コントロールの表示制御
       if (state.currentCommunity) {

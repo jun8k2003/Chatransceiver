@@ -76,11 +76,32 @@ export class SupabaseService {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data: profile } = await supabase
+    let { data: profile, error } = await supabase
       .from('users')
       .select('name')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
+
+    if (error || !profile) {
+      // プロフィールが存在しない場合は自動作成(Upsert)して修復する
+      const fallbackName = user.user_metadata?.name || user.user_metadata?.full_name || 'No Name';
+      const { data: newProfile, error: upsertError } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          name: fallbackName,
+          email: user.email || '',
+          avatar_url: user.user_metadata?.avatar_url || ''
+        }, { onConflict: 'id' })
+        .select('name')
+        .single();
+        
+      if (!upsertError && newProfile) {
+        profile = newProfile;
+      } else {
+        console.error('Failed to auto-repair user profile:', upsertError);
+      }
+    }
 
     return {
       id: user.id,
@@ -154,14 +175,15 @@ export class SupabaseService {
 
       const { error: joinError } = await supabase
         .from('community_members')
-        .insert({
+        .upsert({
           community_id: community.id,
           user_id: userId,
           user_number: nextNumber
+        }, {
+          onConflict: 'community_id, user_id'
         });
 
-      // エラー23505は「すでに存在する（重複）」エラー。この場合は既に参加しているとみなして無視する
-      if (joinError && joinError.code !== '23505') {
+      if (joinError) {
         throw joinError;
       }
     }
