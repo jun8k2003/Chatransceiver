@@ -26,6 +26,7 @@ export class ChatWindowUI {
   private modalEl: HTMLDivElement;
   private meterBars: HTMLDivElement[] = [];
   private recordingTimerEl: HTMLSpanElement;
+  private recordingProgressBarEl: HTMLDivElement;
   private dictationPreviewEl: HTMLDivElement;
   private stopRecBtnEl: HTMLButtonElement;
   private previewBtnEl: HTMLButtonElement;
@@ -36,9 +37,10 @@ export class ChatWindowUI {
   private onStartTalk: () => void;
   private onStopTalk: () => void;
   private onSendAudio: () => void;
-  private onPreviewAudio: () => void;
+  private onPreviewAudio: () => Promise<void>;
   private onCancelTalk: () => void;
-  private onPlayMessage: (messageId: string) => void;
+  private onPlayMessage: (messageId: string) => Promise<void>;
+  private onStopPlayback: () => void;
   private onRevokeMessage: (messageId: string) => void;
   private onBackToSidebar: () => void;
 
@@ -48,9 +50,10 @@ export class ChatWindowUI {
     onStartTalk: () => void,
     onStopTalk: () => void,
     onSendAudio: () => void,
-    onPreviewAudio: () => void,
+    onPreviewAudio: () => Promise<void>,
     onCancelTalk: () => void,
-    onPlayMessage: (messageId: string) => void,
+    onPlayMessage: (messageId: string) => Promise<void>,
+    onStopPlayback: () => void,
     onRevokeMessage: (messageId: string) => void,
     onBackToSidebar: () => void
   ) {
@@ -61,6 +64,7 @@ export class ChatWindowUI {
     this.onPreviewAudio = onPreviewAudio;
     this.onCancelTalk = onCancelTalk;
     this.onPlayMessage = onPlayMessage;
+    this.onStopPlayback = onStopPlayback;
     this.onRevokeMessage = onRevokeMessage;
     this.onBackToSidebar = onBackToSidebar;
 
@@ -77,7 +81,9 @@ export class ChatWindowUI {
 
     // 録音モーダルのバインド
     this.modalEl = document.getElementById('recordingModal') as HTMLDivElement;
+    this.modalEl = document.getElementById('recordingModal') as HTMLDivElement;
     this.recordingTimerEl = document.getElementById('recordingTimer') as HTMLSpanElement;
+    this.recordingProgressBarEl = document.getElementById('recordingProgressBar') as HTMLDivElement;
     this.dictationPreviewEl = document.getElementById('recordingDictationPreview') as HTMLDivElement;
     this.stopRecBtnEl = document.querySelector('.btn-modal-stop') as HTMLButtonElement;
     this.previewBtnEl = document.querySelector('.btn-modal-preview') as HTMLButtonElement;
@@ -121,8 +127,23 @@ export class ChatWindowUI {
     });
 
     // 録音モーダル - プレビュー
-    this.previewBtnEl.addEventListener('click', () => {
-      this.onPreviewAudio();
+    this.previewBtnEl.addEventListener('click', async () => {
+      if (this.previewBtnEl.textContent?.includes('■')) {
+        this.onStopPlayback();
+        return;
+      }
+      
+      // 他の再生ボタンをリセット
+      document.querySelectorAll('.btn-play-msg').forEach(b => {
+        if (b.textContent === '■') b.textContent = '▶';
+      });
+
+      this.previewBtnEl.textContent = '■ プレビュー';
+      try {
+        await this.onPreviewAudio();
+      } finally {
+        this.previewBtnEl.textContent = '▶ プレビュー';
+      }
     });
 
     // 録音モーダル - 送信
@@ -252,8 +273,24 @@ export class ChatWindowUI {
 
         // 再生ボタンのクリックイベント
         const playBtn = bubbleEl.querySelector('.btn-play-msg') as HTMLButtonElement;
-        playBtn.addEventListener('click', () => {
-          this.onPlayMessage(msg.id);
+        playBtn.addEventListener('click', async () => {
+          if (playBtn.textContent === '■') {
+            this.onStopPlayback();
+            return;
+          }
+          
+          // 他の再生ボタンをリセット
+          document.querySelectorAll('.btn-play-msg').forEach(b => b.textContent = '▶');
+          if (this.previewBtnEl.textContent?.includes('■')) {
+            this.previewBtnEl.textContent = '▶ プレビュー';
+          }
+          
+          playBtn.textContent = '■';
+          try {
+            await this.onPlayMessage(msg.id);
+          } finally {
+            playBtn.textContent = '▶';
+          }
         });
 
         // 削除ボタンのクリックイベント
@@ -320,9 +357,20 @@ export class ChatWindowUI {
     // メーターの初期化
     this.updateMicLevel(0);
     this.updateRecordingTimer('00:15');
-
-    // ステータス表示のリセット
-    const statusTextEl = this.modalEl.querySelector('.recording-status span:nth-child(2)') as HTMLSpanElement;
+    this.previewBtnEl.textContent = '▶ プレビュー';
+    this.previewBtnEl.disabled = true;
+    this.sendRecBtnEl.disabled = false;
+    
+    // プログレスバーのリセットとアニメーション開始
+    if (this.recordingProgressBarEl) {
+      this.recordingProgressBarEl.style.transition = 'none';
+      this.recordingProgressBarEl.style.width = '0%';
+      void this.recordingProgressBarEl.offsetWidth; // force reflow
+      this.recordingProgressBarEl.style.transition = 'width 15s linear';
+      this.recordingProgressBarEl.style.width = '100%';
+    }
+      
+    const statusTextEl = this.modalEl.querySelector('#recordingStatusText') as HTMLSpanElement;
     const dotEl = this.modalEl.querySelector('.status-dot') as HTMLSpanElement;
     if (statusTextEl) statusTextEl.textContent = '音声録音中...';
     if (dotEl) dotEl.classList.remove('stopped');
@@ -340,9 +388,16 @@ export class ChatWindowUI {
   hideStopButton(): void {
     this.stopRecBtnEl.disabled = true;
     this.previewBtnEl.disabled = false;
+    this.sendRecBtnEl.disabled = false;
+    
+    if (this.recordingProgressBarEl) {
+      const computedWidth = window.getComputedStyle(this.recordingProgressBarEl).width;
+      this.recordingProgressBarEl.style.transition = 'none';
+      this.recordingProgressBarEl.style.width = computedWidth;
+    }
     
     // ステータス表示の更新
-    const statusTextEl = this.modalEl.querySelector('.recording-status span:nth-child(2)') as HTMLSpanElement;
+    const statusTextEl = this.modalEl.querySelector('#recordingStatusText') as HTMLSpanElement;
     const dotEl = this.modalEl.querySelector('.status-dot') as HTMLSpanElement;
     if (statusTextEl) statusTextEl.textContent = '録音停止（未送信）';
     if (dotEl) dotEl.classList.add('stopped');
@@ -353,6 +408,10 @@ export class ChatWindowUI {
    */
   hideRecordingModal(): void {
     this.modalEl.classList.remove('show');
+    if (this.recordingProgressBarEl) {
+      this.recordingProgressBarEl.style.transition = 'none';
+      this.recordingProgressBarEl.style.width = '0%';
+    }
   }
 
   /**

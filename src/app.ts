@@ -34,7 +34,8 @@ export class App {
     playingGroupId: undefined,
     autoplayEnabled: true,
     isRecording: false,
-    mobileChatForceOpen: false
+    mobileChatForceOpen: false,
+    theme: 'dark'
   };
 
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
@@ -52,24 +53,25 @@ export class App {
 
     // UIController の初期化とコールバック登録
     this.uiController = new UIController(
-      (slug) => this.handleConnectCommunity(slug),
+      (slug: string) => this.handleConnectCommunity(slug),
       () => this.handleDisconnectCommunity(),
       () => this.handleLeaveCommunity(),
-      (userIds) => this.handleUserCheckChange(userIds),
-      (groupId) => this.handleGroupSelect(groupId),
-      (text) => this.handleSendText(text),
+      (userIds: string[]) => this.handleUserCheckChange(userIds),
+      (groupId: string | null) => this.handleGroupSelect(groupId),
+      (text: string) => this.handleSendText(text),
       () => this.handleStartTalk(),
       () => this.handleStopTalk(),
       () => this.handleSendAudio(),
       () => this.handlePreviewAudio(),
       () => this.handleCancelTalk(),
-      (msgId) => this.handlePlayMessage(msgId),
-      (msgId) => this.handleRevokeMessage(msgId),
+      (msgId: string) => this.handlePlayMessage(msgId),
+      () => this.audioManager.stopAllPlayback(),
+      (msgId: string) => this.handleRevokeMessage(msgId),
       () => this.handleMobileGoToChat(),
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname, autoplay) => this.handleSaveSettings(nickname, autoplay)
+      (nickname: string, autoplay: boolean, theme: 'light' | 'dark') => this.handleSaveSettings(nickname, autoplay, theme)
     );
   }
 
@@ -82,6 +84,13 @@ export class App {
     if (savedAutoplay !== null) {
       this.state.autoplayEnabled = savedAutoplay === 'true';
     }
+
+    // テーマ設定の読み込み
+    const savedTheme = localStorage.getItem('chatransceiver_theme') as 'light' | 'dark';
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      this.state.theme = savedTheme;
+    }
+    this.applyTheme(this.state.theme);
 
     // URL フラグメントまたはパラメータによる直接接続チェック (DEC-017)
     let communitySlug = '';
@@ -649,11 +658,13 @@ export class App {
   /**
    * 録音した音声のプレビュー再生
    */
-  private handlePreviewAudio(): void {
+  private async handlePreviewAudio(): Promise<void> {
     if (this.recordedAudioBlob) {
-      this.audioManager.playBlob(this.recordedAudioBlob).catch(err => {
+      try {
+        await this.audioManager.playBlob(this.recordedAudioBlob);
+      } catch (err) {
         console.error('Failed to play preview audio:', err);
-      });
+      }
     }
   }
 
@@ -698,14 +709,18 @@ export class App {
   /**
    * バブルの「▶」再生ボタンクリック時の処理 (手動再再生)
    */
-  private handlePlayMessage(messageId: string): void {
+  private async handlePlayMessage(messageId: string): Promise<void> {
     const msg = this.state.messages.find((m) => m.id === messageId);
     if (!msg) return;
 
-    if (msg.audioUrl) {
-      this.audioManager.playAudio(msg.audioUrl).catch(console.error);
-    } else {
-      this.audioManager.speakText(msg.textContent).catch(console.error);
+    try {
+      if (msg.audioUrl) {
+        await this.audioManager.playAudio(msg.audioUrl);
+      } else {
+        await this.audioManager.speakText(msg.textContent);
+      }
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -735,7 +750,7 @@ export class App {
   /**
    * 環境設定の保存
    */
-  private async handleSaveSettings(nickname: string, autoplay: boolean): Promise<void> {
+  private async handleSaveSettings(nickname: string, autoplay: boolean, theme: 'light' | 'dark'): Promise<void> {
     if (this.state.currentUser) {
       try {
         await this.supabaseService.updateNickname(this.state.currentUser.id, nickname);
@@ -757,6 +772,23 @@ export class App {
     
     // 設定変更に伴い、ヘッダー等の表示名や状態を更新するためリロード
     await this.loadCommunityData();
+    
+    // テーマの保存と適用
+    this.state.theme = theme;
+    localStorage.setItem('chatransceiver_theme', theme);
+    this.applyTheme(theme);
+    
     this.updateUI();
+  }
+  
+  /**
+   * テーマ（Light/Dark）を画面に適用
+   */
+  private applyTheme(theme: 'light' | 'dark'): void {
+    if (theme === 'light') {
+      document.body.classList.add('theme-light');
+    } else {
+      document.body.classList.remove('theme-light');
+    }
   }
 }
