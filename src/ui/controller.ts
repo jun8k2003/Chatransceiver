@@ -186,6 +186,7 @@ export class UIController {
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
       if (newNickname) {
         onSaveSettings(newNickname, autoplay, theme);
+        this.settingsModalEl.classList.remove('show');
       } else {
         alert('ニックネームを入力してください。');
       }

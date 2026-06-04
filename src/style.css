@@ -25,16 +25,50 @@
 }
 
 body.theme-light {
-  --bg-main: #f1f5f9;
-  --bg-panel: rgba(255, 255, 255, 0.85);
-  --bg-input: rgba(248, 250, 252, 0.9);
-  --border-color: rgba(0, 0, 0, 0.08);
+  --bg-main: #ffffff;
+  --bg-panel: rgba(255, 255, 255, 0.95);
+  --bg-input: rgba(245, 245, 245, 0.9);
+  --border-color: rgba(0, 0, 0, 0.1);
   
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
   --color-text-muted: #64748b;
   
   --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+body.theme-light .chat-pane {
+  background-color: #ffffff;
+}
+
+body.theme-light .modal-content {
+  background: #ffffff;
+}
+
+body.theme-light .modal-overlay {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+body.theme-light .chat-header,
+body.theme-light .chat-footer {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+body.theme-light .meter-container {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body.theme-light .btn-modal-cancel,
+body.theme-light .btn-settings-cancel {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+body.theme-light .btn-modal-cancel:hover,
+body.theme-light .btn-settings-cancel:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--color-text-primary);
 }
 
 * {
@@ -912,13 +946,15 @@ body.resizing-v * {
   background: #dc2626;
 }
 
-.btn-modal-cancel {
+.btn-modal-cancel,
+.btn-settings-cancel {
   background: rgba(255, 255, 255, 0.05);
   color: var(--color-text-secondary);
   border: 1px solid var(--border-color);
 }
 
-.btn-modal-cancel:hover {
+.btn-modal-cancel:hover,
+.btn-settings-cancel:hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--color-text-primary);
 }
