@@ -1,4 +1,5 @@
 import { AudioManager } from './manager';
+import pttStartUrl from '../assets/ptt-start.wav';
 
 export interface QueueItem {
   id: string;              // メッセージのユニークID
@@ -43,6 +44,7 @@ export class AudioPlaybackQueue {
     }
   }
 
+
   /**
    * 次のアイテムの再生実行
    */
@@ -61,6 +63,13 @@ export class AudioPlaybackQueue {
         currentItem.onPlayStart();
       }
 
+      // 再生前チャイム
+      try {
+        await this.audioManager.playAudio(pttStartUrl);
+      } catch (error) {
+        console.warn('Failed to play ptt-start before:', error);
+      }
+
       // データのタイプに応じて再生処理を分岐 (DEC-018)
       if (currentItem.type === 'audio') {
         // 音声ファイル再生
@@ -68,6 +77,13 @@ export class AudioPlaybackQueue {
       } else {
         // テキスト音声合成 (TTS) 再生
         await this.audioManager.speakText(currentItem.content);
+      }
+
+      // 再生後チャイム
+      try {
+        await this.audioManager.playAudio(pttStartUrl);
+      } catch (error) {
+        console.warn('Failed to play ptt-start after:', error);
       }
     } catch (error) {
       console.error('AudioPlaybackQueue playback error:', error);
