@@ -45,20 +45,7 @@ export class UserListUI {
       return;
     }
 
-    // 未読件数があるメンバーを上にソートし、未読がある場合は最終未読日時の新しい順
-    const sortedMembers = [...members].sort((a, b) => {
-      const aUnread = a.unreadCount || 0;
-      const bUnread = b.unreadCount || 0;
-      if (aUnread > 0 && bUnread > 0) {
-        return (b.latestUnreadTime || 0) - (a.latestUnreadTime || 0);
-      }
-      if (aUnread !== bUnread) {
-        return bUnread - aUnread;
-      }
-      return a.userNumber - b.userNumber;
-    });
-
-    sortedMembers.forEach((member) => {
+    members.forEach((member) => {
       const isChecked = checkedUserIds.includes(member.id);
       const isPlaying = playingUserId === member.id;
       const isSelected = checkedUserIds.length === 1 && checkedUserIds[0] === member.id;
