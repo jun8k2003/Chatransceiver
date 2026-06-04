@@ -19,6 +19,7 @@ export class App {
   private inboxSubscription: any = null;
   private roomSubscription: any = null;
   private presenceSubscription: any = null;
+  private communityMembersSubscription: any = null;
   private currentOnlineUserIds: string[] = [];
 
   // アプリケーション・グローバルステート
@@ -224,6 +225,18 @@ export class App {
         (inboxItem) => this.handleNewInboxItem(inboxItem)
       );
 
+      // コミュニティメンバー増減の監視開始
+      if (this.communityMembersSubscription) {
+        this.communityMembersSubscription.unsubscribe();
+      }
+      this.communityMembersSubscription = this.supabaseService.subscribeCommunityMembers(
+        comm.id,
+        () => {
+          // メンバーの追加・削除があった場合はデータを再読み込みしてUIを更新
+          this.loadCommunityData().then(() => this.updateUI());
+        }
+      );
+
       // Presenceの購読開始 (オンライン状況同期)
       if (this.presenceSubscription) {
         this.presenceSubscription.unsubscribe();
@@ -314,6 +327,10 @@ export class App {
       this.presenceSubscription = null;
       this.currentOnlineUserIds = [];
     }
+    if (this.communityMembersSubscription) {
+      this.communityMembersSubscription.unsubscribe();
+      this.communityMembersSubscription = null;
+    }
 
     this.state.currentCommunity = null;
     localStorage.removeItem('chatransceiver_current_community');
@@ -345,8 +362,10 @@ export class App {
     if (this.state.currentUser && commId) {
       try {
         await this.supabaseService.leaveCommunity(this.state.currentUser.id, commId);
-      } catch (e) {
+      } catch (e: any) {
         console.error('Failed to leave community in Supabase:', e);
+        alert('退会処理に失敗しました。データベースエラー: ' + (e.message || JSON.stringify(e)));
+        return; // エラー時はローカルの切断処理を中断し、画面に留まる
       }
     }
 

@@ -625,6 +625,27 @@ export class SupabaseService {
   }
 
   /**
+   * コミュニティメンバーの増減（参加・退出）をリアルタイム購読
+   */
+  subscribeCommunityMembers(communityId: string, onMemberChange: () => void): any {
+    return supabase
+      .channel(`community_members:${communityId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'community_members',
+          filter: `community_id=eq.${communityId}`
+        },
+        () => {
+          onMemberChange();
+        }
+      )
+      .subscribe();
+  }
+
+  /**
    * コミュニティ内のオンラインステータスをPresenceで監視
    */
   subscribeCommunityPresence(communitySlug: string, currentUserId: string, onPresenceSync: (onlineUserIds: string[]) => void): any {

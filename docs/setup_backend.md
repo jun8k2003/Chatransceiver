@@ -226,7 +226,6 @@ security definer
 as $$
 declare
   v_room_ids UUID[];
-  v_audio_paths TEXT[];
 begin
   -- 1. ユーザーが参加している、対象コミュニティ内のすべてのルームIDを取得
   select array_agg(cr.id) into v_room_ids
@@ -236,28 +235,17 @@ begin
     and crm.user_id = p_user_id;
 
   if v_room_ids is not null then
-    -- 2. 削除対象のルームに含まれる全メッセージの音声ファイルパスを抽出
-    -- (URLからバケット名以下のパス部分を抽出します)
-    select array_agg(
-      split_part(audio_url, '/voice-messages/', 2)
-    ) into v_audio_paths
-    from public.messages
-    where room_id = any(v_room_ids)
-      and audio_url is not null;
-
-    -- 3. Supabase Storage から実体ファイルを削除
-    if v_audio_paths is not null then
-      delete from storage.objects
-      where bucket_id = 'voice-messages'
-        and name = any(v_audio_paths);
-    end if;
-
-    -- 4. 対象のルームをすべて削除 (CASCADEにより紐づくデータも削除)
+    -- 注意: Supabase Storageの `storage.objects` に対するSQLからの直接DELETEは
+    -- RLSやトリガーの権限エラーを引き起こしトランザクション全体がロールバックする
+    -- 原因となりやすいため、ここではDBレコード（メタデータ）のCASCADE削除のみを行います。
+    -- 音声ファイルの実体はオーファン（孤児）として残りますが、動作上の問題はありません。
+    
+    -- 2. 対象のルームをすべて削除 (CASCADEにより紐づくmessages, user_inboxes等も削除)
     delete from public.chat_rooms
     where id = any(v_room_ids);
   end if;
 
-  -- 5. 最後にコミュニティのメンバーから対象ユーザーを削除
+  -- 3. 最後にコミュニティのメンバーから対象ユーザーを削除
   delete from public.community_members
   where community_id = p_community_id
     and user_id = p_user_id;
