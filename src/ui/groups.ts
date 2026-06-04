@@ -44,17 +44,7 @@ export class GroupListUI {
       return;
     }
 
-    // 未読件数があるグループを上にソートし、未読がある場合は最終未読日時の新しい順
-    const sortedGroups = [...groups].sort((a, b) => {
-      const aUnread = a.unreadCount || 0;
-      const bUnread = b.unreadCount || 0;
-      if (aUnread > 0 && bUnread > 0) {
-        return (b.latestUnreadTime || 0) - (a.latestUnreadTime || 0);
-      }
-      return bUnread - aUnread;
-    });
-
-    sortedGroups.forEach((group) => {
+    groups.forEach((group) => {
       const isSelected = activeGroupId === group.id;
       const isPlaying = playingGroupId === group.id;
       const isUnread = group.unreadCount > 0;

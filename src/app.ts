@@ -289,9 +289,31 @@ export class App {
         m.isOnline = this.currentOnlineUserIds.includes(m.id);
       });
 
+      // members をソート (未読優先・新しい順)
+      members.sort((a, b) => {
+        const aUnread = a.unreadCount || 0;
+        const bUnread = b.unreadCount || 0;
+        if (aUnread > 0 && bUnread > 0) {
+          return (b.latestUnreadTime || 0) - (a.latestUnreadTime || 0);
+        }
+        if (aUnread !== bUnread) {
+          return bUnread - aUnread;
+        }
+        return a.userNumber - b.userNumber;
+      });
       this.state.members = members;
 
       const groups = await this.supabaseService.getCommunityGroups(commId, myId);
+      
+      // groups をソート (未読優先・新しい順)
+      groups.sort((a, b) => {
+        const aUnread = a.unreadCount || 0;
+        const bUnread = b.unreadCount || 0;
+        if (aUnread > 0 && bUnread > 0) {
+          return (b.latestUnreadTime || 0) - (a.latestUnreadTime || 0);
+        }
+        return bUnread - aUnread;
+      });
       this.state.groups = groups;
 
       // 各グループの構成メンバーIDをキャッシュ
