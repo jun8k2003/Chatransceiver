@@ -49,6 +49,8 @@ body.theme-light .modal-overlay {
   background: rgba(0, 0, 0, 0.4);
 }
 
+body.theme-light .app-header,
+body.theme-light .mobile-sidebar-header,
 body.theme-light .chat-header,
 body.theme-light .chat-footer {
   background: rgba(255, 255, 255, 0.8);
@@ -71,6 +73,16 @@ body.theme-light .btn-settings-cancel:hover {
   color: var(--color-text-primary);
 }
 
+body.theme-light .btn-mobile-nav {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+
+body.theme-light .btn-mobile-nav:hover:not(:disabled) {
+  background: #bae6fd;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -81,7 +93,7 @@ body {
   font-family: var(--font-family);
   background-color: var(--bg-main);
   color: var(--color-text-primary);
-  height: 100dvh;
+  height: 100vh; height: calc(var(--vh, 1vh) * 100);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -382,7 +394,7 @@ body.resizing-v * {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px 0 calc(12px + env(safe-area-inset-bottom)) 0;
+  padding: 12px 0;
 }
 
 /* 右ペイン: チャットウィンドウ (残り幅) */
@@ -703,7 +715,7 @@ body.resizing-v * {
    チャット送信フッター (テキスト ＆ 発話ボタン)
    ======================================================== */
 .chat-footer {
-  padding: 16px 24px calc(16px + env(safe-area-inset-bottom)) 24px;
+  padding: 16px 24px;
   background: rgba(11, 13, 25, 0.5);
   border-top: 1px solid var(--border-color);
   display: flex;
@@ -820,7 +832,7 @@ body.resizing-v * {
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100dvh;
+  height: 100vh; height: calc(var(--vh, 1vh) * 100);
   background: rgba(5, 7, 16, 0.7);
   backdrop-filter: blur(8px);
   z-index: 1000;
@@ -969,7 +981,7 @@ body.resizing-v * {
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100dvh;
+  height: 100vh; height: calc(var(--vh, 1vh) * 100);
   background-color: var(--bg-main);
   z-index: 2000;
   display: flex;
@@ -1115,7 +1127,7 @@ body.resizing-v * {
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100dvh;
+  height: 100vh; height: calc(var(--vh, 1vh) * 100);
   background: rgba(5, 7, 16, 0.65);
   backdrop-filter: blur(4px);
   z-index: 3000;
