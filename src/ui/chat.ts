@@ -183,7 +183,9 @@ export class ChatWindowUI {
     state: 'unconnected' | 'placeholder' | 'empty' | 'chat',
     placeholderConfig?: { title: string; subtitle: string },
     roomTitle?: string,
-    roomMembers?: string
+    roomMembers?: string,
+    targetMessageId?: string,
+    communitySlug?: string
   ): void {
     this.messagesEl.innerHTML = '';
 
@@ -245,6 +247,7 @@ export class ChatWindowUI {
       const isOutgoing = msg.senderId === currentUserId;
       const bubbleEl = document.createElement('div');
       bubbleEl.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'} ${msg.isRevoked ? 'message-revoked' : ''}`;
+      bubbleEl.dataset.msgId = msg.id;
       
       const timeStr = msg.createdAt.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
@@ -304,11 +307,42 @@ export class ChatWindowUI {
         }
       }
 
+      // 右クリック (コンテキストメニュー) でURLコピー
+      bubbleEl.addEventListener('contextmenu', async (e) => {
+        e.preventDefault();
+        const url = new URL(window.location.href);
+        url.hash = ''; // ハッシュをクリア
+        if (communitySlug) {
+          url.searchParams.set('c', communitySlug);
+        }
+        url.searchParams.set('m', msg.id);
+        
+        try {
+          await navigator.clipboard.writeText(url.toString());
+          alert('メッセージへのダイレクトリンクをコピーしました！\\n' + url.toString());
+        } catch (err) {
+          console.error('Failed to copy link', err);
+        }
+      });
+
       this.messagesEl.appendChild(bubbleEl);
     });
 
-    // 最下部まで自動スクロール
-    this.scrollToBottom();
+    // スクロールおよびハイライトの処理
+    if (targetMessageId) {
+      setTimeout(() => {
+        const targetEl = this.messagesEl.querySelector(`.message-bubble[data-msg-id="${targetMessageId}"]`) as HTMLElement;
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targetEl.classList.add('highlight-pulse');
+          // アニメーション完了後にクラスを削除
+          setTimeout(() => targetEl.classList.remove('highlight-pulse'), 2500);
+        }
+      }, 100);
+    } else {
+      // 最下部まで自動スクロール
+      this.scrollToBottom();
+    }
   }
 
   private showPlaceholder(icon: string, title: string, subtitle: string): void {

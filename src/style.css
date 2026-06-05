@@ -1222,3 +1222,16 @@ body.resizing-v * {
     padding: 24px;
   }
 }
+
+/* ========================================================
+   ダイレクトリンク時のハイライトアニメーション
+   ======================================================== */
+@keyframes highlightPulse {
+  0% { background-color: rgba(239, 68, 68, 0); }
+  20% { background-color: rgba(239, 68, 68, 0.4); }
+  100% { background-color: rgba(239, 68, 68, 0); }
+}
+
+.chat-message.highlight-pulse .message-content {
+  animation: highlightPulse 2.5s ease-out;
+}

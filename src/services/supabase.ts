@@ -436,6 +436,34 @@ export class SupabaseService {
   }
 
   /**
+   * メッセージIDから所属するルームやコミュニティ情報を取得する (ダイレクトリンク用)
+   */
+  async getMessageInfo(messageId: string): Promise<{ roomId: string, roomType: string, communitySlug: string, audioUrl?: string } | null> {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('room_id, audio_url, chat_rooms(type, communities(slug))')
+        .eq('id', messageId)
+        .single();
+
+      if (error || !data) return null;
+
+      const chatRooms: any = data.chat_rooms;
+      const communities: any = chatRooms?.communities;
+
+      return {
+        roomId: data.room_id,
+        roomType: chatRooms?.type || '',
+        communitySlug: communities?.slug || '',
+        audioUrl: data.audio_url || undefined,
+      };
+    } catch (e) {
+      console.error('Failed to getMessageInfo:', e);
+      return null;
+    }
+  }
+
+  /**
    * メッセージ送信（音声アップロード対応）
    */
   async sendMessage(roomId: string, senderId: string, text: string, audioBlob?: Blob): Promise<SupabaseMessage> {
