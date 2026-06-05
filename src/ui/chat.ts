@@ -25,9 +25,10 @@ export class ChatWindowUI {
   // モーダル関連の要素
   private modalEl: HTMLDivElement;
   private meterBars: HTMLDivElement[] = [];
-  private recordingTimerEl: HTMLSpanElement;
-  private recordingProgressBarEl: HTMLDivElement;
-  private dictationPreviewEl: HTMLDivElement;
+  private recordingTimerEl!: HTMLSpanElement;
+  private recordingProgressBarEl!: HTMLDivElement;
+  private dictationPreviewEl!: HTMLDivElement;
+  private mobileDictationWarningEl!: HTMLParagraphElement;
   private stopRecBtnEl: HTMLButtonElement;
   private previewBtnEl: HTMLButtonElement;
   private sendRecBtnEl: HTMLButtonElement;
@@ -85,6 +86,7 @@ export class ChatWindowUI {
     this.recordingTimerEl = document.getElementById('recordingTimer') as HTMLSpanElement;
     this.recordingProgressBarEl = document.getElementById('recordingProgressBar') as HTMLDivElement;
     this.dictationPreviewEl = document.getElementById('recordingDictationPreview') as HTMLDivElement;
+    this.mobileDictationWarningEl = document.getElementById('mobileDictationWarning') as HTMLParagraphElement;
     this.stopRecBtnEl = document.querySelector('.btn-modal-stop') as HTMLButtonElement;
     this.previewBtnEl = document.querySelector('.btn-modal-preview') as HTMLButtonElement;
     this.sendRecBtnEl = document.querySelector('.btn-modal-send') as HTMLButtonElement;
@@ -387,7 +389,18 @@ export class ChatWindowUI {
     this.sendRecBtnEl.style.display = '';
     this.cancelRecBtnEl.style.display = '';
 
-    this.dictationPreviewEl.textContent = '認識中...';
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      if (this.mobileDictationWarningEl) this.mobileDictationWarningEl.style.display = 'block';
+    } else {
+      if (this.mobileDictationWarningEl) this.mobileDictationWarningEl.style.display = 'none';
+    }
+    
+    if (this.dictationPreviewEl) {
+      this.dictationPreviewEl.style.display = 'block';
+      this.dictationPreviewEl.textContent = '認識中...';
+    }
+
     // メーターの初期化
     this.updateMicLevel(0);
     this.updateRecordingTimer('00:15');
