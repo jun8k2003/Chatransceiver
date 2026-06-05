@@ -211,6 +211,18 @@
           </div>
         </div>
         
+        <!-- プッシュ通知設定 -->
+        <div class="settings-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">
+          <label>プッシュ通知設定</label>
+          <div id="fcmNotSupportedMsg" style="font-size: 12px; color: var(--color-danger); margin-bottom: 10px; display: none;">
+            お使いの端末（iOS等）またはブラウザは、プッシュ通知の登録に非対応です。
+          </div>
+          <div id="fcmButtonsContainer" style="display: flex; gap: 10px; margin-top: 10px;">
+            <button id="btnRegisterNotification" class="btn-modal" style="background-color: var(--color-accent); color: white; flex: 1;">通知を登録する</button>
+            <button id="btnUnregisterNotification" class="btn-modal" style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.3); flex: 1; display: none;">通知を解除する</button>
+          </div>
+        </div>
+        
         <div class="recording-actions" style="margin-top: 25px;">
           <button class="btn-modal btn-settings-save">保存</button>
           <button class="btn-modal btn-settings-cancel">閉じる</button>
