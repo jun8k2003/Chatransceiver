@@ -68,7 +68,7 @@ export class AudioPlaybackQueue {
       // 再生前チャイム
       if (this.callSignEnabled) {
         try {
-          await this.audioManager.playAudio(pttStartUrl);
+          await this.audioManager.playAudio(pttStartUrl, 0.3);
         } catch (error) {
           console.warn('Failed to play ptt-start before:', error);
         }
@@ -86,7 +86,7 @@ export class AudioPlaybackQueue {
       // 再生後チャイム
       if (this.callSignEnabled) {
         try {
-          await this.audioManager.playAudio(pttStartUrl);
+          await this.audioManager.playAudio(pttStartUrl, 0.3);
         } catch (error) {
           console.warn('Failed to play ptt-start after:', error);
         }
