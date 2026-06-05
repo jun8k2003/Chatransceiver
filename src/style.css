@@ -92,6 +92,23 @@ body.theme-light .btn-mobile-nav {
   color: #0369a1;
 }
 
+body.theme-light .message-bubble.incoming .btn-play-msg {
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body.theme-light .message-bubble.incoming .btn-play-msg:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+body.theme-light .btn-talk-trigger {
+  color: #ea580c; /* 鮮やかなオレンジの背景に負けないように、アイコンを濃いオレンジにする */
+}
+
+body.theme-light .btn-talk-trigger:hover {
+  background: rgba(249, 115, 22, 0.4);
+}
+
 body.theme-light .btn-mobile-nav:hover:not(:disabled) {
   background: #bae6fd;
 }
@@ -710,7 +727,7 @@ body.resizing-v * {
 .btn-delete-msg {
   background: none;
   border: none;
-  color: var(--color-text-muted);
+  color: rgba(255, 255, 255, 0.7); /* 青背景に映えるように白ベース */
   cursor: pointer;
   padding: 4px;
   font-size: 14px;
@@ -721,7 +738,7 @@ body.resizing-v * {
   margin-left: 8px;
 }
 .btn-delete-msg:hover {
-  color: var(--color-danger);
+  color: #ffffff;
 }
 
 /* ========================================================
