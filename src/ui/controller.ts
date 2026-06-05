@@ -103,6 +103,23 @@ export class UIController {
       });
     }
 
+    const btnReloadApp = document.getElementById('btnReloadApp');
+    if (btnReloadApp) {
+      btnReloadApp.addEventListener('click', () => {
+        window.location.reload();
+      });
+    }
+
+    // ビルド番号と日時の表示
+    const elBuildNumber = document.getElementById('appBuildNumber');
+    const elBuildTime = document.getElementById('appBuildTime');
+    if (elBuildNumber && typeof __BUILD_NUMBER__ !== 'undefined') {
+      elBuildNumber.textContent = __BUILD_NUMBER__.toString();
+    }
+    if (elBuildTime && typeof __BUILD_TIME__ !== 'undefined') {
+      elBuildTime.textContent = __BUILD_TIME__;
+    }
+
     // Google認証ボタン押下イベント
     btnAuthGoogle.addEventListener('click', async () => {
       btnAuthGoogle.disabled = true;

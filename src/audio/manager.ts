@@ -13,6 +13,7 @@ export class AudioManager {
   private levelIntervalId: number | null = null;
   
   private recognition: any = null; // SpeechRecognition
+  private isRecognitionActive: boolean = false;
   private activeAudioElement: HTMLAudioElement | null = null;
 
   constructor() {
@@ -99,12 +100,29 @@ export class AudioManager {
    */
   stopRecording(): Promise<Blob> {
     return new Promise((resolve, reject) => {
-      if (!this.mediaRecorder) {
-        reject(new Error('録音は開始されていません。'));
+      if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+        const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+        this.cleanupRecordingResources();
+        resolve(audioBlob);
         return;
       }
 
+      let isResolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!isResolved) {
+          console.warn('MediaRecorder stop timeout');
+          isResolved = true;
+          const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+          this.cleanupRecordingResources();
+          resolve(audioBlob);
+        }
+      }, 1500);
+
       this.mediaRecorder.onstop = () => {
+        if (isResolved) return;
+        isResolved = true;
+        clearTimeout(timeoutId);
+        
         // 音声データ (WebM形式等) の結合
         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
         
@@ -114,7 +132,15 @@ export class AudioManager {
         resolve(audioBlob);
       };
 
-      this.mediaRecorder.stop();
+      try {
+        this.mediaRecorder.stop();
+      } catch (e) {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timeoutId);
+          reject(e);
+        }
+      }
     });
   }
 
@@ -150,13 +176,15 @@ export class AudioManager {
   /**
    * 音声ファイルの再生
    * @param url 音声ファイルのURL (ローカルの Blob URL またはクラウドの Storage URL)
+   * @param volume 音量 (0.0 ~ 1.0, デフォルトは 1.0)
    */
-  playAudio(url: string): Promise<void> {
+  playAudio(url: string, volume: number = 1.0): Promise<void> {
     return new Promise((resolve, reject) => {
       // 既存の再生があれば停止
       this.stopAllPlayback();
 
       const audio = new Audio(url);
+      audio.volume = volume;
       this.activeAudioElement = audio;
       this.activeAudioResolve = resolve;
 
@@ -245,6 +273,8 @@ export class AudioManager {
     this.dictationResolver = null;
     if (!this.recognition) return;
 
+    this.isRecognitionActive = true;
+
     this.recognition.onresult = (event: any) => {
       this.recognizedText = event.results[0][0].transcript;
       if (this.dictationResolver) {
@@ -255,6 +285,7 @@ export class AudioManager {
 
     this.recognition.onerror = (event: any) => {
       console.error('Speech Recognition Error:', event.error);
+      this.isRecognitionActive = false;
       if (this.dictationResolver) {
         this.dictationResolver('');
         this.dictationResolver = null;
@@ -262,6 +293,7 @@ export class AudioManager {
     };
 
     this.recognition.onend = () => {
+      this.isRecognitionActive = false;
       if (this.dictationResolver) {
         this.dictationResolver(this.recognizedText);
         this.dictationResolver = null;
@@ -271,6 +303,7 @@ export class AudioManager {
     try {
       this.recognition.start();
     } catch (e) {
+      this.isRecognitionActive = false;
       // すでに開始されている場合は無視
     }
   }
@@ -286,18 +319,38 @@ export class AudioManager {
         return;
       }
 
-      // すでに認識結果が出ている場合は即座に返す
-      if (this.recognizedText) {
+      // すでに認識結果が出ている、または認識が終了している場合は即座に返す
+      if (this.recognizedText || !this.isRecognitionActive) {
         resolve(this.recognizedText);
         return;
       }
 
-      // まだ結果が出ていない場合は、stop()を呼んでコールバックを待つ
-      this.dictationResolver = resolve;
+      // タイムアウトを設定してハングを防止
+      let isResolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!isResolved) {
+          console.warn('Speech recognition stop timeout');
+          isResolved = true;
+          resolve(this.recognizedText);
+        }
+      }, 1500);
+
+      this.dictationResolver = (text: string) => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timeoutId);
+          resolve(text);
+        }
+      };
+
       try {
         this.recognition.stop();
       } catch (e) {
-        resolve('');
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timeoutId);
+          resolve(this.recognizedText);
+        }
       }
     });
   }
