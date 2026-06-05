@@ -714,10 +714,9 @@ body.resizing-v * {
 .btn-talk-trigger {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
-  background: var(--bg-input);
-  border: 1px solid var(--border-color);
-  color: var(--color-text-secondary);
+  background: rgba(249, 115, 22, 0.3); /* 前回の縁の色を背景に */
+  border: 1px solid #ff6a00; /* より鮮やかなオレンジの縁 */
+  color: #ffffff; /* アイコンを白にしてくっきりさせる */
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -729,9 +728,9 @@ body.resizing-v * {
 }
 
 .btn-talk-trigger:hover {
-  background: var(--color-accent);
+  background: rgba(249, 115, 22, 0.8);
   color: #fff;
-  border-color: var(--color-accent);
+  border-color: rgba(249, 115, 22, 1);
   transform: scale(1.02);
 }
 
@@ -1218,14 +1217,14 @@ body.resizing-v * {
     transform: translateX(0); /* 画面内にスライドイン */
   }
 
-  /* モバイル用ナビゲーションボタン（ヘッダー部） */
+  /* モバイル用ナビゲーションボタン（ヘッダー部分） */
   .btn-mobile-nav {
     display: flex !important;
     align-items: center;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color);
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
     border-radius: 8px;
-    color: var(--color-text-primary);
+    color: #38bdf8;
     padding: 8px 12px;
     font-family: var(--font-family);
     font-size: 13px;
@@ -1235,7 +1234,7 @@ body.resizing-v * {
   }
 
   .btn-mobile-nav:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(56, 189, 248, 0.25);
   }
 
   .btn-mobile-nav:disabled {
@@ -1266,6 +1265,34 @@ body.resizing-v * {
   .login-card {
     width: 90%;
     padding: 24px;
+  }
+
+  /* モバイル用のフッターボタン比率調整 */
+  .chat-footer .btn-talk-trigger,
+  .chat-footer .chat-input,
+  .chat-footer .btn-send-message {
+    width: 0;
+    min-width: 0;
+  }
+
+  .chat-footer .btn-talk-trigger {
+    flex: 5;
+  }
+  .chat-footer .chat-input {
+    flex: 3;
+  }
+  .chat-footer .btn-send-message {
+    flex: 2;
+  }
+  
+  .chat-footer:has(.chat-input:focus) .btn-talk-trigger {
+    flex: 2;
+  }
+  .chat-footer:has(.chat-input:focus) .chat-input {
+    flex: 6;
+  }
+  .chat-footer:has(.chat-input:focus) .btn-send-message {
+    flex: 2;
   }
 }
 
