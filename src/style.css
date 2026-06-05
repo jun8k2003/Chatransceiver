@@ -279,7 +279,7 @@ body.theme-light ::-webkit-scrollbar-thumb:hover {
 .app-container {
   display: flex;
   flex: 1;
-  height: calc(100dvh - 65px);
+  min-height: 0;
   position: relative;
 }
 
@@ -1106,6 +1106,50 @@ body.resizing-v * {
 }
 
 /* ========================================================
+   全画面通信中ローディングオーバーレイ
+   ======================================================== */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  background: rgba(5, 7, 16, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 3000;
+  display: none; /* JSで制御 */
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loading-overlay.show {
+  display: flex;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-message {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  letter-spacing: 0.05em;
+}
+
+/* ========================================================
    レスポンシブデザイン (スマートフォン対応 ＆ ウィンドウ縮小)
    ======================================================== */
 @media (max-width: 768px) {
@@ -1136,7 +1180,6 @@ body.resizing-v * {
 
   /* メインレイアウト */
   .app-container {
-    height: calc(100dvh - 120px); /* 2段ヘッダーに対応 */
     position: relative;
     overflow: hidden;
   }
