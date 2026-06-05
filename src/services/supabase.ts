@@ -70,6 +70,15 @@ export class SupabaseService {
   }
 
   /**
+   * 現在のセッションを取得
+   */
+  async getSession(): Promise<any> {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return session;
+  }
+
+  /**
    * 現在のセッションユーザー情報を取得
    */
   async getCurrentUser(): Promise<SupabaseUser | null> {

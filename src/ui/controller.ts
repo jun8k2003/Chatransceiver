@@ -21,6 +21,8 @@ export interface UIState {
   mobileChatForceOpen: boolean;
   theme: 'light' | 'dark';
   targetMessageIdToFocus?: string;
+  fcmIsIOS?: boolean;
+  fcmRegistered?: boolean;
 }
 
 /**
@@ -71,7 +73,9 @@ export class UIController {
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean, theme: 'light'|'dark') => void
+    onSaveSettings: (nickname: string, autoplay: boolean, theme: 'light'|'dark') => void,
+    onRegisterNotification: () => Promise<void>,
+    onUnregisterNotification: () => Promise<void>
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -224,6 +228,35 @@ export class UIController {
         });
       });
     }
+
+    // FCM通知ボタンのイベント
+    const btnReg = document.getElementById('btnRegisterNotification') as HTMLButtonElement;
+    if (btnReg) {
+      btnReg.addEventListener('click', async () => {
+        const originalText = btnReg.textContent;
+        btnReg.textContent = '処理中...';
+        btnReg.disabled = true;
+        await onRegisterNotification();
+        if (btnReg) {
+          btnReg.textContent = originalText;
+          btnReg.disabled = false;
+        }
+      });
+    }
+
+    const btnUnreg = document.getElementById('btnUnregisterNotification') as HTMLButtonElement;
+    if (btnUnreg) {
+      btnUnreg.addEventListener('click', async () => {
+        const originalText = btnUnreg.textContent;
+        btnUnreg.textContent = '処理中...';
+        btnUnreg.disabled = true;
+        await onUnregisterNotification();
+        if (btnUnreg) {
+          btnUnreg.textContent = originalText;
+          btnUnreg.disabled = false;
+        }
+      });
+    }
   }
 
   /**
@@ -252,6 +285,27 @@ export class UIController {
       } else {
         this.settingsLeaveContainerEl.style.display = 'none';
         this.settingsCurrentCommunityNameEl.textContent = '-';
+      }
+
+      // FCM UIの制御
+      const fcmNotSupportedMsg = document.getElementById('fcmNotSupportedMsg') as HTMLDivElement;
+      const fcmButtonsContainer = document.getElementById('fcmButtonsContainer') as HTMLDivElement;
+      const btnRegister = document.getElementById('btnRegisterNotification') as HTMLButtonElement;
+      const btnUnregister = document.getElementById('btnUnregisterNotification') as HTMLButtonElement;
+
+      if (state.fcmIsIOS) {
+        if (fcmNotSupportedMsg) fcmNotSupportedMsg.style.display = 'block';
+        if (fcmButtonsContainer) fcmButtonsContainer.style.display = 'none';
+      } else {
+        if (fcmNotSupportedMsg) fcmNotSupportedMsg.style.display = 'none';
+        if (fcmButtonsContainer) fcmButtonsContainer.style.display = 'flex';
+        if (state.fcmRegistered) {
+          if (btnRegister) btnRegister.style.display = 'none';
+          if (btnUnregister) btnUnregister.style.display = 'block';
+        } else {
+          if (btnRegister) btnRegister.style.display = 'block';
+          if (btnUnregister) btnUnregister.style.display = 'none';
+        }
       }
     }
 

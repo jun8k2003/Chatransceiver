@@ -3,6 +3,7 @@ import { AudioPlaybackQueue } from './audio/queue';
 import { UIController } from './ui/controller';
 import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
+import { FCMService } from './services/FCMService';
 
 /**
  * App (src/app.ts)
@@ -14,6 +15,7 @@ export class App {
   private playbackQueue: AudioPlaybackQueue;
   private uiController: UIController;
   private supabaseService: SupabaseService;
+  private fcmService: FCMService;
 
   // Realtime 監視サブスクリプションの参照
   private inboxSubscription: any = null;
@@ -36,7 +38,9 @@ export class App {
     autoplayEnabled: true,
     isRecording: false,
     mobileChatForceOpen: false,
-    theme: 'dark'
+    theme: 'dark',
+    fcmIsIOS: false,
+    fcmRegistered: false
   };
 
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
@@ -51,6 +55,7 @@ export class App {
     this.audioManager = new AudioManager();
     this.playbackQueue = new AudioPlaybackQueue(this.audioManager);
     this.supabaseService = new SupabaseService();
+    this.fcmService = new FCMService(this.supabaseService);
 
     // UIController の初期化とコールバック登録
     this.uiController = new UIController(
@@ -72,7 +77,9 @@ export class App {
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname: string, autoplay: boolean, theme: 'light' | 'dark') => this.handleSaveSettings(nickname, autoplay, theme)
+      (nickname: string, autoplay: boolean, theme: 'light' | 'dark') => this.handleSaveSettings(nickname, autoplay, theme),
+      async () => await this.handleRegisterNotification(),
+      async () => await this.handleUnregisterNotification()
     );
   }
 
@@ -92,6 +99,11 @@ export class App {
       this.state.theme = savedTheme;
     }
     this.applyTheme(this.state.theme);
+
+    // FCM初期状態のセットアップ
+    this.state.fcmIsIOS = this.fcmService.isIOSTerminal();
+    this.state.fcmRegistered = localStorage.getItem('chatransceiver_fcm_registered') === 'true';
+    this.fcmService.setupIfRegistered();
 
     // URL フラグメントまたはパラメータによる直接接続チェック (DEC-017)
     let communitySlug = '';
@@ -892,6 +904,26 @@ export class App {
 
     } catch (e) {
       console.error('Failed to handle direct message link:', e);
+    }
+  }
+
+  private async handleRegisterNotification(): Promise<void> {
+    const success = await this.fcmService.registerNotification();
+    if (success) {
+      this.state.fcmRegistered = true;
+      this.updateUI();
+      alert('プッシュ通知の登録が完了しました。');
+    }
+  }
+
+  private async handleUnregisterNotification(): Promise<void> {
+    const success = await this.fcmService.unregisterNotification();
+    if (success) {
+      this.state.fcmRegistered = false;
+      this.updateUI();
+      alert('プッシュ通知の解除が完了しました。');
+    } else {
+      alert('プッシュ通知の解除に失敗しました。');
     }
   }
 }
