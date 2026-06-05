@@ -22,6 +22,8 @@ export class AudioPlaybackQueue {
   private isPaused = false;
   private audioManager: AudioManager;
 
+  public callSignEnabled: boolean = true;
+
   constructor(audioManager: AudioManager) {
     this.audioManager = audioManager;
   }
@@ -64,10 +66,12 @@ export class AudioPlaybackQueue {
       }
 
       // 再生前チャイム
-      try {
-        await this.audioManager.playAudio(pttStartUrl);
-      } catch (error) {
-        console.warn('Failed to play ptt-start before:', error);
+      if (this.callSignEnabled) {
+        try {
+          await this.audioManager.playAudio(pttStartUrl);
+        } catch (error) {
+          console.warn('Failed to play ptt-start before:', error);
+        }
       }
 
       // データのタイプに応じて再生処理を分岐 (DEC-018)
@@ -80,10 +84,12 @@ export class AudioPlaybackQueue {
       }
 
       // 再生後チャイム
-      try {
-        await this.audioManager.playAudio(pttStartUrl);
-      } catch (error) {
-        console.warn('Failed to play ptt-start after:', error);
+      if (this.callSignEnabled) {
+        try {
+          await this.audioManager.playAudio(pttStartUrl);
+        } catch (error) {
+          console.warn('Failed to play ptt-start after:', error);
+        }
       }
     } catch (error) {
       console.error('AudioPlaybackQueue playback error:', error);
