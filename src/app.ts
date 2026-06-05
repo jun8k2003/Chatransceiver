@@ -100,8 +100,8 @@ export class App {
       communitySlug = hash.replace('community=', '');
     }
     
+    const urlParams = new URLSearchParams(window.location.search);
     if (!communitySlug) {
-      const urlParams = new URLSearchParams(window.location.search);
       communitySlug = urlParams.get('c') || '';
     }
 
@@ -126,6 +126,11 @@ export class App {
         
         if (communitySlug) {
           await this.handleConnectCommunity(communitySlug);
+          
+          const targetMessageId = urlParams.get('m');
+          if (targetMessageId) {
+            await this.handleDirectMessageLink(targetMessageId, communitySlug);
+          }
         } else {
           this.updateUI();
         }
@@ -210,10 +215,13 @@ export class App {
       this.state.currentCommunity = comm;
       localStorage.setItem('chatransceiver_current_community', JSON.stringify(comm));
 
-      // URLの更新 (フラグメントで画面リロード時にここに戻れるようにする)
+      // URLの更新 (現在のURLがクエリパラメータ'c'を持っていればそれを更新し、なければハッシュを更新する)
       const url = new URL(window.location.href);
-      url.searchParams.delete('c'); // 古いパラメータがあれば削除
-      url.hash = `community=${slug}`;
+      if (url.searchParams.has('c')) {
+        url.searchParams.set('c', slug);
+      } else {
+        url.hash = `community=${slug}`;
+      }
       window.history.replaceState({}, '', url.toString());
 
       // リアルタイムインボックスの購読
@@ -406,13 +414,7 @@ export class App {
     this.state.selectedUserIds = userIds;
 
     if (userIds.length === 0) {
-      this.state.activeChatHistoryId = null;
-      this.state.messages = [];
-      if (this.roomSubscription) {
-        this.roomSubscription.unsubscribe();
-        this.roomSubscription = null;
-      }
-      this.updateUI();
+      this.handleBackToSidebar();
     } else if (userIds.length === 1) {
       if (!this.state.currentUser || !this.state.currentCommunity) return;
 
@@ -830,6 +832,66 @@ export class App {
       document.body.classList.add('theme-light');
     } else {
       document.body.classList.remove('theme-light');
+    }
+  }
+
+  /**
+   * メッセージのダイレクトリンク起動処理
+   */
+  private async handleDirectMessageLink(messageId: string, expectedSlug: string): Promise<void> {
+    try {
+      const info = await this.supabaseService.getMessageInfo(messageId);
+      if (!info) {
+        console.warn('Direct link message not found or access denied.');
+        return;
+      }
+      if (info.communitySlug !== expectedSlug) {
+        console.warn('Direct link message does not belong to the current community.');
+        return;
+      }
+
+      // UI描画時にフォーカスするメッセージIDをセット
+      this.state.targetMessageIdToFocus = messageId;
+
+      // 該当のルームを開く (内部で updateUI() が呼ばれる)
+      if (info.roomType === 'group') {
+        await this.handleGroupSelect(info.roomId);
+      } else if (info.roomType === 'individual') {
+        const members = this.groupMembersMap[info.roomId] || [];
+        const otherUserIds = members.filter(id => id !== this.state.currentUser!.id);
+        if (otherUserIds.length > 0) {
+          await this.handleUserCheckChange(otherUserIds);
+        } else {
+          // メンバーマップにない場合はルームのメンバーを再取得して開く
+          const { data } = await supabase.from('chat_room_members').select('user_id').eq('room_id', info.roomId);
+          if (data) {
+             const others = data.map((d: any) => d.user_id).filter((id: string) => id !== this.state.currentUser!.id);
+             await this.handleUserCheckChange(others);
+          }
+        }
+      }
+
+      // 描画後、フラグをクリア
+      setTimeout(() => {
+        this.state.targetMessageIdToFocus = undefined;
+      }, 1000);
+
+      // オーディオ再生を試みる (TTSまたは録音)
+      // UI描画とスクロールが完了するのを少し待ってから再生
+      setTimeout(async () => {
+        try {
+          await this.handlePlayMessage(messageId);
+        } catch (e: any) {
+          if (e.name === 'NotAllowedError') {
+            console.warn('Autoplay blocked by browser. User interaction required.');
+          } else {
+            console.error('Failed to auto-play message:', e);
+          }
+        }
+      }, 300);
+
+    } catch (e) {
+      console.error('Failed to handle direct message link:', e);
     }
   }
 }

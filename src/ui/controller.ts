@@ -20,6 +20,7 @@ export interface UIState {
   isRecording: boolean;
   mobileChatForceOpen: boolean;
   theme: 'light' | 'dark';
+  targetMessageIdToFocus?: string;
 }
 
 /**
@@ -320,7 +321,7 @@ export class UIController {
         roomTitle = member ? member.name : '個別チャット';
         roomMembers = member ? (member.isOnline ? '● オンライン' : 'オフライン') : '';
       }
-      this.chatWindow.render(state.messages, state.currentUser.id, 'chat', undefined, roomTitle, roomMembers);
+      this.chatWindow.render(state.messages, state.currentUser.id, 'chat', undefined, roomTitle, roomMembers, state.targetMessageIdToFocus, state.currentCommunity?.slug);
     } else if (state.selectedUserIds.length >= 2) {
       // 新規グループ作成中プレースホルダー時 (DEC-011)
       const selectedNames = state.members
