@@ -60,6 +60,15 @@ body.theme-light .login-card {
   background: rgba(255, 255, 255, 0.8);
 }
 
+body.theme-light .combobox-dropdown {
+  background: #ffffff;
+}
+
+body.theme-light .dropdown-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-primary);
+}
+
 body.theme-light .meter-container {
   background: rgba(0, 0, 0, 0.05);
 }
