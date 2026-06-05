@@ -24,6 +24,8 @@ export interface UIState {
   fcmIsIOS?: boolean;
   fcmRegistered?: boolean;
   callSignEnabled: boolean;
+  isLoading: boolean;
+  loadingMessage?: string;
 }
 
 /**
@@ -55,6 +57,10 @@ export class UIController {
 
   // モバイル用 チャットへ移動ボタン
   private btnMobileGoToChat: HTMLButtonElement;
+
+  // 全画面ローディング
+  private loadingOverlayEl: HTMLDivElement;
+  private loadingMessageEl: HTMLParagraphElement;
 
   constructor(
     onConnectCommunity: (slug: string) => void,
@@ -183,6 +189,10 @@ export class UIController {
       });
     }
 
+    // 全画面ローディング要素
+    this.loadingOverlayEl = document.getElementById('globalLoadingOverlay') as HTMLDivElement;
+    this.loadingMessageEl = document.getElementById('globalLoadingMessage') as HTMLParagraphElement;
+
     if (btnSettingsLeave) {
       btnSettingsLeave.addEventListener('click', () => {
         if (confirm('本当にこのコミュニティから退会しますか？（参加履歴からも削除されます）')) {
@@ -284,6 +294,16 @@ export class UIController {
    * アプリ状態（State）に基づく画面全体の再描画 (DEC-012)
    */
   render(state: UIState): void {
+    // 全画面ローディングの制御
+    if (this.loadingOverlayEl && this.loadingMessageEl) {
+      if (state.isLoading) {
+        this.loadingMessageEl.textContent = state.loadingMessage || '読み込み中...';
+        this.loadingOverlayEl.classList.add('show');
+      } else {
+        this.loadingOverlayEl.classList.remove('show');
+      }
+    }
+
     // 1. ログイン画面の表示・非表示切り替え
     if (!state.currentUser) {
       this.loginScreenEl.style.display = 'flex';

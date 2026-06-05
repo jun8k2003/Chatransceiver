@@ -68,7 +68,7 @@
         <!-- モバイル用 チャット画面へ遷移するヘッダー -->
         <div id="mobileSidebarHeader" class="mobile-sidebar-header">
           <div style="flex: 1;"></div>
-          <button id="btnMobileGoToChat" class="btn-mobile-nav" disabled>チャット履歴 →</button>
+          <button id="btnMobileGoToChat" class="btn-mobile-nav" disabled>チャット →</button>
         </div>
 
         <!-- 左上ペイン: 個別チャット一覧 (ユーザー一覧) -->
@@ -253,6 +253,12 @@
           <button id="btnSignOut" style="background: transparent; border: none; color: var(--color-danger); text-decoration: underline; cursor: pointer; font-size: 13px;">アカウントからログアウトする</button>
         </div>
       </div>
+    </div>
+
+    <!-- 6. 全画面通信中ローディングオーバーレイ -->
+    <div id="globalLoadingOverlay" class="loading-overlay">
+      <div class="spinner"></div>
+      <p id="globalLoadingMessage" class="loading-message">読み込み中...</p>
     </div>
 
     <!-- アプリ起動スクリプトのロード -->

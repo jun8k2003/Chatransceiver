@@ -42,7 +42,9 @@ export class App {
     theme: 'dark',
     fcmIsIOS: false,
     fcmRegistered: false,
-    callSignEnabled: true
+    callSignEnabled: true,
+    isLoading: true,
+    loadingMessage: '初期化中...'
   };
 
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
@@ -161,6 +163,9 @@ export class App {
     } catch (e) {
       console.error('Failed to restore user session:', e);
       this.updateUI();
+    } finally {
+      this.state.isLoading = false;
+      this.updateUI();
     }
 
     // OAuthリダイレクト後の遅延セッション確立をキャッチするためのリスナー
@@ -197,9 +202,13 @@ export class App {
    * 本物のサインイン（Google OAuth）
    */
   private async handleSignInWithGoogle(): Promise<void> {
-    // リダイレクト時にURLパラメータ（接続コミュニティ情報）を維持するが、ハッシュ(#)は除外する
+    this.state.isLoading = true;
+    this.state.loadingMessage = '認証画面へ移動中...';
+    this.updateUI();
+    // リダイレクト時にURLパラメータの接続コミュニティ情報を維持するが、ハッシュ(#)は除外する
     const redirectUrl = window.location.origin + window.location.pathname + window.location.search;
     await this.supabaseService.signInWithGoogle(redirectUrl);
+    // リダイレクトされるので finally で戻す必要は基本的にありません
   }
 
   /**
@@ -230,6 +239,10 @@ export class App {
 
     // ブラウザの自動再生ロックを解除 (ユーザーインタラクションを契機にする)
     this.audioManager.unlockAudio();
+
+    this.state.isLoading = true;
+    this.state.loadingMessage = 'コミュニティへ接続中...';
+    this.updateUI();
 
     try {
       const comm = await this.supabaseService.connectCommunity(this.state.currentUser.id, slug);
@@ -294,6 +307,9 @@ export class App {
       console.error('Failed to connect community:', e);
       alert('コミュニティへの接続に失敗しました。\nエラー詳細: ' + (e.message || JSON.stringify(e)));
       this.handleLeaveCommunity();
+    } finally {
+      this.state.isLoading = false;
+      this.updateUI();
     }
   }
 
@@ -439,6 +455,9 @@ export class App {
     } else if (userIds.length === 1) {
       if (!this.state.currentUser || !this.state.currentCommunity) return;
 
+      this.state.isLoading = true;
+      this.updateUI();
+
       try {
         const commId = this.state.currentCommunity.id;
         const myId = this.state.currentUser.id;
@@ -456,10 +475,11 @@ export class App {
         // 未読バッジクリア用のローカル状態反映
         const targetMember = this.state.members.find(m => m.id === targetId);
         if (targetMember) targetMember.unreadCount = 0;
-
-        this.updateUI();
       } catch (e) {
         console.error('Failed to select individual chat:', e);
+      } finally {
+        this.state.isLoading = false;
+        this.updateUI();
       }
     } else {
       // 複数人選択 (既存グループの自動判定)
@@ -473,11 +493,17 @@ export class App {
       });
 
       if (matchedGroup) {
-        this.state.activeChatHistoryId = matchedGroup.id;
-        const messages = await this.supabaseService.getRoomMessages(matchedGroup.id);
-        this.state.messages = messages;
-        await this.supabaseService.markAsRead(matchedGroup.id, this.state.currentUser!.id);
-        this.subscribeRoomMessages(matchedGroup.id);
+        this.state.isLoading = true;
+        this.updateUI();
+        try {
+          this.state.activeChatHistoryId = matchedGroup.id;
+          const messages = await this.supabaseService.getRoomMessages(matchedGroup.id);
+          this.state.messages = messages;
+          await this.supabaseService.markAsRead(matchedGroup.id, this.state.currentUser!.id);
+          this.subscribeRoomMessages(matchedGroup.id);
+        } finally {
+          this.state.isLoading = false;
+        }
       } else {
         this.state.activeChatHistoryId = null;
         this.state.messages = [];
@@ -497,18 +523,25 @@ export class App {
     this.state.activeChatHistoryId = groupId;
 
     if (groupId) {
-      const members = this.groupMembersMap[groupId] || [];
-      this.state.selectedUserIds = members.filter(id => id !== this.state.currentUser!.id);
-      
-      const messages = await this.supabaseService.getRoomMessages(groupId);
-      this.state.messages = messages;
-      
-      await this.supabaseService.markAsRead(groupId, this.state.currentUser!.id);
-      this.subscribeRoomMessages(groupId);
-      
-      // 未読バッジクリア用のローカル状態反映
-      const targetGroup = this.state.groups.find(g => g.id === groupId);
-      if (targetGroup) targetGroup.unreadCount = 0;
+      this.state.isLoading = true;
+      this.updateUI();
+
+      try {
+        const members = this.groupMembersMap[groupId] || [];
+        this.state.selectedUserIds = members.filter(id => id !== this.state.currentUser!.id);
+        
+        const messages = await this.supabaseService.getRoomMessages(groupId);
+        this.state.messages = messages;
+        
+        await this.supabaseService.markAsRead(groupId, this.state.currentUser!.id);
+        this.subscribeRoomMessages(groupId);
+        
+        // 未読バッジクリア用のローカル状態反映
+        const targetGroup = this.state.groups.find(g => g.id === groupId);
+        if (targetGroup) targetGroup.unreadCount = 0;
+      } finally {
+        this.state.isLoading = false;
+      }
     } else {
       this.state.selectedUserIds = [];
       this.state.messages = [];
