@@ -4,6 +4,7 @@ import { UIController } from './ui/controller';
 import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
 import { FCMService } from './services/FCMService';
+import pttStartUrl from './assets/ptt-start.wav';
 
 /**
  * App (src/app.ts)
@@ -40,7 +41,8 @@ export class App {
     mobileChatForceOpen: false,
     theme: 'dark',
     fcmIsIOS: false,
-    fcmRegistered: false
+    fcmRegistered: false,
+    callSignEnabled: true
   };
 
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
@@ -77,7 +79,7 @@ export class App {
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname: string, autoplay: boolean, theme: 'light' | 'dark') => this.handleSaveSettings(nickname, autoplay, theme),
+      (nickname: string, autoplay: boolean, theme: 'light' | 'dark', callSignEnabled: boolean) => this.handleSaveSettings(nickname, autoplay, theme, callSignEnabled),
       async () => await this.handleRegisterNotification(),
       async () => await this.handleUnregisterNotification()
     );
@@ -92,6 +94,13 @@ export class App {
     if (savedAutoplay !== null) {
       this.state.autoplayEnabled = savedAutoplay === 'true';
     }
+
+    // コールサインフォン設定の読み込み
+    const savedCallSign = localStorage.getItem('chatransceiver_callsign_enabled');
+    if (savedCallSign !== null) {
+      this.state.callSignEnabled = savedCallSign === 'true';
+    }
+    this.playbackQueue.callSignEnabled = this.state.callSignEnabled;
 
     // テーマ設定の読み込み
     const savedTheme = localStorage.getItem('chatransceiver_theme') as 'light' | 'dark';
@@ -769,10 +778,26 @@ export class App {
     if (!msg) return;
 
     try {
+      if (this.state.callSignEnabled) {
+        try {
+          await this.audioManager.playAudio(pttStartUrl);
+        } catch (error) {
+          console.warn('Failed to play ptt-start before:', error);
+        }
+      }
+
       if (msg.audioUrl) {
         await this.audioManager.playAudio(msg.audioUrl);
       } else {
         await this.audioManager.speakText(msg.textContent);
+      }
+
+      if (this.state.callSignEnabled) {
+        try {
+          await this.audioManager.playAudio(pttStartUrl);
+        } catch (error) {
+          console.warn('Failed to play ptt-start after:', error);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -805,7 +830,7 @@ export class App {
   /**
    * 環境設定の保存
    */
-  private async handleSaveSettings(nickname: string, autoplay: boolean, theme: 'light' | 'dark'): Promise<void> {
+  private async handleSaveSettings(nickname: string, autoplay: boolean, theme: 'light' | 'dark', callSignEnabled: boolean): Promise<void> {
     if (this.state.currentUser) {
       try {
         await this.supabaseService.updateNickname(this.state.currentUser.id, nickname);
@@ -817,6 +842,10 @@ export class App {
     
     this.state.autoplayEnabled = autoplay;
     localStorage.setItem('chatransceiver_autoplay_enabled', autoplay ? 'true' : 'false');
+
+    this.state.callSignEnabled = callSignEnabled;
+    localStorage.setItem('chatransceiver_callsign_enabled', callSignEnabled ? 'true' : 'false');
+    this.playbackQueue.callSignEnabled = callSignEnabled;
     
     if (!autoplay) {
       this.playbackQueue.clear();
@@ -864,6 +893,7 @@ export class App {
 
       // UI描画時にフォーカスするメッセージIDをセット
       this.state.targetMessageIdToFocus = messageId;
+      this.state.mobileChatForceOpen = true; // モバイルでダイレクトリンクを開いた際にチャット画面を強制表示
 
       // 該当のルームを開く (内部で updateUI() が呼ばれる)
       if (info.roomType === 'group') {

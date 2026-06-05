@@ -23,6 +23,7 @@ export interface UIState {
   targetMessageIdToFocus?: string;
   fcmIsIOS?: boolean;
   fcmRegistered?: boolean;
+  callSignEnabled: boolean;
 }
 
 /**
@@ -45,6 +46,7 @@ export class UIController {
   private settingsModalEl: HTMLDivElement;
   private settingsNicknameInput: HTMLInputElement;
   private settingsAutoplayCheck: HTMLInputElement;
+  private settingsCallSignCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
   private settingsSaveBtn: HTMLButtonElement;
   private settingsCancelBtn: HTMLButtonElement;
@@ -73,7 +75,7 @@ export class UIController {
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean, theme: 'light'|'dark') => void,
+    onSaveSettings: (nickname: string, autoplay: boolean, theme: 'light'|'dark', callSignEnabled: boolean) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>
   ) {
@@ -148,6 +150,7 @@ export class UIController {
     this.settingsModalEl = document.getElementById('settingsModal') as HTMLDivElement;
     this.settingsNicknameInput = document.getElementById('settingsNickname') as HTMLInputElement;
     this.settingsAutoplayCheck = document.getElementById('settingsAutoplay') as HTMLInputElement;
+    this.settingsCallSignCheck = document.getElementById('settingsCallSignOff') as HTMLInputElement;
     this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
     this.settingsSaveBtn = this.settingsModalEl.querySelector('.btn-settings-save') as HTMLButtonElement;
     this.settingsCancelBtn = this.settingsModalEl.querySelector('.btn-settings-cancel') as HTMLButtonElement;
@@ -189,8 +192,9 @@ export class UIController {
       const newNickname = this.settingsNicknameInput.value.trim();
       const autoplay = this.settingsAutoplayCheck.checked;
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
+      const callSignEnabled = !this.settingsCallSignCheck.checked;
       if (newNickname) {
-        onSaveSettings(newNickname, autoplay, theme);
+        onSaveSettings(newNickname, autoplay, theme, callSignEnabled);
         this.settingsModalEl.classList.remove('show');
       } else {
         alert('ニックネームを入力してください。');
@@ -276,6 +280,7 @@ export class UIController {
         this.settingsNicknameInput.value = state.currentUser.name;
       }
       this.settingsAutoplayCheck.checked = state.autoplayEnabled;
+      this.settingsCallSignCheck.checked = !state.callSignEnabled;
       this.settingsThemeSelect.value = state.theme;
       
       // 退会コントロールの表示制御
