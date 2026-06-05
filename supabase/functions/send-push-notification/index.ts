@@ -70,9 +70,30 @@ serve(async (req) => {
 
   if (!tokens || tokens.length === 0) return new Response('No tokens')
 
-  // 通知用のデータ抽出 (テキストはインボックスに保存されている text_content 等を利用)
-  const notificationTitle = `[新着メッセージ] ${record.sender_name || '通知'}`
-  const notificationBody = record.audio_url ? '🎤 音声メッセージ' : (record.text_content || '新しいメッセージが届きました')
+  // DBからメッセージ詳細、送信者情報、コミュニティ情報を取得
+  const { data: msgData, error: msgError } = await supabaseAdmin
+    .from('messages')
+    .select('audio_url, text_content, users(name), chat_rooms(type, communities(slug, name))')
+    .eq('id', record.message_id)
+    .single()
+
+  if (msgError || !msgData) {
+    console.error('Failed to fetch message details:', msgError)
+    return new Response('Message details not found', { status: 400 })
+  }
+
+  const senderName = (msgData.users as any)?.name || '不明なユーザー'
+  const textContent = msgData.text_content || ''
+  const audioUrl = msgData.audio_url || ''
+  
+  const chatRoom = msgData.chat_rooms as any
+  const community = chatRoom?.communities as any
+  const communitySlug = community?.slug || ''
+  const communityName = community?.name || 'コミュニティ'
+
+  // 通知用のデータ抽出
+  const notificationTitle = `[新着メッセージ] ${senderName}`
+  const notificationBody = audioUrl ? '🎤 音声メッセージ' : (textContent || '新しいメッセージが届きました')
 
   const accessToken = await getFirebaseAccessToken()
 
@@ -88,12 +109,12 @@ serve(async (req) => {
           token: t.fcm_token,
           // システム通知として表示させるための data ペイロード
           data: {
-            communitySlug: record.community_slug || '',
+            communitySlug: communitySlug,
             messageId: record.message_id || '',
-            communityName: 'コミュニティ',
-            senderName: record.sender_name || '通知',
-            messageType: record.audio_url ? 'audio' : 'text',
-            textContent: notificationBody
+            communityName: communityName,
+            senderName: senderName,
+            messageType: audioUrl ? 'audio' : 'text',
+            textContent: textContent
           }
         }
       })

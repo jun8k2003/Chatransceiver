@@ -42,7 +42,7 @@ messaging.onBackgroundMessage(function(payload) {
       data: { url: `/?c=${communitySlug}&m=${messageId}` } 
     };
 
-    self.registration.showNotification(notificationTitle, notificationOptions);
+    return self.registration.showNotification(notificationTitle, notificationOptions);
   });
 }
 
