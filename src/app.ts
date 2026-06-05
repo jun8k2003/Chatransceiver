@@ -249,14 +249,9 @@ export class App {
       this.state.currentCommunity = comm;
       localStorage.setItem('chatransceiver_current_community', JSON.stringify(comm));
 
-      // URLの更新 (現在のURLがクエリパラメータ'c'を持っていればそれを更新し、なければハッシュを更新する)
-      const url = new URL(window.location.href);
-      if (url.searchParams.has('c')) {
-        url.searchParams.set('c', slug);
-      } else {
-        url.hash = `community=${slug}`;
-      }
-      window.history.replaceState({}, '', url.toString());
+      // パラメタやフラグメント部分を消去したシンプルなURLにする
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
 
       // リアルタイムインボックスの購読
       if (this.inboxSubscription) {

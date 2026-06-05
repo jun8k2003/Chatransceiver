@@ -155,18 +155,15 @@ export class CommunitySelectorUI {
     this.history.forEach((item) => {
       const itemEl = document.createElement('div');
       itemEl.className = 'dropdown-item';
-      const displayName = item.name || `${item.slug.toUpperCase()} コミュニティ`;
       itemEl.innerHTML = `
-        <span class="item-slug">${item.slug}</span>
-        <span class="item-desc" style="font-size:11px; color:var(--color-text-muted);">${displayName}</span>
+        <span class="item-slug" style="font-weight:500;">${item.slug}</span>
       `;
       
-      // クリック時に選択して接続
+      // クリック時に選択状態をセットするのみ（即時接続はしない）
       itemEl.addEventListener('click', (e) => {
         e.stopPropagation();
         this.inputEl.value = item.slug;
         this.closeDropdown();
-        this.onConnect(item.slug);
       });
 
       this.dropdownEl.appendChild(itemEl);

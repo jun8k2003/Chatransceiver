@@ -202,6 +202,40 @@ export class UIController {
       });
     }
 
+    const btnCopyCommunityLink = this.settingsModalEl.querySelector('#btnCopyCommunityLink') as HTMLButtonElement;
+    const btnCopyCommunityLinkText = this.settingsModalEl.querySelector('#btnCopyCommunityLinkText') as HTMLSpanElement;
+
+    if (btnCopyCommunityLink && btnCopyCommunityLinkText) {
+      btnCopyCommunityLink.addEventListener('click', async () => {
+        const communityStr = localStorage.getItem('chatransceiver_current_community');
+        if (communityStr) {
+          try {
+            const community = JSON.parse(communityStr);
+            const slug = community?.slug;
+            if (slug) {
+              const url = window.location.origin + window.location.pathname + '?c=' + slug;
+              await navigator.clipboard.writeText(url);
+              
+              const originalText = btnCopyCommunityLinkText.textContent;
+              btnCopyCommunityLinkText.textContent = 'コピーしました！';
+              btnCopyCommunityLink.style.background = 'rgba(34, 197, 94, 0.1)'; // green
+              btnCopyCommunityLink.style.color = '#22c55e';
+              btnCopyCommunityLink.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+              
+              setTimeout(() => {
+                btnCopyCommunityLinkText.textContent = originalText;
+                btnCopyCommunityLink.style.background = 'rgba(56, 189, 248, 0.1)'; // blue
+                btnCopyCommunityLink.style.color = '#38bdf8';
+                btnCopyCommunityLink.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+              }, 2000);
+            }
+          } catch (e) {
+            console.error('Failed to copy community link', e);
+          }
+        }
+      });
+    }
+
     // 設定ボタンクリック時にモーダルを表示
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
