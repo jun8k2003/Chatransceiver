@@ -68,7 +68,9 @@ export class App {
       () => this.handleDisconnectCommunity(),
       () => this.handleLeaveCommunity(),
       (userIds: string[]) => this.handleUserCheckChange(userIds),
+      (userId: string, userName: string) => this.handleUserChatClear(userId, userName),
       (groupId: string | null) => this.handleGroupSelect(groupId),
+      (groupId: string, groupName: string) => this.handleGroupDelete(groupId, groupName),
       (text: string) => this.handleSendText(text),
       () => this.handleStartTalk(),
       () => this.handleStopTalk(),
@@ -561,6 +563,71 @@ export class App {
     }
 
     this.updateUI();
+  }
+
+  /**
+   * グループの削除処理
+   */
+  private async handleGroupDelete(groupId: string, groupName: string): Promise<void> {
+    if (!window.confirm(`グループ「${groupName}」とそのチャット履歴をすべて削除しますか？`)) {
+      return;
+    }
+
+    this.state.isLoading = true;
+    this.updateUI();
+
+    try {
+      await this.supabaseService.deleteGroup(groupId);
+      if (this.state.activeChatHistoryId === groupId) {
+        this.state.activeChatHistoryId = null;
+        this.state.selectedUserIds = [];
+        this.state.messages = [];
+        if (this.roomSubscription) {
+          this.roomSubscription.unsubscribe();
+          this.roomSubscription = null;
+        }
+      }
+      await this.loadCommunityData();
+    } catch (err) {
+      console.error('Failed to delete group:', err);
+      alert('グループの削除に失敗しました。');
+    } finally {
+      this.state.isLoading = false;
+      this.updateUI();
+    }
+  }
+
+  /**
+   * 個別チャットの履歴削除処理
+   */
+  private async handleUserChatClear(userId: string, userName: string): Promise<void> {
+    if (!window.confirm(`メンバー「${userName}」とのチャット履歴内容をすべて削除しますか？\n（※メンバーは削除されません）`)) {
+      return;
+    }
+
+    this.state.isLoading = true;
+    this.updateUI();
+
+    try {
+      const roomId = await this.supabaseService.getOrCreateIndividualRoom(
+        this.state.currentCommunity!.id,
+        this.state.currentUser!.id,
+        userId
+      );
+      
+      await this.supabaseService.deleteMessages(roomId);
+
+      if (this.state.activeChatHistoryId === roomId) {
+        this.state.messages = [];
+      }
+      await this.loadCommunityData();
+    } catch (err) {
+      console.error('Failed to clear individual chat history:', err);
+      alert('チャット履歴の削除に失敗しました。');
+    } finally {
+      this.state.isLoading = false;
+      this.updateUI();
+    }
   }
 
   /**

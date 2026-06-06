@@ -14,12 +14,15 @@ export interface GroupItem {
 export class GroupListUI {
   private listEl: HTMLDivElement;
   private onGroupSelect: (groupId: string | null) => void;
+  private onGroupDelete: (groupId: string, groupName: string) => void;
 
   constructor(
     containerId: string,
-    onGroupSelect: (groupId: string | null) => void
+    onGroupSelect: (groupId: string | null) => void,
+    onGroupDelete: (groupId: string, groupName: string) => void
   ) {
     this.onGroupSelect = onGroupSelect;
+    this.onGroupDelete = onGroupDelete;
 
     const container = document.getElementById(containerId);
     if (!container) throw new Error(`Container #${containerId} not found`);
@@ -57,7 +60,9 @@ export class GroupListUI {
 
       itemEl.innerHTML = `
         <div class="item-info">
-          <div class="item-avatar" style="border-radius:8px;">Gp</div>
+          <button class="btn-delete-group" style="background:transparent; border:none; cursor:pointer; color:var(--color-danger); padding:0 8px 0 0; display:flex; align-items:center;" title="グループを削除">
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+          </button>
           <div class="item-details">
             <span class="item-name">${group.name}</span>
             <span class="item-status">${group.memberCount} 人のメンバー</span>
@@ -114,6 +119,15 @@ export class GroupListUI {
           this.onGroupSelect(null);
         }
       });
+
+      // ごみ箱ボタンのクリック処理
+      const deleteBtn = itemEl.querySelector('.btn-delete-group') as HTMLButtonElement;
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation(); // グループの選択切り替えを防ぐ
+          this.onGroupDelete(group.id, group.name);
+        });
+      }
 
       this.listEl.appendChild(itemEl);
     });

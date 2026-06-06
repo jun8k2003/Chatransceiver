@@ -155,16 +155,34 @@ export class CommunitySelectorUI {
     this.history.forEach((item) => {
       const itemEl = document.createElement('div');
       itemEl.className = 'dropdown-item';
+      itemEl.style.display = 'flex';
+      itemEl.style.justifyContent = 'space-between';
+      itemEl.style.alignItems = 'center';
+      
       itemEl.innerHTML = `
         <span class="item-slug" style="font-weight:500;">${item.slug}</span>
+        <button class="btn-delete-history" style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); padding:4px;" title="履歴から削除">
+          <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+        </button>
       `;
       
       // クリック時に選択状態をセットするのみ（即時接続はしない）
       itemEl.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('.btn-delete-history')) {
+          return; // ごみ箱ボタンのクリックは下で処理
+        }
         e.stopPropagation();
         this.inputEl.value = item.slug;
         this.closeDropdown();
       });
+
+      const deleteBtn = itemEl.querySelector('.btn-delete-history') as HTMLButtonElement;
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.removeFromHistory(item.slug);
+        });
+      }
 
       this.dropdownEl.appendChild(itemEl);
     });

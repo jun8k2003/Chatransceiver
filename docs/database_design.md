@@ -212,6 +212,11 @@ create policy "Authenticated users can create chat rooms"
   on chat_rooms for insert
   with check (auth.role() = 'authenticated');
 
+-- 全員：ログイン済みならチャットルームを削除可能
+create policy "Authenticated users can delete chat rooms"
+  on chat_rooms for delete
+  using (auth.role() = 'authenticated');
+
 --------------------------------------------------
 -- 5. chat_room_members テーブル
 --------------------------------------------------
@@ -247,6 +252,11 @@ create policy "Users can revoke their own messages"
   on messages for update
   using (auth.uid() = sender_id)
   with check (auth.uid() = sender_id);
+
+-- 全員：ログイン済みならメッセージを削除可能
+create policy "Authenticated users can delete messages"
+  on messages for delete
+  using (auth.role() = 'authenticated');
 
 --------------------------------------------------
 -- 7. user_inboxes テーブル

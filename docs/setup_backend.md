@@ -144,6 +144,7 @@ create policy "Users can leave a community" on public.community_members for dele
 -- 3.4. chat_rooms ポリシー
 create policy "Authenticated users can view chat rooms" on public.chat_rooms for select using (auth.role() = 'authenticated');
 create policy "Authenticated users can create chat rooms" on public.chat_rooms for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated users can delete chat rooms" on public.chat_rooms for delete using (auth.role() = 'authenticated');
 
 -- 3.5. chat_room_members ポリシー
 create policy "Authenticated users can view room membership" on public.chat_room_members for select using (auth.role() = 'authenticated');
@@ -154,6 +155,7 @@ create policy "Users can leave rooms" on public.chat_room_members for delete usi
 create policy "Authenticated users can view messages" on public.messages for select using (auth.role() = 'authenticated');
 create policy "Users can post messages" on public.messages for insert with check (auth.uid() = sender_id);
 create policy "Users can revoke their own messages" on public.messages for update using (auth.uid() = sender_id) with check (auth.uid() = sender_id);
+create policy "Authenticated users can delete messages" on public.messages for delete using (auth.role() = 'authenticated');
 
 -- 3.7. user_inboxes ポリシー
 create policy "Users can manage their own inbox" on public.user_inboxes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -357,3 +359,33 @@ Vite環境では、これらの変数を `import.meta.env.VITE_SUPABASE_URL` な
 4. さきほどコピーした **Client ID** と **Client Secret** を貼り付けて **「Save」** を押します。
 
 これでGoogle連携によるログイン準備はすべて完了です！
+
+---
+
+## 7. Edge Function と Database Webhook の設定 (メッセージ削除時の音声ファイル自動削除用)
+
+チャット履歴の削除（`messages` の DELETE）が行われた際、不要になったStorage上の音声ファイルを自動削除するために Edge Function と Database Webhook を連携させます。
+
+### 7.1 Edge Function のデプロイ
+コマンドプロンプトやターミナルを開き、プロジェクトのルートディレクトリで以下のコマンドを実行してデプロイします。
+
+```bash
+npx supabase functions deploy delete-audio-on-message-delete
+```
+
+> [!NOTE]
+> デプロイ時にSupabase CLIがプロジェクトへのリンクを求めてくる場合があります。その場合は `npx supabase link --project-ref <あなたのプロジェクトID>` を実行してリンクしてから再度デプロイしてください。
+
+### 7.2 Database Webhook の設定
+1. Supabaseダッシュボードの左メニューから **「Database」** を選び、**「Webhooks」** をクリックします。
+2. **「Create Webhook」** をクリックします。
+3. 以下の通り設定します。
+   * **Name**: `on-message-delete-remove-audio` (任意の名前でOK)
+   * **Table**: `messages`
+   * **Events**: `Delete` のみにチェックを入れる
+   * **Type**: `Supabase Edge Function`
+   * **Method**: `POST`
+   * **Edge Function**: `delete-audio-on-message-delete` をプルダウンから選択
+4. **「Save webhook」** をクリックして保存します。
+
+これで、メッセージが削除された際に自動的に音声ファイルもストレージから消去されるようになります。
