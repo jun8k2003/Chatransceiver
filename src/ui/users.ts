@@ -14,17 +14,67 @@ export interface MemberItem {
  */
 export class UserListUI {
   private listEl: HTMLDivElement;
+  private searchInput: HTMLInputElement;
+  private searchBtn: HTMLButtonElement;
+  private selectAllBtn: HTMLButtonElement;
+  private searchQuery: string = '';
   private onUserCheckChange: (selectedUserIds: string[]) => void;
+  private onUserChatClear: (userId: string, userName: string) => void;
 
   constructor(
     containerId: string,
-    onUserCheckChange: (selectedUserIds: string[]) => void
+    onUserCheckChange: (selectedUserIds: string[]) => void,
+    onUserChatClear: (userId: string, userName: string) => void
   ) {
     this.onUserCheckChange = onUserCheckChange;
+    this.onUserChatClear = onUserChatClear;
 
     const container = document.getElementById(containerId);
     if (!container) throw new Error(`Container #${containerId} not found`);
     this.listEl = container.querySelector('.pane-content') as HTMLDivElement;
+    
+    this.searchInput = container.querySelector('#userSearchInput') as HTMLInputElement;
+    this.searchBtn = container.querySelector('#btnUserSearch') as HTMLButtonElement;
+
+    if (this.searchBtn && this.searchInput) {
+      this.searchBtn.addEventListener('click', () => {
+        this.searchInput.style.display = 'block';
+        this.searchInput.focus();
+      });
+
+      this.searchInput.addEventListener('input', () => {
+        this.searchQuery = this.searchInput.value.toLowerCase();
+        // 絞り込みが行われたらすべての選択チェックボックスを外す
+        this.onUserCheckChange([]);
+      });
+
+      this.searchInput.addEventListener('blur', () => {
+        if (this.searchInput.value.trim() === '') {
+          this.searchInput.style.display = 'none';
+        }
+      });
+    }
+
+    this.selectAllBtn = container.querySelector('#btnUserSelectAll') as HTMLButtonElement;
+    if (this.selectAllBtn) {
+      this.selectAllBtn.addEventListener('click', () => {
+        const checkboxes = this.listEl.querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        if (checkboxes.length === 0) return;
+
+        let allChecked = true;
+        checkboxes.forEach(cb => {
+          if (!cb.checked) allChecked = false;
+        });
+
+        const newState = !allChecked;
+        const selectedUserIds: string[] = [];
+        if (newState) {
+          checkboxes.forEach(cb => selectedUserIds.push(cb.value));
+        }
+
+        this.onUserCheckChange(selectedUserIds);
+      });
+    }
   }
 
   /**
@@ -40,12 +90,17 @@ export class UserListUI {
   ): void {
     this.listEl.innerHTML = '';
 
-    if (members.length === 0) {
-      this.listEl.innerHTML = '<div class="chat-placeholder" style="padding: 20px;"><div class="placeholder-subtitle">メンバーがいません</div></div>';
+    let displayMembers = members;
+    if (this.searchQuery) {
+      displayMembers = members.filter(m => m.name.toLowerCase().includes(this.searchQuery));
+    }
+
+    if (displayMembers.length === 0) {
+      this.listEl.innerHTML = '<div class="chat-placeholder" style="padding: 20px;"><div class="placeholder-subtitle">メンバーが見つかりません</div></div>';
       return;
     }
 
-    members.forEach((member) => {
+    displayMembers.forEach((member) => {
       const isChecked = checkedUserIds.includes(member.id);
       const isPlaying = playingUserId === member.id;
       const isSelected = checkedUserIds.length === 1 && checkedUserIds[0] === member.id;
@@ -104,6 +159,12 @@ export class UserListUI {
         }
         checkbox.checked = !checkbox.checked;
         this.emitCheckedUsers();
+      });
+
+      // 右クリック（コンテキストメニュー）で個別チャット履歴削除
+      itemEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); // デフォルトの右クリックメニューを無効化
+        this.onUserChatClear(member.id, member.name);
       });
 
       this.listEl.appendChild(itemEl);

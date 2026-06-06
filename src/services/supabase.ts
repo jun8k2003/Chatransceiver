@@ -723,4 +723,34 @@ export class SupabaseService {
       
     return channel;
   }
+
+  /**
+   * グループ（チャットルーム）とその関連データをすべて削除する
+   */
+  async deleteGroup(roomId: string): Promise<void> {
+    const { error } = await supabase
+      .from('chat_rooms')
+      .delete()
+      .eq('id', roomId);
+      
+    if (error) {
+      console.error('Failed to delete group:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 指定したチャットルーム内のメッセージ履歴をすべて削除する（個別チャット用）
+   */
+  async deleteMessages(roomId: string): Promise<void> {
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('room_id', roomId);
+      
+    if (error) {
+      console.error('Failed to delete messages:', error);
+      throw error;
+    }
+  }
 }

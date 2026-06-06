@@ -70,7 +70,9 @@ export class UIController {
     onDisconnectCommunity: () => void,
     onLeaveCommunity: () => void,
     onUserCheckChange: (selectedUserIds: string[]) => void,
+    onUserChatClear: (userId: string, userName: string) => void,
     onGroupSelect: (groupId: string | null) => void,
+    onGroupDelete: (groupId: string, groupName: string) => void,
     onSendText: (text: string) => void,
     onStartTalk: () => void,
     onStopTalk: () => void,
@@ -152,8 +154,8 @@ export class UIController {
       onDisconnectCommunity
     );
 
-    this.userList = new UserListUI('userPane', onUserCheckChange);
-    this.groupList = new GroupListUI('groupPane', onGroupSelect);
+    this.userList = new UserListUI('userPane', onUserCheckChange, onUserChatClear);
+    this.groupList = new GroupListUI('groupPane', onGroupSelect, onGroupDelete);
     
     this.chatWindow = new ChatWindowUI(
       'chatPane',
