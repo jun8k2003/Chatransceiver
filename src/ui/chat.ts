@@ -386,8 +386,9 @@ export class ChatWindowUI {
     this.cancelRecBtnEl.disabled = false;
     
     this.stopRecBtnEl.style.display = '';
-    // text_onlyの場合はプレビューする音声が存在しないため非表示
-    this.previewBtnEl.style.display = recordMode === 'text_only' ? 'none' : '';
+    // text_onlyの場合はプレビューする音声が存在しないため見えなくするが、レイアウトがずれないよう visibility を使う
+    this.previewBtnEl.style.visibility = recordMode === 'text_only' ? 'hidden' : 'visible';
+    this.previewBtnEl.style.display = '';
     this.sendRecBtnEl.style.display = '';
     this.cancelRecBtnEl.style.display = '';
 
