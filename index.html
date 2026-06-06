@@ -151,7 +151,7 @@
           </div>
         </div>
         <p class="recording-title">話しかけてください</p>
-        <p id="mobileDictationWarning" style="display: none; font-size: 12px; color: var(--color-text-secondary); text-align: center; margin-top: -5px; margin-bottom: 5px;">※ モバイル端末では文字起こしできません</p>
+        <p id="mobileDictationWarning" style="display: none; font-size: 12px; color: var(--color-text-secondary); text-align: center; margin-top: -5px; margin-bottom: 5px;">※ モバイル端末では録音または文字おこしのどちらかのみ設定してください</p>
         <div id="recordingDictationPreview" style="margin: 10px 0; min-height: 24px; font-size: 14px; color: var(--color-text-secondary); text-align: center; word-break: break-all;"></div>
         
         <!-- マイク入力レベルメーター -->
@@ -220,31 +220,39 @@
             <option value="audio_only">録音のみ (音声ファイルのみ送信)</option>
             <option value="text_only">文字おこしのみ (テキストのみ送信)</option>
           </select>
+          <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 5px;">
+            ※ モバイルの場合は録音と文字おこしを両方動かすことができません。
+          </div>
         </div>
         
-        <!-- マイク権限設定URLコピー (DEC-008) -->
-        <div class="settings-group" style="margin-top: 15px;">
-          <label>マイクが使えない・音声が認識されない場合</label>
-          <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">
-            ブラウザのマイク権限がブロックされている可能性があります。以下のURLをコピーして新しいタブで開き、「マイク」の許可を行ってください。
-          </div>
-          <div class="message-input-container">
-            <input type="text" id="settingsMicUrl" class="chat-input" value="chrome://settings/content/microphone" readonly />
-            <button id="btnCopyMicUrl" class="btn-send-message" style="background: var(--color-primary);" title="マイク設定URLをコピー">📋</button>
-          </div>
-        </div>
+        <!-- PCの場合の設定 -->
+        <fieldset style="margin-top: 20px; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 15px 15px;">
+          <legend style="font-size: 13px; font-weight: bold; color: var(--color-text-secondary); padding: 0 5px;">PCの場合の設定</legend>
 
-        <!-- スピーカー/音声設定URLコピー -->
-        <div class="settings-group" style="margin-top: 15px;">
-          <label>相手の声が聞こえない・自動再生されない場合</label>
-          <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">
-            ブラウザの音声再生（スピーカー）がミュートされている可能性があります。以下のURLをコピーして新しいタブで開き、「音声」の許可を行ってください。
+          <!-- マイク権限設定URLコピー (DEC-008) -->
+          <div class="settings-group" style="margin-top: 5px;">
+            <label>マイクが使えない・音声が認識されない場合</label>
+            <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">
+              ブラウザのマイク権限がブロックされている可能性があります。以下のURLをコピーして新しいタブで開き、「マイク」の許可を行ってください。
+            </div>
+            <div class="message-input-container">
+              <input type="text" id="settingsMicUrl" class="chat-input" value="chrome://settings/content/microphone" readonly />
+              <button id="btnCopyMicUrl" class="btn-send-message" style="background: var(--color-primary);" title="マイク設定URLをコピー">📋</button>
+            </div>
           </div>
-          <div class="message-input-container">
-            <input type="text" id="settingsSoundUrl" class="chat-input" value="chrome://settings/content/sound" readonly />
-            <button id="btnCopySoundUrl" class="btn-send-message" style="background: var(--color-primary);" title="音声設定URLをコピー">📋</button>
+
+          <!-- スピーカー/音声設定URLコピー -->
+          <div class="settings-group" style="margin-top: 15px;">
+            <label>相手の声が聞こえない・自動再生されない場合</label>
+            <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">
+              ブラウザの音声再生（スピーカー）がミュートされている可能性があります。以下のURLをコピーして新しいタブで開き、「音声」の許可を行ってください。
+            </div>
+            <div class="message-input-container">
+              <input type="text" id="settingsSoundUrl" class="chat-input" value="chrome://settings/content/sound" readonly />
+              <button id="btnCopySoundUrl" class="btn-send-message" style="background: var(--color-primary);" title="音声設定URLをコピー">📋</button>
+            </div>
           </div>
-        </div>
+        </fieldset>
         
         <!-- プッシュ通知設定 -->
         <div class="settings-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">

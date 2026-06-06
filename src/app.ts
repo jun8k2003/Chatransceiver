@@ -140,10 +140,17 @@ export class App {
       const savedCommunity = localStorage.getItem('chatransceiver_current_community');
       if (savedCommunity) {
         try {
+          // JSONパースを試みる
           const community = JSON.parse(savedCommunity);
-          communitySlug = community?.slug || null;
+          // slugがあれば優先し、無ければidを使用するフォールバック
+          communitySlug = community?.slug || community?.id || null;
         } catch (e) {
-          console.error('Failed to parse current community from LocalStorage:', e);
+          // JSONパースに失敗した場合、単一の文字列（IDやSlug）として保存されていた可能性を考慮
+          if (typeof savedCommunity === 'string' && !savedCommunity.startsWith('{')) {
+            communitySlug = savedCommunity;
+          } else {
+            console.error('Failed to parse current community from LocalStorage:', e);
+          }
         }
       }
     }
