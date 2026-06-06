@@ -175,18 +175,31 @@ export class FCMService {
     //   基本的には何もしない（あるいは別コミュニティの通知の場合は自前で Notification を出す）
     onMessage(this.messaging, (payload) => {
       console.log('Message received in foreground: ', payload);
-      // const data = payload.data || {};
-      // const communitySlug = data.communitySlug || '';
+      const data = payload.data || {};
+      const communitySlug = data.communitySlug || '';
+      const communityName = data.communityName || 'コミュニティ';
+      const senderName = data.senderName || 'ユーザー';
+      const messageType = data.messageType || 'text';
+      const textContent = data.textContent || '';
 
-      // 現在開いているコミュニティと違うコミュニティの通知が来た場合、システム通知を強制的に出すことも可能
-      // const urlParams = new URLSearchParams(window.location.search);
-      // const currentSlug = urlParams.get('c');
-      // if (currentSlug !== communitySlug && Notification.permission === 'granted') {
-      //   new Notification(`[${data.communityName}] ${data.senderName}`, {
-      //     body: data.messageType === 'audio' ? '🎤 音声メッセージ' : data.textContent,
-      //     icon: '/chatora.png'
-      //   });
-      // }
+      const notificationTitle = `[${communityName}] ${senderName}`;
+      const notificationBody = messageType === 'audio' ? '🎤 音声メッセージ' : textContent;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const currentSlug = urlParams.get('c');
+
+      // ページが隠れている（バックグラウンド）、または別のコミュニティを開いている場合は通知を出す
+      if (document.visibilityState === 'hidden' || currentSlug !== communitySlug) {
+        if (Notification.permission === 'granted') {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(notificationTitle, {
+              body: notificationBody,
+              icon: '/chatora.png',
+              data: { url: `/?c=${communitySlug}&m=${data.messageId}` }
+            });
+          });
+        }
+      }
     });
   }
 
