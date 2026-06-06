@@ -174,13 +174,16 @@ export class SupabaseService {
 
     if (!membership) {
       // 3. 参加していない場合はメンバーに追加（user_number は自動採番または連番）
-      // 現在のコミュニティメンバー数をカウントして user_number を決定する
-      const { count } = await supabase
+      // 退会者が出た場合の重複を防ぐため、現在の最大の user_number を取得して +1 する
+      const { data: maxMember } = await supabase
         .from('community_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('community_id', community.id);
+        .select('user_number')
+        .eq('community_id', community.id)
+        .order('user_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       
-      const nextNumber = (count || 0) + 1;
+      const nextNumber = (maxMember?.user_number || 0) + 1;
 
       const { error: joinError } = await supabase
         .from('community_members')
