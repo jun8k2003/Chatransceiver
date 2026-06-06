@@ -7,7 +7,7 @@ import { ChatWindowUI } from './chat';
 import type { MessageItem } from './chat';
 
 export interface UIState {
-  currentUser: { id: string; name: string } | null;
+  currentUser: { id: string; name: string; discord_webhook_url?: string } | null;
   currentCommunity: { id: string; slug: string; name: string } | null;
   activeChatHistoryId: string | null;
   selectedUserIds: string[];
@@ -52,6 +52,7 @@ export class UIController {
   private settingsRecordModeSelect: HTMLSelectElement;
   private settingsCallSignCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
+  private settingsDiscordWebhookInput: HTMLInputElement;
   private settingsSaveBtn: HTMLButtonElement;
   private settingsCancelBtn: HTMLButtonElement;
   private settingsLeaveContainerEl: HTMLDivElement;
@@ -83,7 +84,7 @@ export class UIController {
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean) => void,
+    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>
   ) {
@@ -178,6 +179,7 @@ export class UIController {
     this.settingsRecordModeSelect = document.getElementById('settingsRecordMode') as HTMLSelectElement;
     this.settingsCallSignCheck = document.getElementById('settingsCallSignOff') as HTMLInputElement;
     this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
+    this.settingsDiscordWebhookInput = document.getElementById('settingsDiscordWebhook') as HTMLInputElement;
     this.settingsSaveBtn = this.settingsModalEl.querySelector('.btn-settings-save') as HTMLButtonElement;
     this.settingsCancelBtn = this.settingsModalEl.querySelector('.btn-settings-cancel') as HTMLButtonElement;
     this.settingsLeaveContainerEl = this.settingsModalEl.querySelector('#settingsLeaveContainer') as HTMLDivElement;
@@ -265,8 +267,9 @@ export class UIController {
       const recordMode = this.settingsRecordModeSelect.value as 'both' | 'audio_only' | 'text_only';
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
       const callSignEnabled = !this.settingsCallSignCheck.checked;
+      const discordWebhookUrl = this.settingsDiscordWebhookInput.value.trim();
       if (newNickname) {
-        onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled);
+        onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl);
         this.settingsModalEl.classList.remove('show');
       } else {
         alert('ニックネームを入力してください。');
@@ -365,6 +368,10 @@ export class UIController {
       this.settingsRecordModeSelect.value = state.recordMode;
       this.settingsCallSignCheck.checked = !state.callSignEnabled;
       this.settingsThemeSelect.value = state.theme;
+      
+      if (document.activeElement !== this.settingsDiscordWebhookInput) {
+        this.settingsDiscordWebhookInput.value = state.currentUser?.discord_webhook_url || '';
+      }
       
       // 退会コントロールの表示制御
       if (state.currentCommunity) {

@@ -48,6 +48,7 @@ create table public.users (
   name varchar not null,
   email varchar not null,
   avatar_url text,
+  discord_webhook_url text,
   created_at timestamptz default now() not null
 );
 

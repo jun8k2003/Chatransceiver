@@ -62,13 +62,18 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   )
 
-  // 対象ユーザーのトークンを取得
-  const { data: tokens } = await supabaseAdmin
-    .from('fcm_tokens')
-    .select('device_uuid, fcm_token')
-    .eq('user_id', record.user_id)
+  // 対象ユーザーのトークンおよびDiscord Webhookを取得
+  const [tokensResult, userResult] = await Promise.all([
+    supabaseAdmin.from('fcm_tokens').select('device_uuid, fcm_token').eq('user_id', record.user_id),
+    supabaseAdmin.from('users').select('discord_webhook_url').eq('id', record.user_id).single()
+  ])
 
-  if (!tokens || tokens.length === 0) return new Response('No tokens')
+  const tokens = tokensResult.data || []
+  const discordWebhookUrl = userResult.data?.discord_webhook_url
+
+  if (tokens.length === 0 && (!discordWebhookUrl || discordWebhookUrl.trim() === '')) {
+    return new Response('No notification targets')
+  }
 
   // DBからメッセージ詳細、送信者情報、コミュニティ情報を取得
   const { data: msgData, error: msgError } = await supabaseAdmin
@@ -95,42 +100,75 @@ serve(async (req) => {
   const notificationTitle = `[新着メッセージ] ${senderName}`
   const notificationBody = audioUrl ? '🎤 音声メッセージ' : (textContent || '新しいメッセージが届きました')
 
-  const accessToken = await getFirebaseAccessToken()
-
-  const sendPromises = tokens.map(async (t) => {
-    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: {
-          token: t.fcm_token,
-          // カスタムのクリックハンドラで利用するデータ
-          data: {
-            url: `/?c=${communitySlug}&m=${record.message_id || ''}`,
-            communitySlug: communitySlug,
-            messageId: record.message_id || '',
-            communityName: communityName,
-            senderName: senderName,
-            messageType: audioUrl ? 'audio' : 'text',
-            textContent: textContent
-          }
-        }
-      })
-    })
-
-    if (!res.ok) {
-      const errorData = await res.json()
-      const errorCode = errorData.error?.details?.[0]?.errorCode
-      // トークン無効時は削除
-      if (errorCode === 'UNREGISTERED' || res.status === 404) {
-        await supabaseAdmin.from('fcm_tokens').delete().eq('device_uuid', t.device_uuid)
-      }
+  let accessToken = '';
+  if (tokens.length > 0) {
+    try {
+      accessToken = await getFirebaseAccessToken()
+    } catch (e) {
+      console.error('Failed to get Firebase access token:', e)
     }
-  })
+  }
 
-  await Promise.all(sendPromises)
+  const sendPromises: Promise<any>[] = []
+
+  if (accessToken && tokens.length > 0) {
+    const fcmPromises = tokens.map(async (t) => {
+      const res = await fetch(`https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: {
+            token: t.fcm_token,
+            // カスタムのクリックハンドラで利用するデータ
+            data: {
+              url: `/?c=${communitySlug}&m=${record.message_id || ''}`,
+              communitySlug: communitySlug,
+              messageId: record.message_id || '',
+              communityName: communityName,
+              senderName: senderName,
+              messageType: audioUrl ? 'audio' : 'text',
+              textContent: textContent
+            }
+          }
+        })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        const errorCode = errorData.error?.details?.[0]?.errorCode
+        // トークン無効時は削除
+        if (errorCode === 'UNREGISTERED' || res.status === 404) {
+          await supabaseAdmin.from('fcm_tokens').delete().eq('device_uuid', t.device_uuid)
+        }
+      }
+    })
+    sendPromises.push(...fcmPromises)
+  }
+
+  // Discord Webhookの送信
+  if (discordWebhookUrl && discordWebhookUrl.trim() !== '') {
+    const fullUrl = `https://chatransceiver13162.web.app/?c=${communitySlug}&m=${record.message_id || ''}`
+    const messageText = audioUrl ? '🎤 音声メッセージ' : textContent;
+    
+    const discordPromise = fetch(discordWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `【新着】**${senderName}**さんからメッセージ:\n> ${messageText}\n\n👉 アプリで開く: ${fullUrl}`
+      })
+    }).then(res => {
+      if (!res.ok) {
+        console.error('Discord Webhook error:', res.status, res.statusText)
+      }
+    }).catch(e => {
+      console.error('Failed to send Discord webhook:', e)
+    })
+    sendPromises.push(discordPromise)
+  }
+
+  await Promise.allSettled(sendPromises)
   return new Response('Sent')
 })

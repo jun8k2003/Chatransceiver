@@ -9,6 +9,7 @@ export interface SupabaseUser {
   id: string;
   name: string;
   email: string;
+  discord_webhook_url?: string;
 }
 
 export interface SupabaseCommunity {
@@ -87,13 +88,14 @@ export class SupabaseService {
 
     let { data: profile, error } = await supabase
       .from('users')
-      .select('name')
+      .select('name, discord_webhook_url')
       .eq('id', user.id)
       .maybeSingle();
 
+    const fallbackName = user.user_metadata?.name || user.user_metadata?.full_name || 'No Name';
+
     if (error || !profile) {
       // プロフィールが存在しない場合は自動作成(Upsert)して修復する
-      const fallbackName = user.user_metadata?.name || user.user_metadata?.full_name || 'No Name';
       const { data: newProfile, error: upsertError } = await supabase
         .from('users')
         .upsert({
@@ -102,7 +104,7 @@ export class SupabaseService {
           email: user.email || '',
           avatar_url: user.user_metadata?.avatar_url || ''
         }, { onConflict: 'id' })
-        .select('name')
+        .select('name, discord_webhook_url')
         .single();
         
       if (!upsertError && newProfile) {
@@ -114,8 +116,9 @@ export class SupabaseService {
 
     return {
       id: user.id,
-      name: profile?.name || user.user_metadata?.name || 'No Name',
-      email: user.email || ''
+      name: profile?.name || fallbackName,
+      email: user.email || '',
+      discord_webhook_url: profile?.discord_webhook_url || ''
     };
   }
 
@@ -126,6 +129,18 @@ export class SupabaseService {
     const { error } = await supabase
       .from('users')
       .update({ name: newName })
+      .eq('id', userId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Discord Webhook URLの更新
+   */
+  async updateDiscordWebhook(userId: string, webhookUrl: string): Promise<void> {
+    const { error } = await supabase
+      .from('users')
+      .update({ discord_webhook_url: webhookUrl })
       .eq('id', userId);
 
     if (error) throw error;

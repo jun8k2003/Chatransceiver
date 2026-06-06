@@ -83,7 +83,8 @@ Table users {
   name varchar [not null, note: 'ニックネーム']
   email varchar [not null]
   avatar_url text
-  created_at timestamptz [default: `now()`]
+  discord_webhook_url text [note: 'Discord Webhook 通知用URL (プッシュ通知代替)']
+  created_at timestamptz [not null, default: `now()`]
 }
 
 Table communities {
