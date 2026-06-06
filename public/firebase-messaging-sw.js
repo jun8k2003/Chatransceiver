@@ -17,42 +17,26 @@ if (apiKey && projectId) {
 
   const messaging = firebase.messaging();
 
-// バックグラウンドでプッシュ通知を受信した時の処理
-messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
+// Firebase SDKが notification ペイロードを自動処理するため、
+// 手動での onBackgroundMessage による showNotification は削除します。
+// （これにより、Android Chromeの「不正な通知」警告が完全に防止されます）
 
-  const data = payload.data || {};
-  const communitySlug = data.communitySlug || '';
-  const messageId = data.messageId || '';
-  const communityName = data.communityName || 'コミュニティ';
-  const senderName = data.senderName || 'ユーザー';
-  const messageType = data.messageType || 'text';
-  const textContent = data.textContent || '';
-
-  // 通知のタイトルと本文を動的に組み立て
-  const notificationTitle = `[${communityName}] ${senderName}`;
-  const notificationBody = messageType === 'audio' 
-    ? `🎤 ${textContent}` 
-    : textContent;
-
-  const notificationOptions = {
-    body: notificationBody,
-    icon: '/chatora.png', // アプリのアイコンが public/chatora.png にあると想定
-    // ダイレクトリンクURL。app.ts の handleDirectMessageLink が処理するパラメータ形式
-      data: { url: `/?c=${communitySlug}&m=${messageId}` } 
-    };
-
-    return self.registration.showNotification(notificationTitle, notificationOptions);
-  });
 }
 
 // 通知クリック時のイベントハンドラ
 self.addEventListener('notificationclick', function(event) {
-  console.log('[firebase-messaging-sw.js] Notification click received.');
+  console.log('[firebase-messaging-sw.js] Notification click received.', event.notification.data);
   event.notification.close();
 
-  if (!event.notification.data || !event.notification.data.url) return;
-  const urlToOpen = new URL(event.notification.data.url, self.location.origin).href;
+  // Firebase SDKが自動生成した通知の場合、dataは FCM_MSG の中に入っている
+  let urlToOpen = '/';
+  if (event.notification.data) {
+    if (event.notification.data.FCM_MSG && event.notification.data.FCM_MSG.data && event.notification.data.FCM_MSG.data.url) {
+      urlToOpen = new URL(event.notification.data.FCM_MSG.data.url, self.location.origin).href;
+    } else if (event.notification.data.url) {
+      urlToOpen = new URL(event.notification.data.url, self.location.origin).href;
+    }
+  }
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

@@ -107,8 +107,14 @@ serve(async (req) => {
       body: JSON.stringify({
         message: {
           token: t.fcm_token,
-          // システム通知として表示させるための data ペイロード
+          // Android Chromeでの「不正な通知」警告を防ぐため、およびiOSでの確実なバックグラウンド通知のために notification ブロックを含める
+          notification: {
+            title: notificationTitle,
+            body: notificationBody
+          },
+          // カスタムのクリックハンドラで利用するデータ
           data: {
+            url: `/?c=${communitySlug}&m=${record.message_id || ''}`,
             communitySlug: communitySlug,
             messageId: record.message_id || '',
             communityName: communityName,
