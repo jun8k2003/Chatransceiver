@@ -170,8 +170,14 @@
 
     <!-- 5. 設定モーダルダイアログ (Settings Modal) -->
     <div id="settingsModal" class="modal-overlay">
-      <div class="modal-content">
-        <p class="modal-title">環境設定</p>
+      <div class="modal-content" style="position: relative;">
+        <button id="btnSettingsCloseTop" class="modal-close-top" aria-label="閉じる">&times;</button>
+        <p class="modal-title" style="margin-bottom: 15px;">環境設定</p>
+        
+        <div class="recording-actions" style="margin-bottom: 25px;">
+          <button class="btn-modal btn-settings-save">保存</button>
+          <button class="btn-modal btn-settings-cancel">閉じる</button>
+        </div>
         
         <!-- ニックネーム設定 -->
         <div class="settings-group">
@@ -203,6 +209,16 @@
           <select id="settingsTheme" class="mock-input" style="cursor: pointer;">
             <option value="dark">ダークモード (標準)</option>
             <option value="light">ライトモード</option>
+          </select>
+        </div>
+
+        <!-- 録音設定 -->
+        <div class="settings-group" style="margin-top: 15px; width: 100%;">
+          <label for="settingsRecordMode" style="margin-bottom: 8px; display: block;">録音設定</label>
+          <select id="settingsRecordMode" class="mock-input" style="cursor: pointer;">
+            <option value="both">両方 (音声録音 ＋ 文字おこし)</option>
+            <option value="audio_only">録音のみ (音声ファイルのみ送信)</option>
+            <option value="text_only">文字おこしのみ (テキストのみ送信)</option>
           </select>
         </div>
         
@@ -240,11 +256,6 @@
             <button id="btnRegisterNotification" class="btn-modal" style="background-color: var(--color-accent); color: white; flex: 1;">通知を登録する</button>
             <button id="btnUnregisterNotification" class="btn-modal" style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.3); flex: 1; display: none;">通知を解除する</button>
           </div>
-        </div>
-        
-        <div class="recording-actions" style="margin-top: 25px;">
-          <button class="btn-modal btn-settings-save">保存</button>
-          <button class="btn-modal btn-settings-cancel">閉じる</button>
         </div>
         
         <div id="settingsLeaveContainer" style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border-color); display: none; width: 100%; text-align: center;">

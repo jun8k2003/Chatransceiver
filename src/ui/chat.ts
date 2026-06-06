@@ -378,7 +378,7 @@ export class ChatWindowUI {
   /**
    * 録音モーダルの表示
    */
-  showRecordingModal(): void {
+  showRecordingModal(recordMode: 'both' | 'audio_only' | 'text_only' = 'both'): void {
     this.modalEl.classList.add('show');
     this.stopRecBtnEl.disabled = false;
     this.previewBtnEl.disabled = true;
@@ -386,12 +386,13 @@ export class ChatWindowUI {
     this.cancelRecBtnEl.disabled = false;
     
     this.stopRecBtnEl.style.display = '';
-    this.previewBtnEl.style.display = '';
+    // text_onlyの場合はプレビューする音声が存在しないため非表示
+    this.previewBtnEl.style.display = recordMode === 'text_only' ? 'none' : '';
     this.sendRecBtnEl.style.display = '';
     this.cancelRecBtnEl.style.display = '';
 
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
+    if (isMobile && recordMode === 'both') {
       if (this.mobileDictationWarningEl) this.mobileDictationWarningEl.style.display = 'block';
     } else {
       if (this.mobileDictationWarningEl) this.mobileDictationWarningEl.style.display = 'none';
