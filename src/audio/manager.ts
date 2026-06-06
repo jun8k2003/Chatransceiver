@@ -360,10 +360,18 @@ export class AudioManager {
    * ユーザーのクリックイベントハンドラ内で一度だけ呼び出します。
    */
   unlockAudio(): void {
+    // 1. Web Audio API (音声ファイル再生等) のロック解除
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioCtx) {
       const ctx = new AudioCtx();
-      ctx.resume().then(() => ctx.close());
+      ctx.resume().then(() => ctx.close()).catch(console.error);
+    }
+
+    // 2. SpeechSynthesis (音声読み上げ) のロック解除 (iOS/iPadOS対応)
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance('');
+      utterance.volume = 0; // 無音で再生
+      window.speechSynthesis.speak(utterance);
     }
   }
 }
