@@ -200,7 +200,7 @@ export class ChatWindowUI {
         'コミュニティ未接続',
         '最上部のコンボボックスにコミュニティIDを入力するか、履歴から選択して「接続する」を押してください。'
       );
-      this.toggleInputs(false, 'unconnected');
+      this.toggleInputs(false);
       return;
     }
 
@@ -226,7 +226,7 @@ export class ChatWindowUI {
         placeholderConfig.title,
         placeholderConfig.subtitle
       );
-      this.toggleInputs(false, 'empty');
+      this.toggleInputs(false);
       return;
     }
 
@@ -357,15 +357,16 @@ export class ChatWindowUI {
     `;
   }
 
-  private toggleInputs(enabled: boolean, emptyType?: 'unconnected' | 'empty'): void {
+  private toggleInputs(enabled: boolean): void {
+    const footerEl = this.inputEl.closest('.chat-footer') as HTMLElement;
+    if (footerEl) {
+      footerEl.style.display = enabled ? 'flex' : 'none';
+    }
+    
     this.inputEl.disabled = !enabled;
     this.sendBtnEl.disabled = !enabled;
     this.talkBtnEl.disabled = !enabled;
-    if (!enabled) {
-      this.inputEl.placeholder = emptyType === 'unconnected' 
-        ? 'コミュニティへ接続してください' 
-        : 'チャット相手を選択してください';
-    } else {
+    if (enabled) {
       this.inputEl.placeholder = 'メッセージを入力...';
     }
   }
