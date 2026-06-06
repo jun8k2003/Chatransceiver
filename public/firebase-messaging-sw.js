@@ -16,12 +16,57 @@ if (apiKey && projectId) {
   });
 
   const messaging = firebase.messaging();
-
-// Firebase SDKが notification ペイロードを自動処理するため、
-// 手動での onBackgroundMessage による showNotification は削除します。
-// （これにより、Android Chromeの「不正な通知」警告が完全に防止されます）
-
 }
+
+// ネイティブの push イベントリスナーで通知を処理します（Chromeの不正通知警告を完全に防ぐため）
+self.addEventListener('push', function(event) {
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch (e) {
+    return;
+  }
+
+  const data = payload.data || {};
+  const communitySlug = data.communitySlug || '';
+  const messageId = data.messageId || '';
+  const communityName = data.communityName || 'コミュニティ';
+  const senderName = data.senderName || 'ユーザー';
+  const messageType = data.messageType || 'text';
+  const textContent = data.textContent || '';
+
+  const notificationTitle = `[${communityName}] ${senderName}`;
+  const notificationBody = messageType === 'audio' ? `🎤 ${textContent}` : textContent;
+
+  const notificationOptions = {
+    body: notificationBody,
+    icon: '/chatora.png',
+    data: { url: `/?c=${communitySlug}&m=${messageId}` }
+  };
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // 画面が開いていて、アクティブで、同じコミュニティを見ている場合は通知を出さない
+      let isVisibleAndSameCommunity = false;
+      for (let i = 0; i < windowClients.length; i++) {
+        const client = windowClients[i];
+        if (client.visibilityState === 'visible') {
+          const url = new URL(client.url);
+          if (url.searchParams.get('c') === communitySlug) {
+            isVisibleAndSameCommunity = true;
+            break;
+          }
+        }
+      }
+
+      if (isVisibleAndSameCommunity) {
+        return Promise.resolve(); // 通知不要
+      } else {
+        return self.registration.showNotification(notificationTitle, notificationOptions);
+      }
+    })
+  );
+});
 
 // 通知クリック時のイベントハンドラ
 self.addEventListener('notificationclick', function(event) {

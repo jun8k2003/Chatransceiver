@@ -175,31 +175,9 @@ export class FCMService {
     //   基本的には何もしない（あるいは別コミュニティの通知の場合は自前で Notification を出す）
     onMessage(this.messaging, (payload) => {
       console.log('Message received in foreground: ', payload);
-      const data = payload.data || {};
-      const communitySlug = data.communitySlug || '';
-      const communityName = data.communityName || 'コミュニティ';
-      const senderName = data.senderName || 'ユーザー';
-      const messageType = data.messageType || 'text';
-      const textContent = data.textContent || '';
-
-      const notificationTitle = `[${communityName}] ${senderName}`;
-      const notificationBody = messageType === 'audio' ? '🎤 音声メッセージ' : textContent;
-
-      const urlParams = new URLSearchParams(window.location.search);
-      const currentSlug = urlParams.get('c');
-
-      // ページが隠れている（バックグラウンド）、または別のコミュニティを開いている場合は通知を出す
-      if (document.visibilityState === 'hidden' || currentSlug !== communitySlug) {
-        if (Notification.permission === 'granted') {
-          navigator.serviceWorker.ready.then((registration) => {
-            registration.showNotification(notificationTitle, {
-              body: notificationBody,
-              icon: '/chatora.png',
-              data: { url: `/?c=${communitySlug}&m=${data.messageId}` }
-            });
-          });
-        }
-      }
+      // フォアグラウンド時のシステム通知は、firebase-messaging-sw.js の
+      // ネイティブ push リスナー側で画面のアクティブ状態を判定して処理するため、
+      // ここでは何もしません。
     });
   }
 
