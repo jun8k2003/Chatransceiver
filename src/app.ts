@@ -82,7 +82,7 @@ export class App {
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled),
+      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl),
       async () => await this.handleRegisterNotification(),
       async () => await this.handleUnregisterNotification()
     );
@@ -892,13 +892,18 @@ export class App {
   /**
    * 環境設定の保存
    */
-  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean): Promise<void> {
+  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string): Promise<void> {
     if (this.state.currentUser) {
       try {
         await this.supabaseService.updateNickname(this.state.currentUser.id, nickname);
         this.state.currentUser.name = nickname;
+        
+        if (discordWebhookUrl !== undefined) {
+          await this.supabaseService.updateDiscordWebhook(this.state.currentUser.id, discordWebhookUrl);
+          this.state.currentUser.discord_webhook_url = discordWebhookUrl;
+        }
       } catch (e) {
-        console.error('Failed to update nickname in Database:', e);
+        console.error('Failed to update user settings in Database:', e);
       }
     }
     
