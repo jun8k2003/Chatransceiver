@@ -2,8 +2,7 @@
 
 > **15秒トランシーバー！文字起こし付きチャット**
 
-![Chatransceiver Screenshot](./public/icons/icon-192x192.png)
-*(※ここにアプリのスクリーンショットやデモGIFを配置します)*
+![Chatransceiver Screenshot](./README_img/Chatransceiver.gif_1280x546.gif)
 
 ## 📖 概要 (What is this?)
 
