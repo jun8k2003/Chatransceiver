@@ -901,6 +901,24 @@ body.resizing-v * {
   transform: scale(1);
 }
 
+.modal-close-top {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.2s ease;
+  z-index: 10;
+}
+
+.modal-close-top:hover {
+  color: var(--text-color);
+}
 .recording-title {
   font-size: 16px;
   font-weight: 600;

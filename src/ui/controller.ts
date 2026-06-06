@@ -17,6 +17,7 @@ export interface UIState {
   playingUserId?: string;
   playingGroupId?: string;
   autoplayEnabled: boolean;
+  recordMode: 'both' | 'audio_only' | 'text_only';
   isRecording: boolean;
   mobileChatForceOpen: boolean;
   theme: 'light' | 'dark';
@@ -48,6 +49,7 @@ export class UIController {
   private settingsModalEl: HTMLDivElement;
   private settingsNicknameInput: HTMLInputElement;
   private settingsAutoplayCheck: HTMLInputElement;
+  private settingsRecordModeSelect: HTMLSelectElement;
   private settingsCallSignCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
   private settingsSaveBtn: HTMLButtonElement;
@@ -81,7 +83,7 @@ export class UIController {
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean, theme: 'light'|'dark', callSignEnabled: boolean) => void,
+    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>
   ) {
@@ -173,6 +175,7 @@ export class UIController {
     this.settingsModalEl = document.getElementById('settingsModal') as HTMLDivElement;
     this.settingsNicknameInput = document.getElementById('settingsNickname') as HTMLInputElement;
     this.settingsAutoplayCheck = document.getElementById('settingsAutoplay') as HTMLInputElement;
+    this.settingsRecordModeSelect = document.getElementById('settingsRecordMode') as HTMLSelectElement;
     this.settingsCallSignCheck = document.getElementById('settingsCallSignOff') as HTMLInputElement;
     this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
     this.settingsSaveBtn = this.settingsModalEl.querySelector('.btn-settings-save') as HTMLButtonElement;
@@ -248,14 +251,22 @@ export class UIController {
       this.settingsModalEl.classList.remove('show');
     });
 
+    const btnSettingsCloseTop = document.getElementById('btnSettingsCloseTop') as HTMLButtonElement;
+    if (btnSettingsCloseTop) {
+      btnSettingsCloseTop.addEventListener('click', () => {
+        this.settingsModalEl.classList.remove('show');
+      });
+    }
+
     // 環境設定モーダル保存
     this.settingsSaveBtn.addEventListener('click', () => {
       const newNickname = this.settingsNicknameInput.value.trim();
       const autoplay = this.settingsAutoplayCheck.checked;
+      const recordMode = this.settingsRecordModeSelect.value as 'both' | 'audio_only' | 'text_only';
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
       const callSignEnabled = !this.settingsCallSignCheck.checked;
       if (newNickname) {
-        onSaveSettings(newNickname, autoplay, theme, callSignEnabled);
+        onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled);
         this.settingsModalEl.classList.remove('show');
       } else {
         alert('ニックネームを入力してください。');
@@ -348,9 +359,10 @@ export class UIController {
       
       // 設定画面の初期値をセット（入力中以外の時に値を同期）
       if (document.activeElement !== this.settingsNicknameInput) {
-        this.settingsNicknameInput.value = state.currentUser.name;
+        this.settingsNicknameInput.value = state.currentUser?.name || '';
       }
       this.settingsAutoplayCheck.checked = state.autoplayEnabled;
+      this.settingsRecordModeSelect.value = state.recordMode;
       this.settingsCallSignCheck.checked = !state.callSignEnabled;
       this.settingsThemeSelect.value = state.theme;
       
@@ -483,7 +495,7 @@ export class UIController {
   }
 
   // 録音ダイアログ制御の委譲
-  showRecordingModal(): void { this.chatWindow.showRecordingModal(); }
+  showRecordingModal(recordMode: 'both'|'audio_only'|'text_only' = 'both'): void { this.chatWindow.showRecordingModal(recordMode); }
   hideRecordingModal(): void { this.chatWindow.hideRecordingModal(); }
   updateMicLevel(level: number): void { this.chatWindow.updateMicLevel(level); }
   updateRecordingTimer(text: string): void { this.chatWindow.updateRecordingTimer(text); }

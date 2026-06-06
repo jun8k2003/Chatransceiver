@@ -37,6 +37,7 @@ export class App {
     playingUserId: undefined,
     playingGroupId: undefined,
     autoplayEnabled: true,
+    recordMode: 'both' as 'both' | 'audio_only' | 'text_only',
     isRecording: false,
     mobileChatForceOpen: false,
     theme: 'dark',
@@ -81,7 +82,7 @@ export class App {
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname: string, autoplay: boolean, theme: 'light' | 'dark', callSignEnabled: boolean) => this.handleSaveSettings(nickname, autoplay, theme, callSignEnabled),
+      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled),
       async () => await this.handleRegisterNotification(),
       async () => await this.handleUnregisterNotification()
     );
@@ -95,6 +96,12 @@ export class App {
     const savedAutoplay = localStorage.getItem('chatransceiver_autoplay_enabled');
     if (savedAutoplay !== null) {
       this.state.autoplayEnabled = savedAutoplay === 'true';
+    }
+
+    // 録音設定の読み込み
+    const savedRecordMode = localStorage.getItem('chatransceiver_record_mode');
+    if (savedRecordMode === 'both' || savedRecordMode === 'audio_only' || savedRecordMode === 'text_only') {
+      this.state.recordMode = savedRecordMode;
     }
 
     // コールサインフォン設定の読み込み
@@ -640,19 +647,26 @@ export class App {
     this.recordedAudioBlob = null;
     this.recordedDictationText = '';
 
-    this.uiController.showRecordingModal();
+    this.uiController.showRecordingModal(this.state.recordMode);
     
-    // 録音と同時に音声認識（ディクテーション）も開始する
-    this.audioManager.startDictation();
+    // recordMode に応じて処理を分岐
+    if (this.state.recordMode === 'both' || this.state.recordMode === 'text_only') {
+      this.audioManager.startDictation();
+    }
     
-    this.audioManager.startRecording((level) => {
-      this.uiController.updateMicLevel(level);
-    }).catch((err) => {
-      console.error('Microphone recording error:', err);
-      this.uiController.showMicError(window.location.origin);
-      this.clearRecordingState();
-      this.uiController.hideRecordingModal();
-    });
+    if (this.state.recordMode === 'both' || this.state.recordMode === 'audio_only') {
+      this.audioManager.startRecording((level) => {
+        this.uiController.updateMicLevel(level);
+      }).catch((err) => {
+        console.error('Microphone recording error:', err);
+        this.uiController.showMicError(window.location.origin);
+        this.clearRecordingState();
+        this.uiController.hideRecordingModal();
+      });
+    } else if (this.state.recordMode === 'text_only') {
+      // 録音しない場合はマイクレベルを0固定で進める
+      this.uiController.updateMicLevel(0);
+    }
 
     let timeLeft = 15;
     this.uiController.updateRecordingTimer(`00:${timeLeft.toString().padStart(2, '0')}`);
@@ -679,11 +693,23 @@ export class App {
     this.clearRecordingState();
 
     try {
-      this.recordedAudioBlob = await this.audioManager.stopRecording();
+      if (this.state.recordMode === 'both' || this.state.recordMode === 'audio_only') {
+        this.recordedAudioBlob = await this.audioManager.stopRecording();
+      } else {
+        this.recordedAudioBlob = null;
+      }
       
-      // 音声認識を停止し、結果を受け取る
-      const recognizedText = await this.audioManager.stopDictation();
-      this.recordedDictationText = recognizedText || '（音声メッセージ）';
+      let recognizedText = '';
+      if (this.state.recordMode === 'both' || this.state.recordMode === 'text_only') {
+        // 音声認識を停止し、結果を受け取る
+        recognizedText = await this.audioManager.stopDictation();
+      }
+
+      if (this.state.recordMode === 'audio_only') {
+        this.recordedDictationText = '🎤 音声メッセージ';
+      } else {
+        this.recordedDictationText = recognizedText || (this.state.recordMode === 'text_only' ? '（テキスト化できませんでした）' : '（音声メッセージ）');
+      }
       
       this.uiController.updateDictationPreview(this.recordedDictationText);
       this.uiController.hideRecordingStopButton();
@@ -715,7 +741,8 @@ export class App {
     this.uiController.hideRecordingModal();
     this.playbackQueue.resume();
 
-    if (!this.recordedAudioBlob) return;
+    if (!this.recordedAudioBlob && this.state.recordMode !== 'text_only') return;
+    if (this.state.recordMode === 'text_only' && !this.recordedDictationText) return;
 
     try {
       if (!roomId) {
@@ -730,7 +757,7 @@ export class App {
         await this.loadCommunityData();
       }
 
-      await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob);
+      await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob || undefined);
     } catch (e) {
       console.error('Failed to send audio message:', e);
     }
@@ -858,7 +885,7 @@ export class App {
   /**
    * 環境設定の保存
    */
-  private async handleSaveSettings(nickname: string, autoplay: boolean, theme: 'light' | 'dark', callSignEnabled: boolean): Promise<void> {
+  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean): Promise<void> {
     if (this.state.currentUser) {
       try {
         await this.supabaseService.updateNickname(this.state.currentUser.id, nickname);
@@ -870,6 +897,9 @@ export class App {
     
     this.state.autoplayEnabled = autoplay;
     localStorage.setItem('chatransceiver_autoplay_enabled', autoplay ? 'true' : 'false');
+
+    this.state.recordMode = recordMode;
+    localStorage.setItem('chatransceiver_record_mode', recordMode);
 
     this.state.callSignEnabled = callSignEnabled;
     localStorage.setItem('chatransceiver_callsign_enabled', callSignEnabled ? 'true' : 'false');
