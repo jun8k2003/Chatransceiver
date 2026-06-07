@@ -5,8 +5,6 @@ import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
 import { FCMService } from './services/FCMService';
 import pttStartUrl from './assets/ptt-start.wav';
-import { AudioKeepAliveManager } from './audio/keepalive';
-import { isRunningAsPWA } from './utils/pwa';
 
 /**
  * App (src/app.ts)
@@ -19,8 +17,6 @@ export class App {
   private uiController: UIController;
   private supabaseService: SupabaseService;
   private fcmService: FCMService;
-  private keepAliveManager: AudioKeepAliveManager | null = null;
-  private keepAliveAudioContext: AudioContext | null = null;
 
   // Realtime 監視サブスクリプションの参照
   private inboxSubscription: any = null;
@@ -90,9 +86,7 @@ export class App {
       () => this.handleBackToSidebar(),
       (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl),
       async () => await this.handleRegisterNotification(),
-      async () => await this.handleUnregisterNotification(),
-      () => this.handleStartStandby(),
-      () => this.handleStopStandby()
+      async () => await this.handleUnregisterNotification()
     );
   }
 
@@ -314,14 +308,6 @@ export class App {
 
       // コミュニティデータのロード
       await this.loadCommunityData();
-
-      // PWAの場合は待機ボタンを表示
-      const btnStandbyMode = document.getElementById('btnStandbyMode');
-      if (btnStandbyMode) {
-        if (isRunningAsPWA()) {
-          btnStandbyMode.style.display = 'flex';
-        }
-      }
 
       this.state.activeChatHistoryId = null;
       this.state.selectedUserIds = [];
@@ -726,52 +712,7 @@ export class App {
     this.state.isRecording = false;
   }
 
-  /**
-   * 待機モードの開始
-   */
-  private handleStartStandby(): void {
-    if (!this.keepAliveAudioContext) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      this.keepAliveAudioContext = new AudioCtx();
-    }
-    if (this.keepAliveAudioContext.state === 'suspended') {
-      this.keepAliveAudioContext.resume();
-    }
-    if (!this.keepAliveManager) {
-      this.keepAliveManager = new AudioKeepAliveManager(this.keepAliveAudioContext);
-    }
-    
-    this.keepAliveManager.startInaudibleNoise();
 
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'playing';
-      
-      const togglePtt = () => {
-        if (this.state.isRecording) {
-          this.handleStopTalk();
-        } else {
-          this.handleStartTalk();
-        }
-      };
-      
-      navigator.mediaSession.setActionHandler('play', togglePtt);
-      navigator.mediaSession.setActionHandler('pause', togglePtt);
-    }
-  }
-
-  /**
-   * 待機モードの終了
-   */
-  private handleStopStandby(): void {
-    if (this.keepAliveManager) {
-      this.keepAliveManager.stopInaudibleNoise();
-    }
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'none';
-      navigator.mediaSession.setActionHandler('play', null);
-      navigator.mediaSession.setActionHandler('pause', null);
-    }
-  }
 
   /**
    * 音声発話開始 (録音開始ボタン)
@@ -779,9 +720,6 @@ export class App {
   private handleStartTalk(): void {
     this.state.isRecording = true;
     this.playbackQueue.pause();
-    if (this.keepAliveManager) {
-      this.keepAliveManager.stopInaudibleNoise();
-    }
     this.recordedAudioBlob = null;
     this.recordedDictationText = '';
 
@@ -829,14 +767,7 @@ export class App {
   private async handleStopTalk(): Promise<void> {
     if (!this.state.isRecording) return;
     this.clearRecordingState();
-    if (this.keepAliveManager) {
-      // PTT終了後に待機ノイズを再開（バックグラウンド待機が有効な場合）
-      const btnStopStandby = document.getElementById('btnStopStandby');
-      if (btnStopStandby && btnStopStandby.style.display === 'block') {
-        this.keepAliveManager.startInaudibleNoise();
-      }
-    }
-
+    
     try {
       if (this.state.recordMode === 'both' || this.state.recordMode === 'audio_only') {
         this.recordedAudioBlob = await this.audioManager.stopRecording();
