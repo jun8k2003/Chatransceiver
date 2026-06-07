@@ -126,6 +126,9 @@
             <h3 class="chat-room-title">-</h3>
             <span class="chat-room-members-text">-</span>
           </div>
+          <button id="btnStandbyMode" class="btn-standby" title="バックグラウンド待機" style="display: none; background: transparent; border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: 20px; padding: 4px 12px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+            🎧 待機
+          </button>
         </div>
         
         <!-- チャット履歴タイムライン -->
@@ -311,7 +314,36 @@
       </div>
     </div>
 
-    <!-- 6. 全画面通信中ローディングオーバーレイ -->
+    <!-- 6. バックグラウンド待機設定モーダルダイアログ -->
+    <div id="standbyModal" class="modal-overlay">
+      <div class="modal-content">
+        <button id="btnStandbyClose" class="btn-modal-close" title="閉じる">×</button>
+        <h3 class="modal-title">バックグラウンド待機</h3>
+        
+        <div class="settings-group">
+          <p style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; margin-bottom: 15px;">
+            この機能を使うと、画面をロックしたり別のアプリを開いていても、Bluetoothイヤホンのボタン等から発話（PTT）を開始できるようになります。
+          </p>
+          <div style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; padding: 10px; margin-bottom: 20px;">
+            <p style="font-size: 12px; color: #f59e0b; margin: 0; line-height: 1.4;">
+              <strong>仕組みと注意点:</strong><br>
+              OSによってアプリが停止されるのを防ぐため、背後で極小音量（耳には聞こえません）のノイズをループ再生し、<strong>音楽プレーヤーのように振る舞います</strong>。<br>
+              そのため、待機中は通常より<strong>スマートフォンの電池を消耗します</strong>。使用が終わったら必ず待機を解除してください。
+            </p>
+          </div>
+          
+          <button id="btnStartStandby" class="btn-modal" style="margin-bottom: 10px; background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">
+            待ち受け開始
+          </button>
+          
+          <button id="btnStopStandby" class="btn-modal" style="display: none; background: rgba(239, 68, 68, 0.1); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.3);">
+            待ち受けを停止
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. 全画面通信中ローディングオーバーレイ -->
     <div id="globalLoadingOverlay" class="loading-overlay">
       <div class="spinner"></div>
       <p id="globalLoadingMessage" class="loading-message">読み込み中...</p>
