@@ -1,6 +1,11 @@
 {
-  "short_name": "Chatransceiver",
   "name": "Chatransceiver - 文字起こし付き半二重チャット",
+  "short_name": "Chatransceiver",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "scope": "/",
   "icons": [
     {
       "src": "/chatora.png",
@@ -14,10 +19,5 @@
       "sizes": "512x512",
       "purpose": "any maskable"
     }
-  ],
-  "start_url": "/",
-  "background_color": "#111827",
-  "display": "standalone",
-  "scope": "/",
-  "theme_color": "#111827"
+  ]
 }

@@ -88,7 +88,9 @@ export class UIController {
     onBackToSidebar: () => void,
     onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
     onRegisterNotification: () => Promise<void>,
-    onUnregisterNotification: () => Promise<void>
+    onUnregisterNotification: () => Promise<void>,
+    onStartStandby: () => void,
+    onStopStandby: () => void
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -247,6 +249,49 @@ export class UIController {
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
         this.settingsModalEl.classList.add('show');
+      });
+    }
+
+    // 待機モーダルのバインド
+    const btnStandbyMode = document.getElementById('btnStandbyMode') as HTMLButtonElement;
+    const standbyModalEl = document.getElementById('standbyModal') as HTMLDivElement;
+    const btnStandbyClose = document.getElementById('btnStandbyClose') as HTMLButtonElement;
+    const btnStartStandby = document.getElementById('btnStartStandby') as HTMLButtonElement;
+    const btnStopStandby = document.getElementById('btnStopStandby') as HTMLButtonElement;
+
+    if (btnStandbyMode && standbyModalEl) {
+      btnStandbyMode.addEventListener('click', () => {
+        standbyModalEl.classList.add('show');
+      });
+    }
+    
+    if (btnStandbyClose && standbyModalEl) {
+      btnStandbyClose.addEventListener('click', () => {
+        standbyModalEl.classList.remove('show');
+      });
+    }
+
+    if (btnStartStandby) {
+      btnStartStandby.addEventListener('click', () => {
+        onStartStandby();
+        standbyModalEl.classList.remove('show');
+        // UI状態をONにする
+        btnStartStandby.style.display = 'none';
+        btnStopStandby.style.display = 'block';
+        btnStandbyMode.style.background = 'rgba(16, 185, 129, 0.1)';
+        btnStandbyMode.style.borderColor = '#10b981';
+      });
+    }
+
+    if (btnStopStandby) {
+      btnStopStandby.addEventListener('click', () => {
+        onStopStandby();
+        standbyModalEl.classList.remove('show');
+        // UI状態をOFFにする
+        btnStopStandby.style.display = 'none';
+        btnStartStandby.style.display = 'block';
+        btnStandbyMode.style.background = 'transparent';
+        btnStandbyMode.style.borderColor = 'var(--color-border)';
       });
     }
 
