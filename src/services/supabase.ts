@@ -65,6 +65,26 @@ export class SupabaseService {
   }
 
   /**
+   * Magic Link (メールリンク) でログイン (OTP)
+   * メールアドレス宛にワンタイムのログインリンクを送信する。
+   * 初回利用時はアカウントが自動作成される (サインアップ兼ログイン)。
+   * @param email 送信先メールアドレス
+   * @param redirectTo リンククリック後の戻り先URL (省略可能)
+   */
+  async signInWithMagicLink(email: string, redirectTo?: string): Promise<void> {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo
+        // shouldCreateUser はデフォルト true (未登録メールは自動でサインアップ)
+      }
+    });
+
+    if (error) throw error;
+    // 送信成功後はメール内リンクのクリックを待つ (リダイレクトでセッション確立)
+  }
+
+  /**
    * サインアウト
    */
   async signOut(): Promise<void> {

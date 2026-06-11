@@ -85,6 +85,7 @@ export class UIController {
     onStopPlayback: () => void,
     onRevokeMessage: (messageId: string) => void,
     onSignInWithGoogle: () => Promise<void>,
+    onSignInWithMagicLink: (email: string) => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
     onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
@@ -149,6 +150,37 @@ export class UIController {
         btnAuthGoogle.textContent = 'Google でログイン';
       }
     });
+
+    // Magic Link (メールリンク) 送信イベント
+    const magicLinkForm = document.getElementById('magicLinkForm') as HTMLFormElement;
+    const magicLinkEmail = document.getElementById('magicLinkEmail') as HTMLInputElement;
+    const btnAuthMagicLink = document.getElementById('btnAuthMagicLink') as HTMLButtonElement;
+    const magicLinkSuccessEl = document.getElementById('magicLinkSuccess') as HTMLDivElement;
+
+    if (magicLinkForm) {
+      magicLinkForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = magicLinkEmail.value.trim();
+        if (!email) return;
+
+        btnAuthMagicLink.disabled = true;
+        btnAuthMagicLink.textContent = '送信中...';
+        magicLinkSuccessEl.style.display = 'none';
+        clearAuthError();
+
+        try {
+          await onSignInWithMagicLink(email);
+          // 送信成功: 案内メッセージを表示し、フォームを無効化したままにする
+          magicLinkSuccessEl.style.display = 'block';
+          btnAuthMagicLink.textContent = '送信済み';
+        } catch (err: any) {
+          console.error('Magic Link authentication error:', err);
+          showAuthError(err.message || 'ログインリンクの送信に失敗しました。');
+          btnAuthMagicLink.disabled = false;
+          btnAuthMagicLink.textContent = 'メールでログインリンクを受け取る';
+        }
+      });
+    }
 
     // 各UIパーツクラスの初期化
     this.communityMenu = new CommunityMenuUI(

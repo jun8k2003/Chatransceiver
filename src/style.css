@@ -1644,6 +1644,87 @@ select.setting-input {
   line-height: 1.4;
 }
 
+/* --- Magic Link (メールリンク) ログイン --- */
+.login-divider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 300px;
+  margin: 18px 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+.login-divider span {
+  padding: 0 12px;
+}
+
+.magic-link-form {
+  width: 100%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.magic-link-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: var(--font-family);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--color-text-primary);
+  box-sizing: border-box;
+  transition: var(--transition-normal);
+}
+.magic-link-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.btn-magic-link {
+  width: 100%;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: bold;
+  font-family: var(--font-family);
+  color: #ffffff;
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition-normal);
+}
+.btn-magic-link:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.btn-magic-link:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.magic-link-success {
+  display: none;
+  margin-top: 14px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  text-align: center;
+}
+
 .login-notice {
   margin-top: 24px;
   font-size: 11px;
