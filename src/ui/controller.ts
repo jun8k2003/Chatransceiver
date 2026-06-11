@@ -1,5 +1,6 @@
 import { CommunityMenuUI } from './community';
 import { WakeLockService } from '../services/wakelock';
+import { MediaButtonPttService } from '../services/mediabutton';
 import { ChatListUI } from './list';
 import type { MemberItem, GroupItem } from './list';
 import { ChatWindowUI } from './chat';
@@ -61,6 +62,9 @@ export class UIController {
   // 常時表示 (Wake Lock) トグルボタン (DEC-026)
   private btnKeepAwake: HTMLButtonElement | null;
 
+  // メディアボタンPTT トグルボタン (DEC-027)
+  private btnMediaPtt: HTMLButtonElement | null;
+
   constructor(
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
@@ -86,7 +90,8 @@ export class UIController {
     onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>,
-    onToggleWakeLock: () => Promise<boolean>
+    onToggleWakeLock: () => Promise<boolean>,
+    onToggleMediaPtt: () => Promise<boolean>
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -289,6 +294,33 @@ export class UIController {
         }
       });
     }
+
+    // メディアボタンPTT トグルボタン: 対応環境でのみ表示 (DEC-027)
+    this.btnMediaPtt = document.getElementById('btnMediaPtt') as HTMLButtonElement | null;
+    if (this.btnMediaPtt) {
+      if (MediaButtonPttService.isSupported()) {
+        this.btnMediaPtt.classList.add('supported');
+      }
+      this.btnMediaPtt.addEventListener('click', async () => {
+        this.btnMediaPtt!.disabled = true;
+        try {
+          await onToggleMediaPtt();
+        } finally {
+          this.btnMediaPtt!.disabled = false;
+        }
+      });
+    }
+  }
+
+  /**
+   * メディアボタンPTTのON/OFFをヘッダーボタンに反映する (DEC-027)
+   */
+  updateMediaPttState(isActive: boolean): void {
+    if (!this.btnMediaPtt) return;
+    this.btnMediaPtt.classList.toggle('active', isActive);
+    this.btnMediaPtt.title = isActive
+      ? 'メディアボタンPTT有効: イヤフォンの再生/停止ボタンで録音・送信 (タップで解除)'
+      : 'メディアボタンPTT: イヤフォンの再生/停止ボタンで録音・送信できるようにします';
   }
 
   /**
