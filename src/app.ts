@@ -5,6 +5,7 @@ import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
 import { FCMService } from './services/FCMService';
 import { WakeLockService } from './services/wakelock';
+import { MediaButtonPttService } from './services/mediabutton';
 import pttStartUrl from './assets/ptt-start.wav';
 
 /**
@@ -19,6 +20,7 @@ export class App {
   private supabaseService: SupabaseService;
   private fcmService: FCMService;
   private wakeLockService: WakeLockService;
+  private mediaButtonPtt: MediaButtonPttService;
 
   // Realtime 監視サブスクリプションの参照
   private inboxSubscription: any = null;
@@ -58,12 +60,19 @@ export class App {
   private recordedAudioBlob: Blob | null = null;
   private recordedDictationText: string = '';
 
+  // メディアボタンPTT経由で録音を開始したか (15秒タイムアウト時に自動送信するため) (DEC-027)
+  private mediaPttTalkActive: boolean = false;
+
   constructor() {
     this.audioManager = new AudioManager();
     this.playbackQueue = new AudioPlaybackQueue(this.audioManager);
     this.supabaseService = new SupabaseService();
     this.fcmService = new FCMService(this.supabaseService);
     this.wakeLockService = new WakeLockService();
+    this.mediaButtonPtt = new MediaButtonPttService();
+
+    // メディアボタンPTT (DEC-027): ボタン押下 → 録音開始 / 録音停止+送信 のトグル
+    this.mediaButtonPtt.onButtonPress(() => this.handleMediaButtonPress());
 
     // UIController の初期化とコールバック登録
     this.uiController = new UIController(
@@ -91,7 +100,8 @@ export class App {
       (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl),
       async () => await this.handleRegisterNotification(),
       async () => await this.handleUnregisterNotification(),
-      async () => await this.handleToggleWakeLock()
+      async () => await this.handleToggleWakeLock(),
+      async () => await this.handleToggleMediaPtt()
     );
   }
 
@@ -777,6 +787,50 @@ export class App {
   }
 
   /**
+   * メディアボタンPTTモードのON/OFFトグル (DEC-027)
+   * @returns トグル後の状態 (true = ON)
+   */
+  private async handleToggleMediaPtt(): Promise<boolean> {
+    try {
+      if (this.mediaButtonPtt.isActive) {
+        this.mediaButtonPtt.deactivate();
+      } else {
+        await this.mediaButtonPtt.activate();
+      }
+    } catch (e) {
+      console.error('Failed to toggle media button PTT:', e);
+      alert('メディアボタンPTTの切り替えに失敗しました。');
+    }
+    const isActive = this.mediaButtonPtt.isActive;
+    this.uiController.updateMediaPttState(isActive);
+    return isActive;
+  }
+
+  /**
+   * メディアボタン (MediaPlay/Pause) 押下時の処理 (DEC-027)
+   * 1回目: 録音開始 / 2回目: 録音停止して送信
+   */
+  private async handleMediaButtonPress(): Promise<void> {
+    if (!this.state.isRecording) {
+      // 送信先が未選択の場合は開始できない (エラービープで通知)
+      if (!this.state.activeChatHistoryId && this.state.selectedUserIds.length === 0) {
+        this.mediaButtonPtt.beepError();
+        return;
+      }
+      this.mediaButtonPtt.beepStart();
+      this.mediaButtonPtt.setRecordingState(true);
+      this.mediaPttTalkActive = true;
+      this.handleStartTalk();
+    } else {
+      this.mediaButtonPtt.beepEnd();
+      this.mediaButtonPtt.setRecordingState(false);
+      this.mediaPttTalkActive = false;
+      // handleSendAudio が内部で録音停止 → 送信まで行う
+      await this.handleSendAudio();
+    }
+  }
+
+  /**
    * 録音状態のリセット
    */
   private clearRecordingState(): void {
@@ -862,8 +916,18 @@ export class App {
       
       this.uiController.updateDictationPreview(this.recordedDictationText);
       this.uiController.hideRecordingStopButton();
+
+      // メディアボタンPTT経由の録音が15秒タイムアウトで停止した場合は自動送信する (DEC-027)
+      // (ボタン操作主体のフローでは画面の「送信」ボタンを押させない)
+      if (this.mediaPttTalkActive) {
+        this.mediaPttTalkActive = false;
+        this.mediaButtonPtt.beepEnd();
+        this.mediaButtonPtt.setRecordingState(false);
+        await this.handleSendAudio();
+      }
     } catch (error) {
       console.error('Failed to stop recording:', error);
+      this.mediaPttTalkActive = false;
       this.uiController.hideRecordingModal();
     }
   }
@@ -916,6 +980,8 @@ export class App {
    * 録音キャンセル
    */
   private handleCancelTalk(): void {
+    this.mediaPttTalkActive = false;
+    this.mediaButtonPtt.setRecordingState(false);
     this.clearRecordingState();
     this.uiController.hideRecordingModal();
     this.audioManager.stopRecording().catch(() => {});

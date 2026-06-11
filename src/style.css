@@ -1484,6 +1484,32 @@ select.setting-input {
 }
 
 /* ========================================================
+   メディアボタンPTT トグルボタン (DEC-027)
+   対応環境でのみ .supported が付与され表示される
+   ======================================================== */
+.btn-media-ptt {
+  display: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 16px;
+  padding: 4px 8px;
+  cursor: pointer;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.btn-media-ptt.supported {
+  display: inline-block;
+}
+.btn-media-ptt.active {
+  filter: none;
+  opacity: 1;
+  border-color: var(--color-ptt);
+  background: rgba(249, 115, 22, 0.15);
+}
+
+/* ========================================================
    バックグラウンド待機モーダル
    ======================================================== */
 .settings-group {
