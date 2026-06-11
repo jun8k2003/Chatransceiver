@@ -4,6 +4,7 @@ import { UIController } from './ui/controller';
 import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
 import { FCMService } from './services/FCMService';
+import { StandbyService } from './services/standby';
 import pttStartUrl from './assets/ptt-start.wav';
 
 /**
@@ -17,6 +18,7 @@ export class App {
   private uiController: UIController;
   private supabaseService: SupabaseService;
   private fcmService: FCMService;
+  private standbyService: StandbyService;
 
   // Realtime 監視サブスクリプションの参照
   private inboxSubscription: any = null;
@@ -56,11 +58,22 @@ export class App {
   private recordedAudioBlob: Blob | null = null;
   private recordedDictationText: string = '';
 
+  // 待機状態経由で録音を開始したか (15秒タイムアウト時に自動送信するため) (DEC-025)
+  private standbyTalkActive: boolean = false;
+
   constructor() {
     this.audioManager = new AudioManager();
     this.playbackQueue = new AudioPlaybackQueue(this.audioManager);
     this.supabaseService = new SupabaseService();
     this.fcmService = new FCMService(this.supabaseService);
+    this.standbyService = new StandbyService();
+
+    // 待機状態 (DEC-025): イヤフォンボタン押下 → 録音開始 / 録音停止+送信 のトグル
+    this.standbyService.onButtonPress(() => this.handleStandbyButtonPress());
+    this.standbyService.onMicLost(() => {
+      this.uiController.updateStandbyState(false);
+      alert('マイクがOSにより停止されたため、バックグラウンド待機を終了しました。');
+    });
 
     // UIController の初期化とコールバック登録
     this.uiController = new UIController(
@@ -87,7 +100,9 @@ export class App {
       () => this.handleBackToSidebar(),
       (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl),
       async () => await this.handleRegisterNotification(),
-      async () => await this.handleUnregisterNotification()
+      async () => await this.handleUnregisterNotification(),
+      async () => await this.handleStartStandby(),
+      () => this.handleStopStandby()
     );
   }
 
@@ -753,6 +768,58 @@ export class App {
   }
 
   /**
+   * バックグラウンド待機の開始 (DEC-025)
+   * @returns 開始に成功したか
+   */
+  private async handleStartStandby(): Promise<boolean> {
+    if (!StandbyService.isSupported()) {
+      alert('バックグラウンド待機はAndroid端末のChromeでのみ利用できます。');
+      return false;
+    }
+    try {
+      await this.standbyService.activate();
+      this.uiController.updateStandbyState(true);
+      return true;
+    } catch (e) {
+      console.error('Failed to activate standby mode:', e);
+      alert('バックグラウンド待機の開始に失敗しました。マイクの使用許可を確認してください。');
+      return false;
+    }
+  }
+
+  /**
+   * バックグラウンド待機の停止 (DEC-025)
+   */
+  private handleStopStandby(): void {
+    this.standbyService.deactivate();
+    this.uiController.updateStandbyState(false);
+  }
+
+  /**
+   * 待機状態中のイヤフォンボタン押下 (DEC-025)
+   * 1回目: 録音開始 / 2回目: 録音停止して送信
+   */
+  private async handleStandbyButtonPress(): Promise<void> {
+    if (!this.state.isRecording) {
+      // 送信先が未選択の場合は開始できない (エラービープで通知)
+      if (!this.state.activeChatHistoryId && this.state.selectedUserIds.length === 0) {
+        this.standbyService.beepError();
+        return;
+      }
+      this.standbyService.beepStart();
+      this.standbyService.setRecordingState(true);
+      this.standbyTalkActive = true;
+      this.handleStartTalk();
+    } else {
+      this.standbyService.beepEnd();
+      this.standbyService.setRecordingState(false);
+      this.standbyTalkActive = false;
+      // handleSendAudio が内部で録音停止 → 送信まで行う
+      await this.handleSendAudio();
+    }
+  }
+
+  /**
    * 録音状態のリセット
    */
   private clearRecordingState(): void {
@@ -780,9 +847,13 @@ export class App {
     }
     
     if (this.state.recordMode === 'both' || this.state.recordMode === 'audio_only') {
+      // 待機状態中は事前取得済みマイクストリームを使う (バックグラウンドでは新規取得不可) (DEC-025)
+      const externalStream = this.standbyService.isActive
+        ? this.standbyService.preAcquiredMicStream || undefined
+        : undefined;
       this.audioManager.startRecording((level) => {
         this.uiController.updateMicLevel(level);
-      }).catch((err) => {
+      }, externalStream).catch((err) => {
         console.error('Microphone recording error:', err);
         this.uiController.showMicError(window.location.origin);
         this.clearRecordingState();
@@ -838,8 +909,18 @@ export class App {
       
       this.uiController.updateDictationPreview(this.recordedDictationText);
       this.uiController.hideRecordingStopButton();
+
+      // 待機状態経由の録音が15秒タイムアウトで停止した場合は自動送信する (DEC-025)
+      // (バックグラウンドでは画面の「送信」ボタンを押せないため)
+      if (this.standbyTalkActive) {
+        this.standbyTalkActive = false;
+        this.standbyService.beepEnd();
+        this.standbyService.setRecordingState(false);
+        await this.handleSendAudio();
+      }
     } catch (error) {
       console.error('Failed to stop recording:', error);
+      this.standbyTalkActive = false;
       this.uiController.hideRecordingModal();
     }
   }
@@ -892,6 +973,8 @@ export class App {
    * 録音キャンセル
    */
   private handleCancelTalk(): void {
+    this.standbyTalkActive = false;
+    this.standbyService.setRecordingState(false);
     this.clearRecordingState();
     this.uiController.hideRecordingModal();
     this.audioManager.stopRecording().catch(() => {});

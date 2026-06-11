@@ -15,6 +15,7 @@ export class AudioManager {
   private recognition: any = null; // SpeechRecognition
   private isRecognitionActive: boolean = false;
   private activeAudioElement: HTMLAudioElement | null = null;
+  private ownsMicStream: boolean = true;
 
   constructor() {
     this.initSpeechRecognition();
@@ -40,18 +41,28 @@ export class AudioManager {
   /**
    * 録音の開始
    * @param onLevelUpdate リアルタイムの音量レベルを受け取るコールバック (0 ~ 100)
+   * @param externalStream 事前取得済みのマイクストリーム (待機状態 DEC-025 用)。
+   *   指定した場合は getUserMedia を呼ばず、録音終了時にトラックを停止しない。
    */
-  async startRecording(onLevelUpdate: (level: number) => void): Promise<void> {
+  async startRecording(onLevelUpdate: (level: number) => void, externalStream?: MediaStream): Promise<void> {
     this.audioChunks = [];
 
-    // マイクストリームの取得（OSデフォルトマイク）
-    this.micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        autoGainControl: true,
-        echoCancellation: true,
-        noiseSuppression: true
-      }
-    });
+    if (externalStream) {
+      // バックグラウンドからは getUserMedia を新規呼び出しできないため、
+      // 待機状態で事前取得されたストリームを借用する
+      this.micStream = externalStream;
+      this.ownsMicStream = false;
+    } else {
+      // マイクストリームの取得（OSデフォルトマイク）
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          autoGainControl: true,
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      });
+      this.ownsMicStream = true;
+    }
 
     // Web Audio API で音量レベルメーターを設定
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -153,7 +164,10 @@ export class AudioManager {
       this.levelIntervalId = null;
     }
     if (this.micStream) {
-      this.micStream.getTracks().forEach((track) => track.stop());
+      // 借用ストリーム (待機状態の事前取得分) は停止せず保持元に返す
+      if (this.ownsMicStream) {
+        this.micStream.getTracks().forEach((track) => track.stop());
+      }
       this.micStream = null;
     }
     if (this.audioContext && this.audioContext.state !== 'closed') {

@@ -1460,6 +1460,29 @@ select.setting-input {
 /* ========================================================
    バックグラウンド待機モーダル
    ======================================================== */
+/* ヘッダーの待機ボタン: Android対応端末でのみ .supported が付与され表示される (DEC-025) */
+.btn-standby-open {
+  display: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 16px;
+  padding: 4px 8px;
+  cursor: pointer;
+  line-height: 1;
+}
+.btn-standby-open.supported {
+  display: inline-block;
+}
+.btn-standby-open.active {
+  border-color: var(--color-ptt);
+  background: rgba(249, 115, 22, 0.15);
+  animation: standby-pulse 2s ease-in-out infinite;
+}
+@keyframes standby-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
+  50% { box-shadow: 0 0 0 5px rgba(249, 115, 22, 0); }
+}
 .settings-group {
   width: 100%;
   display: flex;
