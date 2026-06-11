@@ -1,4 +1,5 @@
 import { CommunityMenuUI } from './community';
+import { StandbyService } from '../services/standby';
 import { ChatListUI } from './list';
 import type { MemberItem, GroupItem } from './list';
 import { ChatWindowUI } from './chat';
@@ -57,6 +58,12 @@ export class UIController {
   private loadingOverlayEl: HTMLDivElement;
   private loadingMessageEl: HTMLParagraphElement;
 
+  // バックグラウンド待機 (DEC-025) 関連の要素
+  private standbyModalEl: HTMLDivElement | null;
+  private btnStandbyOpen: HTMLButtonElement | null;
+  private btnStartStandby: HTMLButtonElement | null;
+  private btnStopStandby: HTMLButtonElement | null;
+
   constructor(
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
@@ -81,7 +88,9 @@ export class UIController {
     onBackToSidebar: () => void,
     onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
     onRegisterNotification: () => Promise<void>,
-    onUnregisterNotification: () => Promise<void>
+    onUnregisterNotification: () => Promise<void>,
+    onStartStandby: () => Promise<boolean>,
+    onStopStandby: () => void
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -268,6 +277,73 @@ export class UIController {
     // 全画面ローディング要素
     this.loadingOverlayEl = document.getElementById('globalLoadingOverlay') as HTMLDivElement;
     this.loadingMessageEl = document.getElementById('globalLoadingMessage') as HTMLParagraphElement;
+
+    // バックグラウンド待機モーダル (DEC-025)
+    this.standbyModalEl = document.getElementById('standbyModal') as HTMLDivElement | null;
+    this.btnStandbyOpen = document.getElementById('btnStandbyOpen') as HTMLButtonElement | null;
+    this.btnStartStandby = document.getElementById('btnStartStandby') as HTMLButtonElement | null;
+    this.btnStopStandby = document.getElementById('btnStopStandby') as HTMLButtonElement | null;
+
+    if (this.btnStandbyOpen) {
+      // 対応環境 (Android) のときのみヘッダーに待機ボタンを表示する
+      if (StandbyService.isSupported()) {
+        this.btnStandbyOpen.classList.add('supported');
+      }
+      this.btnStandbyOpen.addEventListener('click', () => {
+        this.standbyModalEl?.classList.add('show');
+      });
+    }
+
+    const btnStandbyClose = document.getElementById('btnStandbyClose');
+    if (btnStandbyClose && this.standbyModalEl) {
+      btnStandbyClose.addEventListener('click', () => {
+        this.standbyModalEl!.classList.remove('show');
+      });
+      this.standbyModalEl.addEventListener('click', (e) => {
+        if (e.target === this.standbyModalEl) {
+          this.standbyModalEl!.classList.remove('show');
+        }
+      });
+    }
+
+    if (this.btnStartStandby) {
+      this.btnStartStandby.addEventListener('click', async () => {
+        this.btnStartStandby!.disabled = true;
+        try {
+          const ok = await onStartStandby();
+          if (ok) {
+            this.standbyModalEl?.classList.remove('show');
+          }
+        } finally {
+          this.btnStartStandby!.disabled = false;
+        }
+      });
+    }
+
+    if (this.btnStopStandby) {
+      this.btnStopStandby.addEventListener('click', () => {
+        onStopStandby();
+        this.standbyModalEl?.classList.remove('show');
+      });
+    }
+  }
+
+  /**
+   * 待機状態のON/OFFをUI (ヘッダーボタン・モーダル内ボタン) に反映する (DEC-025)
+   */
+  updateStandbyState(isActive: boolean): void {
+    if (this.btnStandbyOpen) {
+      this.btnStandbyOpen.classList.toggle('active', isActive);
+      this.btnStandbyOpen.title = isActive
+        ? 'バックグラウンド待機中 (タップで設定)'
+        : 'バックグラウンド待機';
+    }
+    if (this.btnStartStandby) {
+      this.btnStartStandby.style.display = isActive ? 'none' : 'block';
+    }
+    if (this.btnStopStandby) {
+      this.btnStopStandby.style.display = isActive ? 'block' : 'none';
+    }
   }
 
   /**
