@@ -194,6 +194,16 @@ export class UIController {
     const settingsBtn = document.querySelector('.btn-settings') as HTMLButtonElement;
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
+        // 再生デバッグログの表示更新
+        const logView = document.getElementById('audioDebugLogView');
+        if (logView) {
+          try {
+            const logs: string[] = JSON.parse(localStorage.getItem('chatransceiver_audio_debug') || '[]');
+            logView.textContent = logs.length > 0 ? logs.slice().reverse().join('\n') : '(ログなし)';
+          } catch (e) {
+            logView.textContent = '(ログ読み込みエラー)';
+          }
+        }
         this.settingsModalEl.classList.add('show');
       });
     }

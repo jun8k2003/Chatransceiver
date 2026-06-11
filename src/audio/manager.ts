@@ -23,8 +23,34 @@ export class AudioManager {
   private activeBufferSource: AudioBufferSourceNode | null = null;
   private activeBufferResolve: (() => void) | null = null;
 
+  // ロック中に受信し読み上げできなかったテキスト (画面復帰時に追っかけ読み上げする)
+  private pendingTtsTexts: string[] = [];
+
   constructor() {
     this.initSpeechRecognition();
+
+    // 画面復帰時に保留中のTTSを読み上げる
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        this.flushPendingTts();
+      }
+    });
+  }
+
+  /**
+   * 再生系の診断ログ (localStorageに最新30件を保持し、設定モーダルから参照できる)
+   */
+  static debugLog(message: string): void {
+    try {
+      const key = 'chatransceiver_audio_debug';
+      const logs: string[] = JSON.parse(localStorage.getItem(key) || '[]');
+      logs.push(`${new Date().toLocaleTimeString('ja-JP')} ${message}`);
+      while (logs.length > 30) logs.shift();
+      localStorage.setItem(key, JSON.stringify(logs));
+    } catch (e) {
+      // localStorage不可時は無視
+    }
+    console.log('[AudioDebug]', message);
   }
 
   /**
@@ -201,12 +227,24 @@ export class AudioManager {
   async playAudio(url: string, volume: number = 1.0): Promise<void> {
     // バックグラウンド (画面ロック・タブ非表示) では新規<audio>要素の再生開始が
     // ブロックされるため、実行中の常駐AudioContext経由で再生する
-    if (document.hidden && this.playbackContext && this.playbackContext.state === 'running') {
-      try {
-        await this.playViaWebAudio(url, volume);
-        return;
-      } catch (e) {
-        console.warn('WebAudio playback failed, falling back to audio element:', e);
+    if (document.hidden && this.playbackContext) {
+      // suspendedの場合もresumeを試みる (バックグラウンドでOSに一時停止される場合がある)
+      if (this.playbackContext.state === 'suspended') {
+        try {
+          await this.playbackContext.resume();
+        } catch (e) {
+          AudioManager.debugLog(`resume失敗: ${e}`);
+        }
+      }
+      AudioManager.debugLog(`BG再生開始 ctx=${this.playbackContext.state} url=${url.slice(-40)}`);
+      if (this.playbackContext.state === 'running') {
+        try {
+          await this.playViaWebAudio(url, volume);
+          AudioManager.debugLog('BG再生完了 (WebAudio)');
+          return;
+        } catch (e) {
+          AudioManager.debugLog(`WebAudio再生失敗→element代替: ${e}`);
+        }
       }
     }
     return this.playAudioViaElement(url, volume);
@@ -270,12 +308,14 @@ export class AudioManager {
       };
 
       audio.onerror = (e) => {
+        if (document.hidden) AudioManager.debugLog(`element再生エラー: ${audio.error?.code}`);
         this.activeAudioElement = null;
         this.activeAudioResolve = null;
         reject(e);
       };
 
       audio.play().catch((err) => {
+        if (document.hidden) AudioManager.debugLog(`element play()拒否: ${err?.name}`);
         this.activeAudioElement = null;
         this.activeAudioResolve = null;
         reject(err);
@@ -294,6 +334,15 @@ export class AudioManager {
 
       if (!('speechSynthesis' in window)) {
         console.warn('このブラウザは音声合成 (SpeechSynthesis) をサポートしていません。');
+        resolve();
+        return;
+      }
+
+      // Android等は画面ロック・バックグラウンド中のSpeechSynthesisが動作しない (OS制約)。
+      // 読み上げを保留リストに積み、画面復帰時に追っかけ読み上げする。
+      if (document.hidden) {
+        AudioManager.debugLog(`TTS保留 (BG中): ${text.slice(0, 20)}`);
+        this.pendingTtsTexts.push(text);
         resolve();
         return;
       }
@@ -333,6 +382,23 @@ export class AudioManager {
   }
 
   private activeAudioResolve: (() => void) | null = null;
+
+  /**
+   * 画面復帰時、ロック中に読み上げできなかったテキストを順に読み上げる
+   */
+  private async flushPendingTts(): Promise<void> {
+    if (this.pendingTtsTexts.length === 0) return;
+    const texts = this.pendingTtsTexts;
+    this.pendingTtsTexts = [];
+    AudioManager.debugLog(`保留TTSを追っかけ読み上げ: ${texts.length}件`);
+    for (const text of texts) {
+      try {
+        await this.speakText(text);
+      } catch (e) {
+        console.warn('Failed to flush pending TTS:', e);
+      }
+    }
+  }
 
   /**
    * 現在実行中のすべての再生・音声読み上げを即座に停止する
