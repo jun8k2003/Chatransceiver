@@ -28,3 +28,9 @@
   * SpeechSynthesisはロック中に無視され、onend/onerrorも発火しないため、タイムアウト無しでawaitすると再生キュー全体が停止する。
   * Media Sessionのキー捕捉にはHTMLAudioElementの再生が必要（Web Audio単独では対象にならない）。
 * **再挑戦の条件**: テキストメッセージを事前にサーバー側でTTS音声化する等、ロック中でも全メッセージを音声ファイルとして再生できる構成が用意できた場合。
+
+## DEC-026: 常時表示機能 (Screen Wake Lock) (2026-06-11)
+* **決定**: 待機状態 (DEC-025・撤回) の代替として、Screen Wake Lock API による「常時表示」機能を実装する。画面の自動消灯・ロックを抑止することでアプリの停止自体を防ぎ、TTSを含む全機能が通常どおり動作する。
+* **対象環境**: `navigator.wakeLock` 対応環境すべて（Android Chrome / iOS Safari 16.4+ / PC Chrome・Edge）。非対応環境ではヘッダーの☀️ボタン自体を表示しない。
+* **操作モデル**: ヘッダーの☀️ボタンでON/OFFトグル。デフォルトOFF。ON中は☀️がカラー表示＋青枠（OFF時はグレースケール）。電池消耗を伴うため能動的ON・使用後OFFの運用とし、状態はリロードで解除される。
+* **実装**: `src/services/wakelock.ts` の `WakeLockService`。タブ非表示でOSがロックを自動解放する仕様に対し、ユーザー意思のON/OFF (`enabled`) とセンチネル保持を分離し、`visibilitychange` で画面復帰時に自動再取得する。

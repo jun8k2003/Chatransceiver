@@ -1,4 +1,5 @@
 import { CommunityMenuUI } from './community';
+import { WakeLockService } from '../services/wakelock';
 import { ChatListUI } from './list';
 import type { MemberItem, GroupItem } from './list';
 import { ChatWindowUI } from './chat';
@@ -57,6 +58,9 @@ export class UIController {
   private loadingOverlayEl: HTMLDivElement;
   private loadingMessageEl: HTMLParagraphElement;
 
+  // 常時表示 (Wake Lock) トグルボタン (DEC-026)
+  private btnKeepAwake: HTMLButtonElement | null;
+
   constructor(
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
@@ -81,7 +85,8 @@ export class UIController {
     onBackToSidebar: () => void,
     onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
     onRegisterNotification: () => Promise<void>,
-    onUnregisterNotification: () => Promise<void>
+    onUnregisterNotification: () => Promise<void>,
+    onToggleWakeLock: () => Promise<boolean>
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -268,6 +273,33 @@ export class UIController {
     // 全画面ローディング要素
     this.loadingOverlayEl = document.getElementById('globalLoadingOverlay') as HTMLDivElement;
     this.loadingMessageEl = document.getElementById('globalLoadingMessage') as HTMLParagraphElement;
+
+    // 常時表示 (Wake Lock) トグルボタン: 対応環境でのみ表示 (DEC-026)
+    this.btnKeepAwake = document.getElementById('btnKeepAwake') as HTMLButtonElement | null;
+    if (this.btnKeepAwake) {
+      if (WakeLockService.isSupported()) {
+        this.btnKeepAwake.classList.add('supported');
+      }
+      this.btnKeepAwake.addEventListener('click', async () => {
+        this.btnKeepAwake!.disabled = true;
+        try {
+          await onToggleWakeLock();
+        } finally {
+          this.btnKeepAwake!.disabled = false;
+        }
+      });
+    }
+  }
+
+  /**
+   * 常時表示のON/OFFをヘッダーボタンに反映する (DEC-026)
+   */
+  updateWakeLockState(isActive: boolean): void {
+    if (!this.btnKeepAwake) return;
+    this.btnKeepAwake.classList.toggle('active', isActive);
+    this.btnKeepAwake.title = isActive
+      ? '常時表示中: 画面は自動ロックされません (タップで解除)'
+      : '常時表示: 画面の自動ロックを防ぎます';
   }
 
   /**

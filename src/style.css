@@ -1458,6 +1458,32 @@ select.setting-input {
 }
 
 /* ========================================================
+   常時表示 (Wake Lock) トグルボタン (DEC-026)
+   対応環境でのみ .supported が付与され表示される
+   ======================================================== */
+.btn-keep-awake {
+  display: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 16px;
+  padding: 4px 8px;
+  cursor: pointer;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.btn-keep-awake.supported {
+  display: inline-block;
+}
+.btn-keep-awake.active {
+  filter: none;
+  opacity: 1;
+  border-color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.15);
+}
+
+/* ========================================================
    バックグラウンド待機モーダル
    ======================================================== */
 .settings-group {

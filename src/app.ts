@@ -4,6 +4,7 @@ import { UIController } from './ui/controller';
 import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
 import { FCMService } from './services/FCMService';
+import { WakeLockService } from './services/wakelock';
 import pttStartUrl from './assets/ptt-start.wav';
 
 /**
@@ -17,6 +18,7 @@ export class App {
   private uiController: UIController;
   private supabaseService: SupabaseService;
   private fcmService: FCMService;
+  private wakeLockService: WakeLockService;
 
   // Realtime 監視サブスクリプションの参照
   private inboxSubscription: any = null;
@@ -61,6 +63,7 @@ export class App {
     this.playbackQueue = new AudioPlaybackQueue(this.audioManager);
     this.supabaseService = new SupabaseService();
     this.fcmService = new FCMService(this.supabaseService);
+    this.wakeLockService = new WakeLockService();
 
     // UIController の初期化とコールバック登録
     this.uiController = new UIController(
@@ -87,7 +90,8 @@ export class App {
       () => this.handleBackToSidebar(),
       (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl),
       async () => await this.handleRegisterNotification(),
-      async () => await this.handleUnregisterNotification()
+      async () => await this.handleUnregisterNotification(),
+      async () => await this.handleToggleWakeLock()
     );
   }
 
@@ -750,6 +754,26 @@ export class App {
     } catch (e) {
       console.error('Failed to send text message:', e);
     }
+  }
+
+  /**
+   * 常時表示 (Screen Wake Lock) のON/OFFトグル (DEC-026)
+   * @returns トグル後の状態 (true = ON)
+   */
+  private async handleToggleWakeLock(): Promise<boolean> {
+    try {
+      if (this.wakeLockService.isActive) {
+        await this.wakeLockService.disable();
+      } else {
+        await this.wakeLockService.enable();
+      }
+    } catch (e) {
+      console.error('Failed to toggle wake lock:', e);
+      alert('常時表示の切り替えに失敗しました。');
+    }
+    const isActive = this.wakeLockService.isActive;
+    this.uiController.updateWakeLockState(isActive);
+    return isActive;
   }
 
   /**
