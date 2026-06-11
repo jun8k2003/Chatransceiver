@@ -95,6 +95,7 @@ export class App {
       () => this.audioManager.stopAllPlayback(),
       (msgId: string) => this.handleRevokeMessage(msgId),
       () => this.handleSignInWithGoogle(),
+      (email: string) => this.handleSignInWithMagicLink(email),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
       (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl),
@@ -240,6 +241,17 @@ export class App {
     const redirectUrl = window.location.origin + window.location.pathname + window.location.search;
     await this.supabaseService.signInWithGoogle(redirectUrl);
     // リダイレクトされるので finally で戻す必要は基本的にありません
+  }
+
+  /**
+   * Magic Link (メールリンク) でのサインイン
+   * メール送信のみを行い、リンククリック後のセッション確立は
+   * onAuthStateChange (SIGNED_IN) で拾う。
+   */
+  private async handleSignInWithMagicLink(email: string): Promise<void> {
+    // リンククリック後の戻り先。Google OAuth と同じく接続先コミュニティ情報を維持する。
+    const redirectUrl = window.location.origin + window.location.pathname + window.location.search;
+    await this.supabaseService.signInWithMagicLink(email, redirectUrl);
   }
 
   /**

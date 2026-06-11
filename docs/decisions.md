@@ -41,3 +41,11 @@
 * **DEC-025の失敗原因の対策**: 前回のノイズは実効レベル約-120dBFSでChromeの可聴判定に「無音」と分類され、メディアキーが配送されなかった可能性が高い。今回はノイズ振幅1%FS × volume 0.1（実効約-60dBFS）とし、`MediaButtonPttService.NOISE_VOLUME` を実機調整のパラメータとして明示。
 * **操作モデル**: ヘッダーの🎧ボタンでON/OFFトグル（対応環境のみ表示、ON中はオレンジ枠）。ボタン1回目で録音開始（上昇ビープ）、2回目で停止+送信（下降ビープ）、送信先未選択時はエラービープ、15秒タイムアウト時は自動送信。play/pauseの連続発火は600msデバウンスで吸収。状態はリロードで解除。
 * **実装**: `src/services/mediabutton.ts` の `MediaButtonPttService`。ノイズWAV自前生成（5秒ループ）、Media Session play/pauseハンドラ、OscillatorNodeによるビープ合成。
+
+## DEC-028: Magic Link (メールリンク) 認証の追加 (2026-06-11)
+* **決定**: 従来の Google フェデレーション認証に加え、メールアドレス宛のワンタイムリンクでログインできる Magic Link 認証を追加する。ログイン画面でGoogleボタンと並列に提示する。
+* **採用理由**: Googleアカウントを持たない/使いたくないユーザー向けの選択肢を増やしたい一方、ID/PW方式はサインアップ画面・パスワードリセット画面など実装・運用コストが大きい。Magic Linkは Supabase が `signInWithOtp()` で標準サポートしており、サインアップとログインが同一フローに統合される（未登録メールは自動でサインアップ）ため、追加UIがメール入力欄のみで済む。
+* **アカウント同一性**: Supabase の automatic identity linking により、**Google と Magic Link で同一の検証済みメールアドレスを使った場合、同じ `auth.users.id`（UUID）に集約され、アプリ上は同一ユーザーとして扱われる**（プロフィール・コミュニティ所属・履歴を共有）。本アプリのプロフィールは `user.id` をキーに `users` テーブルを引くため、この前提が崩れると分裂アカウントになる。Supabaseダッシュボードで自動連携が有効であることを前提とする。
+* **実装**: `SupabaseService.signInWithMagicLink(email, redirectTo)` が `supabase.auth.signInWithOtp()` を呼ぶのみ。リンククリック後のセッション確立は既存の `onAuthStateChange(SIGNED_IN)` リスナーを再利用（Google OAuthと同じ復帰経路）。`redirectTo` はGoogleと同様に接続先コミュニティ情報を維持する。UIは `index.html` のログインカードにメール入力フォーム＋送信完了メッセージを追加、配色は青（操作系アクセント、DEC-024）に統一。
+* **運用上の前提（コード外設定）**: Supabaseダッシュボードで (1) Email プロバイダ有効、(2) Redirect URLs に本番URL・`localhost` を登録、(3) 本格運用時はデフォルトSMTPの送信レート制限を避けるため独自SMTPを設定。
+* **不採用**: ID/PW 方式は上記コスト理由により見送り。将来必要になった場合の代替として記録に留める。
