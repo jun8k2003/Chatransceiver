@@ -1712,6 +1712,14 @@ select.setting-input {
   cursor: default;
 }
 
+.magic-link-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .magic-link-success {
   display: none;
   margin-top: 14px;
