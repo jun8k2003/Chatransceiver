@@ -1,5 +1,5 @@
 import { CommunityMenuUI } from './community';
-import { StandbyService } from '../services/standby';
+import { WakeLockService } from '../services/wakelock';
 import { ChatListUI } from './list';
 import type { MemberItem, GroupItem } from './list';
 import { ChatWindowUI } from './chat';
@@ -58,11 +58,8 @@ export class UIController {
   private loadingOverlayEl: HTMLDivElement;
   private loadingMessageEl: HTMLParagraphElement;
 
-  // バックグラウンド待機 (DEC-025) 関連の要素
-  private standbyModalEl: HTMLDivElement | null;
-  private btnStandbyOpen: HTMLButtonElement | null;
-  private btnStartStandby: HTMLButtonElement | null;
-  private btnStopStandby: HTMLButtonElement | null;
+  // 常時表示 (Wake Lock) トグルボタン (DEC-026)
+  private btnKeepAwake: HTMLButtonElement | null;
 
   constructor(
     onConnectCommunity: (slug: string) => void,
@@ -89,8 +86,7 @@ export class UIController {
     onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>,
-    onStartStandby: () => Promise<boolean>,
-    onStopStandby: () => void
+    onToggleWakeLock: () => Promise<boolean>
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -278,72 +274,32 @@ export class UIController {
     this.loadingOverlayEl = document.getElementById('globalLoadingOverlay') as HTMLDivElement;
     this.loadingMessageEl = document.getElementById('globalLoadingMessage') as HTMLParagraphElement;
 
-    // バックグラウンド待機モーダル (DEC-025)
-    this.standbyModalEl = document.getElementById('standbyModal') as HTMLDivElement | null;
-    this.btnStandbyOpen = document.getElementById('btnStandbyOpen') as HTMLButtonElement | null;
-    this.btnStartStandby = document.getElementById('btnStartStandby') as HTMLButtonElement | null;
-    this.btnStopStandby = document.getElementById('btnStopStandby') as HTMLButtonElement | null;
-
-    if (this.btnStandbyOpen) {
-      // 対応環境 (Android) のときのみヘッダーに待機ボタンを表示する
-      if (StandbyService.isSupported()) {
-        this.btnStandbyOpen.classList.add('supported');
+    // 常時表示 (Wake Lock) トグルボタン: 対応環境でのみ表示 (DEC-026)
+    this.btnKeepAwake = document.getElementById('btnKeepAwake') as HTMLButtonElement | null;
+    if (this.btnKeepAwake) {
+      if (WakeLockService.isSupported()) {
+        this.btnKeepAwake.classList.add('supported');
       }
-      this.btnStandbyOpen.addEventListener('click', () => {
-        this.standbyModalEl?.classList.add('show');
-      });
-    }
-
-    const btnStandbyClose = document.getElementById('btnStandbyClose');
-    if (btnStandbyClose && this.standbyModalEl) {
-      btnStandbyClose.addEventListener('click', () => {
-        this.standbyModalEl!.classList.remove('show');
-      });
-      this.standbyModalEl.addEventListener('click', (e) => {
-        if (e.target === this.standbyModalEl) {
-          this.standbyModalEl!.classList.remove('show');
-        }
-      });
-    }
-
-    if (this.btnStartStandby) {
-      this.btnStartStandby.addEventListener('click', async () => {
-        this.btnStartStandby!.disabled = true;
+      this.btnKeepAwake.addEventListener('click', async () => {
+        this.btnKeepAwake!.disabled = true;
         try {
-          const ok = await onStartStandby();
-          if (ok) {
-            this.standbyModalEl?.classList.remove('show');
-          }
+          await onToggleWakeLock();
         } finally {
-          this.btnStartStandby!.disabled = false;
+          this.btnKeepAwake!.disabled = false;
         }
-      });
-    }
-
-    if (this.btnStopStandby) {
-      this.btnStopStandby.addEventListener('click', () => {
-        onStopStandby();
-        this.standbyModalEl?.classList.remove('show');
       });
     }
   }
 
   /**
-   * 待機状態のON/OFFをUI (ヘッダーボタン・モーダル内ボタン) に反映する (DEC-025)
+   * 常時表示のON/OFFをヘッダーボタンに反映する (DEC-026)
    */
-  updateStandbyState(isActive: boolean): void {
-    if (this.btnStandbyOpen) {
-      this.btnStandbyOpen.classList.toggle('active', isActive);
-      this.btnStandbyOpen.title = isActive
-        ? 'バックグラウンド待機中 (タップで設定)'
-        : 'バックグラウンド待機';
-    }
-    if (this.btnStartStandby) {
-      this.btnStartStandby.style.display = isActive ? 'none' : 'block';
-    }
-    if (this.btnStopStandby) {
-      this.btnStopStandby.style.display = isActive ? 'block' : 'none';
-    }
+  updateWakeLockState(isActive: boolean): void {
+    if (!this.btnKeepAwake) return;
+    this.btnKeepAwake.classList.toggle('active', isActive);
+    this.btnKeepAwake.title = isActive
+      ? '常時表示中: 画面は自動ロックされません (タップで解除)'
+      : '常時表示: 画面の自動ロックを防ぎます';
   }
 
   /**

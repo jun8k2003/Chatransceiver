@@ -20,13 +20,17 @@
   * **削除ボタンの表示**: PCはホバー時のみ表示、タッチ端末（`hover: none` または `pointer: coarse`）は常時表示。
 * **不変条件**: アプリの代表ロゴ（public/chatora.png 茶トラ猫）は変更しない。
 
-## DEC-025: バックグラウンド待機状態 (Standby Mode) (2026-06-11)
-* **決定**: Android Chrome 限定で、画面ロック・バックグラウンド時もイヤフォンボタンから発話できる「待機状態」を実装する（詳細は docs/plan_standby_mode.md）。
-* **対象環境**: Android のみ（UserAgent + MediaSession + AudioContext で判定）。iOS はバックグラウンドでのマイク維持が不安定なため対象外。非対応環境ではヘッダーの📡ボタン自体を表示しない。
-* **仕組み**:
-  * 極小音量（振幅0.1% × volume 0.001）のホワイトノイズWAVを `<audio loop>` で連続再生し、OSにメディア再生中と認識させる。Web Audio 単独では Media Session のキー捕捉対象にならないため HTMLAudioElement を使用。
-  * マイクは待機開始時（フォアグラウンド）に事前取得して保持し、録音時は AudioManager に外部ストリームとして渡す（バックグラウンドからの getUserMedia 新規呼び出しは不可のため）。
-  * Media Session の play/pause ハンドラでイヤフォンボタンを捕捉。連続発火対策に600msデバウンス。
-* **操作モデル**: ボタン1回目で録音開始（上昇ビープ 800→1200Hz）、2回目で停止＋送信（下降ビープ 1200→800Hz）。送信先未選択時はエラービープ（400Hz×2）。15秒タイムアウト時は自動送信。ビープは OscillatorNode で合成。
-* **状態管理**: 録音中かどうかはアプリ内フラグ (`state.isRecording`) を正とし、Media Session の playbackState は常に 'playing' に固定する。
-* **UI**: ヘッダー📡ボタン → 既存の standbyModal で開始/停止。待機中は📡がオレンジ枠＋パルスアニメーション。バッテリー消費の注意書きをモーダル内に表示。待機状態はリロードで解除（意図的）。
+## DEC-025: バックグラウンド待機状態 (Standby Mode) の実装と撤回 (2026-06-11)
+* **経緯**: Android限定で、画面ロック中もイヤフォンボタンから発話できる「待機状態」を一度実装した（極小音量ノイズのループ再生＋Media Sessionによるボタン捕捉＋マイク事前取得）。
+* **撤回理由**: ロック中のテキストメッセージ読み上げ（SpeechSynthesis）がAndroidのOS制約で技術的に不可能であり、トランシーバーとしての受信体験が成立しないため、機能ごと取り除いた（実装コミットをrevert）。
+* **得られた知見（再挑戦時の参考）**:
+  * ロック中の音声ファイル再生は、ユーザージェスチャー中にresume済みの常駐AudioContext経由（fetch→decodeAudioData→BufferSource）なら可能。新規`<audio>`要素の再生開始はブロックされる。
+  * SpeechSynthesisはロック中に無視され、onend/onerrorも発火しないため、タイムアウト無しでawaitすると再生キュー全体が停止する。
+  * Media Sessionのキー捕捉にはHTMLAudioElementの再生が必要（Web Audio単独では対象にならない）。
+* **再挑戦の条件**: テキストメッセージを事前にサーバー側でTTS音声化する等、ロック中でも全メッセージを音声ファイルとして再生できる構成が用意できた場合。
+
+## DEC-026: 常時表示機能 (Screen Wake Lock) (2026-06-11)
+* **決定**: 待機状態 (DEC-025・撤回) の代替として、Screen Wake Lock API による「常時表示」機能を実装する。画面の自動消灯・ロックを抑止することでアプリの停止自体を防ぎ、TTSを含む全機能が通常どおり動作する。
+* **対象環境**: `navigator.wakeLock` 対応環境すべて（Android Chrome / iOS Safari 16.4+ / PC Chrome・Edge）。非対応環境ではヘッダーの☀️ボタン自体を表示しない。
+* **操作モデル**: ヘッダーの☀️ボタンでON/OFFトグル。デフォルトOFF。ON中は☀️がカラー表示＋青枠（OFF時はグレースケール）。電池消耗を伴うため能動的ON・使用後OFFの運用とし、状態はリロードで解除される。
+* **実装**: `src/services/wakelock.ts` の `WakeLockService`。タブ非表示でOSがロックを自動解放する仕様に対し、ユーザー意思のON/OFF (`enabled`) とセンチネル保持を分離し、`visibilitychange` で画面復帰時に自動再取得する。

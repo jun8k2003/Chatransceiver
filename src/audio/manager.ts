@@ -15,13 +15,6 @@ export class AudioManager {
   private recognition: any = null; // SpeechRecognition
   private isRecognitionActive: boolean = false;
   private activeAudioElement: HTMLAudioElement | null = null;
-  private ownsMicStream: boolean = true;
-
-  // バックグラウンド再生用の常駐AudioContext (ユーザージェスチャー中にunlockAudioで作成)
-  // 画面ロック中は新規<audio>要素の再生がブロックされるため、Web Audio経由で再生する
-  private playbackContext: AudioContext | null = null;
-  private activeBufferSource: AudioBufferSourceNode | null = null;
-  private activeBufferResolve: (() => void) | null = null;
 
   constructor() {
     this.initSpeechRecognition();
@@ -47,28 +40,18 @@ export class AudioManager {
   /**
    * 録音の開始
    * @param onLevelUpdate リアルタイムの音量レベルを受け取るコールバック (0 ~ 100)
-   * @param externalStream 事前取得済みのマイクストリーム (待機状態 DEC-025 用)。
-   *   指定した場合は getUserMedia を呼ばず、録音終了時にトラックを停止しない。
    */
-  async startRecording(onLevelUpdate: (level: number) => void, externalStream?: MediaStream): Promise<void> {
+  async startRecording(onLevelUpdate: (level: number) => void): Promise<void> {
     this.audioChunks = [];
 
-    if (externalStream) {
-      // バックグラウンドからは getUserMedia を新規呼び出しできないため、
-      // 待機状態で事前取得されたストリームを借用する
-      this.micStream = externalStream;
-      this.ownsMicStream = false;
-    } else {
-      // マイクストリームの取得（OSデフォルトマイク）
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          autoGainControl: true,
-          echoCancellation: true,
-          noiseSuppression: true
-        }
-      });
-      this.ownsMicStream = true;
-    }
+    // マイクストリームの取得（OSデフォルトマイク）
+    this.micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true
+      }
+    });
 
     // Web Audio API で音量レベルメーターを設定
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -170,10 +153,7 @@ export class AudioManager {
       this.levelIntervalId = null;
     }
     if (this.micStream) {
-      // 借用ストリーム (待機状態の事前取得分) は停止せず保持元に返す
-      if (this.ownsMicStream) {
-        this.micStream.getTracks().forEach((track) => track.stop());
-      }
+      this.micStream.getTracks().forEach((track) => track.stop());
       this.micStream = null;
     }
     if (this.audioContext && this.audioContext.state !== 'closed') {
@@ -198,60 +178,7 @@ export class AudioManager {
    * @param url 音声ファイルのURL (ローカルの Blob URL またはクラウドの Storage URL)
    * @param volume 音量 (0.0 ~ 1.0, デフォルトは 1.0)
    */
-  async playAudio(url: string, volume: number = 1.0): Promise<void> {
-    // バックグラウンド (画面ロック・タブ非表示) では新規<audio>要素の再生開始が
-    // ブロックされるため、実行中の常駐AudioContext経由で再生する
-    if (document.hidden && this.playbackContext && this.playbackContext.state === 'running') {
-      try {
-        await this.playViaWebAudio(url, volume);
-        return;
-      } catch (e) {
-        console.warn('WebAudio playback failed, falling back to audio element:', e);
-      }
-    }
-    return this.playAudioViaElement(url, volume);
-  }
-
-  /**
-   * Web Audio API (常駐AudioContext) 経由の再生。バックグラウンドでも動作する。
-   */
-  private async playViaWebAudio(url: string, volume: number): Promise<void> {
-    this.stopAllPlayback();
-
-    const ctx = this.playbackContext!;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status}`);
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-
-    return new Promise<void>((resolve) => {
-      const source = ctx.createBufferSource();
-      const gain = ctx.createGain();
-      source.buffer = audioBuffer;
-      gain.gain.value = volume;
-      source.connect(gain).connect(ctx.destination);
-
-      this.activeBufferSource = source;
-      this.activeBufferResolve = resolve;
-
-      source.onended = () => {
-        if (this.activeBufferSource === source) {
-          this.activeBufferSource = null;
-        }
-        if (this.activeBufferResolve) {
-          this.activeBufferResolve();
-          this.activeBufferResolve = null;
-        }
-      };
-
-      source.start();
-    });
-  }
-
-  /**
-   * HTMLAudioElement 経由の再生 (フォアグラウンド通常経路)
-   */
-  private playAudioViaElement(url: string, volume: number): Promise<void> {
+  playAudio(url: string, volume: number = 1.0): Promise<void> {
     return new Promise((resolve, reject) => {
       // 既存の再生があれば停止
       this.stopAllPlayback();
@@ -302,31 +229,13 @@ export class AudioManager {
       utterance.lang = 'ja-JP';
       utterance.rate = 1.0; // 読み上げ速度
 
-      let isResolved = false;
-      let hasStarted = false;
-      const finish = () => {
-        if (!isResolved) {
-          isResolved = true;
-          resolve();
-        }
+      utterance.onend = () => {
+        resolve();
       };
 
-      utterance.onstart = () => {
-        hasStarted = true;
+      utterance.onerror = () => {
+        resolve(); // エラー時もキューを停滞させないため解決する
       };
-      utterance.onend = finish;
-      utterance.onerror = finish; // エラー時もキューを停滞させないため解決する
-
-      // Android画面ロック中などはspeakが無視されonend/onerrorも発火しない。
-      // 一定時間たっても読み上げが開始されない場合はキャンセルして解決し、
-      // 再生キュー全体が停止するのを防ぐ。
-      setTimeout(() => {
-        if (!hasStarted && !isResolved) {
-          console.warn('SpeechSynthesis did not start (likely background/locked). Skipping TTS.');
-          window.speechSynthesis.cancel();
-          finish();
-        }
-      }, 4000);
 
       window.speechSynthesis.speak(utterance);
     });
@@ -346,19 +255,6 @@ export class AudioManager {
     if (this.activeAudioResolve) {
       this.activeAudioResolve();
       this.activeAudioResolve = null;
-    }
-    // Web Audio経由 (バックグラウンド再生) の停止
-    if (this.activeBufferSource) {
-      try {
-        this.activeBufferSource.stop();
-      } catch (e) {
-        // 既に停止済みの場合は無視
-      }
-      this.activeBufferSource = null;
-    }
-    if (this.activeBufferResolve) {
-      this.activeBufferResolve();
-      this.activeBufferResolve = null;
     }
     // 音声合成の読み上げ停止
     if ('speechSynthesis' in window) {
@@ -464,15 +360,11 @@ export class AudioManager {
    * ユーザーのクリックイベントハンドラ内で一度だけ呼び出します。
    */
   unlockAudio(): void {
-    // 1. Web Audio API のロック解除
-    // 常駐AudioContextとして保持し続ける (バックグラウンド再生経路で使用するため、
-    // ユーザージェスチャー中に作成・resumeしたものを閉じずに残す)
+    // 1. Web Audio API (音声ファイル再生等) のロック解除
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioCtx) {
-      if (!this.playbackContext || this.playbackContext.state === 'closed') {
-        this.playbackContext = new AudioCtx();
-      }
-      this.playbackContext!.resume().catch(console.error);
+      const ctx = new AudioCtx();
+      ctx.resume().then(() => ctx.close()).catch(console.error);
     }
 
     // 2. SpeechSynthesis (音声読み上げ) のロック解除 (iOS/iPadOS対応)

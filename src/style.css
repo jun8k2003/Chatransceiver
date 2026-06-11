@@ -1458,10 +1458,10 @@ select.setting-input {
 }
 
 /* ========================================================
-   バックグラウンド待機モーダル
+   常時表示 (Wake Lock) トグルボタン (DEC-026)
+   対応環境でのみ .supported が付与され表示される
    ======================================================== */
-/* ヘッダーの待機ボタン: Android対応端末でのみ .supported が付与され表示される (DEC-025) */
-.btn-standby-open {
+.btn-keep-awake {
   display: none;
   background: transparent;
   border: 1px solid transparent;
@@ -1470,19 +1470,22 @@ select.setting-input {
   padding: 4px 8px;
   cursor: pointer;
   line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.6;
 }
-.btn-standby-open.supported {
+.btn-keep-awake.supported {
   display: inline-block;
 }
-.btn-standby-open.active {
-  border-color: var(--color-ptt);
-  background: rgba(249, 115, 22, 0.15);
-  animation: standby-pulse 2s ease-in-out infinite;
+.btn-keep-awake.active {
+  filter: none;
+  opacity: 1;
+  border-color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.15);
 }
-@keyframes standby-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
-  50% { box-shadow: 0 0 0 5px rgba(249, 115, 22, 0); }
-}
+
+/* ========================================================
+   バックグラウンド待機モーダル
+   ======================================================== */
 .settings-group {
   width: 100%;
   display: flex;
