@@ -777,8 +777,6 @@ export class App {
       return false;
     }
     try {
-      // バックグラウンド再生用の常駐AudioContextをユーザージェスチャー中に確実に起動しておく
-      this.audioManager.unlockAudio();
       await this.standbyService.activate();
       this.uiController.updateStandbyState(true);
       return true;
