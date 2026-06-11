@@ -34,6 +34,9 @@ export class ChatWindowUI {
   private sendRecBtnEl: HTMLButtonElement;
   private cancelRecBtnEl: HTMLButtonElement;
 
+  private renameBtnEl: HTMLButtonElement;
+  private isRenaming: boolean = false;
+
   private onSendText: (text: string) => void;
   private onStartTalk: () => void;
   private onStopTalk: () => void;
@@ -44,6 +47,7 @@ export class ChatWindowUI {
   private onStopPlayback: () => void;
   private onRevokeMessage: (messageId: string) => void;
   private onBackToSidebar: () => void;
+  private onRenameGroup: (newName: string) => void;
 
   constructor(
     containerId: string,
@@ -56,7 +60,8 @@ export class ChatWindowUI {
     onPlayMessage: (messageId: string) => Promise<void>,
     onStopPlayback: () => void,
     onRevokeMessage: (messageId: string) => void,
-    onBackToSidebar: () => void
+    onBackToSidebar: () => void,
+    onRenameGroup: (newName: string) => void
   ) {
     this.onSendText = onSendText;
     this.onStartTalk = onStartTalk;
@@ -68,6 +73,7 @@ export class ChatWindowUI {
     this.onStopPlayback = onStopPlayback;
     this.onRevokeMessage = onRevokeMessage;
     this.onBackToSidebar = onBackToSidebar;
+    this.onRenameGroup = onRenameGroup;
 
     const container = document.getElementById(containerId);
     if (!container) throw new Error(`Container #${containerId} not found`);
@@ -79,6 +85,7 @@ export class ChatWindowUI {
     this.roomTitleEl = container.querySelector('.chat-room-title') as HTMLHeadingElement;
     this.roomMembersEl = container.querySelector('.chat-room-members-text') as HTMLSpanElement;
     this.backBtnEl = container.querySelector('.btn-back-to-sidebar') as HTMLButtonElement;
+    this.renameBtnEl = container.querySelector('.btn-rename-group') as HTMLButtonElement;
 
     // 録音モーダルのバインド
     this.modalEl = document.getElementById('recordingModal') as HTMLDivElement;
@@ -162,6 +169,51 @@ export class ChatWindowUI {
     this.backBtnEl.addEventListener('click', () => {
       this.onBackToSidebar();
     });
+
+    // グループ名のインライン編集 (DEC-023)
+    this.renameBtnEl.addEventListener('click', () => {
+      this.startRenameEdit();
+    });
+  }
+
+  /**
+   * グループ名のインライン編集を開始する (DEC-023)
+   * Enter/フォーカスアウトで確定、Escでキャンセル
+   */
+  private startRenameEdit(): void {
+    if (this.isRenaming) return;
+    this.isRenaming = true;
+
+    const input = document.createElement('input');
+    input.className = 'chat-title-input';
+    input.value = this.roomTitleEl.textContent || '';
+    this.roomTitleEl.style.display = 'none';
+    this.renameBtnEl.style.display = 'none';
+    this.roomTitleEl.parentNode!.insertBefore(input, this.roomTitleEl);
+    input.focus();
+    input.select();
+
+    let cancelled = false;
+    const commit = () => {
+      const newName = input.value.trim();
+      input.remove();
+      this.roomTitleEl.style.display = '';
+      this.renameBtnEl.style.display = 'block';
+      this.isRenaming = false;
+      if (!cancelled && newName && newName !== this.roomTitleEl.textContent) {
+        this.onRenameGroup(newName);
+      }
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        input.blur();
+      }
+      if (e.key === 'Escape') {
+        cancelled = true;
+        input.blur();
+      }
+    });
   }
 
   private emitText(): void {
@@ -187,9 +239,13 @@ export class ChatWindowUI {
     roomTitle?: string,
     roomMembers?: string,
     targetMessageId?: string,
-    communitySlug?: string
+    communitySlug?: string,
+    canRename?: boolean
   ): void {
     this.messagesEl.innerHTML = '';
+
+    // グループ名編集ボタンはグループチャット表示時のみ (DEC-023)
+    this.renameBtnEl.style.display = (state === 'chat' && canRename) ? 'block' : 'none';
 
     // 1. 未接続プレースホルダー
     if (state === 'unconnected') {
@@ -198,7 +254,7 @@ export class ChatWindowUI {
       this.showPlaceholder(
         '🔌',
         'コミュニティ未接続',
-        '最上部のコンボボックスにコミュニティIDを入力するか、履歴から選択して「接続する」を押してください。'
+        '上部のコミュニティ名をクリックし、コミュニティIDを入力するか履歴から選択して接続してください。'
       );
       this.toggleInputs(false);
       return;
@@ -305,6 +361,11 @@ export class ChatWindowUI {
             if (window.confirm("発言を取り消しますか。")) {
               this.onRevokeMessage(msg.id);
             }
+          });
+          // 削除ボタン上での長押し/右クリックではURLコピーを発火させない (DEC-024)
+          deleteBtn.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
           });
         }
       }

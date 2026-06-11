@@ -1,8 +1,6 @@
-import { CommunitySelectorUI } from './community';
-import { UserListUI } from './users';
-import type { MemberItem } from './users';
-import { GroupListUI } from './groups';
-import type { GroupItem } from './groups';
+import { CommunityMenuUI } from './community';
+import { ChatListUI } from './list';
+import type { MemberItem, GroupItem } from './list';
 import { ChatWindowUI } from './chat';
 import type { MessageItem } from './chat';
 
@@ -31,13 +29,12 @@ export interface UIState {
 
 /**
  * UIController (src/ui/controller.ts)
- * 画面上のすべてのビューコンポーネント（ペイン、ヘッダー、モーダル）を統括し、
+ * 画面上のすべてのビューコンポーネント（統合リスト、ヘッダー、チャット、モーダル）を統括し、
  * アプリのグローバルステートに応じたリアクティブな描画と相互同期を管理します。
  */
 export class UIController {
-  private communitySelector: CommunitySelectorUI;
-  private userList: UserListUI;
-  private groupList: GroupListUI;
+  private communityMenu: CommunityMenuUI;
+  private chatList: ChatListUI;
   private chatWindow: ChatWindowUI;
 
   // ログインUIの要素
@@ -53,13 +50,8 @@ export class UIController {
   private settingsCallSignCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
   private settingsDiscordWebhookInput: HTMLInputElement;
-  private settingsSaveBtn: HTMLButtonElement;
-  private settingsCancelBtn: HTMLButtonElement;
-  private settingsLeaveContainerEl: HTMLDivElement;
-  private settingsCurrentCommunityNameEl: HTMLElement;
-
-  // モバイル用 チャットへ移動ボタン
-  private btnMobileGoToChat: HTMLButtonElement;
+  private settingsFcmToggle: HTMLInputElement;
+  private fcmUpdating: boolean = false;
 
   // 全画面ローディング
   private loadingOverlayEl: HTMLDivElement;
@@ -69,10 +61,12 @@ export class UIController {
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
     onLeaveCommunity: () => void,
-    onUserCheckChange: (selectedUserIds: string[]) => void,
+    onOpenUser: (userId: string) => void,
+    onOpenGroup: (groupId: string) => void,
+    onCreateGroup: (userIds: string[]) => void,
     onUserChatClear: (userId: string, userName: string) => void,
-    onGroupSelect: (groupId: string | null) => void,
     onGroupDelete: (groupId: string, groupName: string) => void,
+    onRenameGroup: (newName: string) => void,
     onSendText: (text: string) => void,
     onStartTalk: () => void,
     onStopTalk: () => void,
@@ -82,7 +76,6 @@ export class UIController {
     onPlayMessage: (messageId: string) => Promise<void>,
     onStopPlayback: () => void,
     onRevokeMessage: (messageId: string) => void,
-    onMobileGoToChat: () => void,
     onSignInWithGoogle: () => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
@@ -148,15 +141,21 @@ export class UIController {
     });
 
     // 各UIパーツクラスの初期化
-    this.communitySelector = new CommunitySelectorUI(
+    this.communityMenu = new CommunityMenuUI(
       'communityConnector',
       onConnectCommunity,
-      onDisconnectCommunity
+      onDisconnectCommunity,
+      onLeaveCommunity
     );
 
-    this.userList = new UserListUI('userPane', onUserCheckChange, onUserChatClear);
-    this.groupList = new GroupListUI('groupPane', onGroupSelect, onGroupDelete);
-    
+    this.chatList = new ChatListUI(
+      onOpenUser,
+      onOpenGroup,
+      onCreateGroup,
+      onUserChatClear,
+      onGroupDelete
+    );
+
     this.chatWindow = new ChatWindowUI(
       'chatPane',
       onSendText,
@@ -168,92 +167,31 @@ export class UIController {
       onPlayMessage,
       onStopPlayback,
       onRevokeMessage,
-      onBackToSidebar
+      onBackToSidebar,
+      onRenameGroup
     );
 
-    // ヘッダーの設定ボタン
-    const settingsBtn = document.querySelector('.btn-settings') as HTMLButtonElement;
-    
     // 設定モーダルのバインド
     this.settingsModalEl = document.getElementById('settingsModal') as HTMLDivElement;
     this.settingsNicknameInput = document.getElementById('settingsNickname') as HTMLInputElement;
     this.settingsAutoplayCheck = document.getElementById('settingsAutoplay') as HTMLInputElement;
     this.settingsRecordModeSelect = document.getElementById('settingsRecordMode') as HTMLSelectElement;
-    this.settingsCallSignCheck = document.getElementById('settingsCallSignOff') as HTMLInputElement;
+    this.settingsCallSignCheck = document.getElementById('settingsCallSign') as HTMLInputElement;
     this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
     this.settingsDiscordWebhookInput = document.getElementById('settingsDiscordWebhook') as HTMLInputElement;
-    this.settingsSaveBtn = this.settingsModalEl.querySelector('.btn-settings-save') as HTMLButtonElement;
-    this.settingsCancelBtn = this.settingsModalEl.querySelector('.btn-settings-cancel') as HTMLButtonElement;
-    this.settingsLeaveContainerEl = this.settingsModalEl.querySelector('#settingsLeaveContainer') as HTMLDivElement;
-    this.settingsCurrentCommunityNameEl = this.settingsModalEl.querySelector('#settingsCurrentCommunityName') as HTMLElement;
-    const btnSettingsLeave = this.settingsModalEl.querySelector('#btnSettingsLeave') as HTMLButtonElement;
-
-    // モバイル用ボタン
-    this.btnMobileGoToChat = document.getElementById('btnMobileGoToChat') as HTMLButtonElement;
-    if (this.btnMobileGoToChat) {
-      this.btnMobileGoToChat.addEventListener('click', () => {
-        onMobileGoToChat();
-      });
-    }
-
-    // 全画面ローディング要素
-    this.loadingOverlayEl = document.getElementById('globalLoadingOverlay') as HTMLDivElement;
-    this.loadingMessageEl = document.getElementById('globalLoadingMessage') as HTMLParagraphElement;
-
-    if (btnSettingsLeave) {
-      btnSettingsLeave.addEventListener('click', () => {
-        if (confirm('本当にこのコミュニティから退会しますか？（参加履歴からも削除されます）')) {
-          this.settingsModalEl.classList.remove('show');
-          onLeaveCommunity();
-        }
-      });
-    }
-
-    const btnCopyCommunityLink = this.settingsModalEl.querySelector('#btnCopyCommunityLink') as HTMLButtonElement;
-    const btnCopyCommunityLinkText = this.settingsModalEl.querySelector('#btnCopyCommunityLinkText') as HTMLSpanElement;
-
-    if (btnCopyCommunityLink && btnCopyCommunityLinkText) {
-      btnCopyCommunityLink.addEventListener('click', async () => {
-        const communityStr = localStorage.getItem('chatransceiver_current_community');
-        if (communityStr) {
-          try {
-            const community = JSON.parse(communityStr);
-            const slug = community?.slug;
-            if (slug) {
-              const url = window.location.origin + window.location.pathname + '?c=' + slug;
-              await navigator.clipboard.writeText(url);
-              
-              const originalText = btnCopyCommunityLinkText.textContent;
-              btnCopyCommunityLinkText.textContent = 'コピーしました！';
-              btnCopyCommunityLink.style.background = 'rgba(34, 197, 94, 0.1)'; // green
-              btnCopyCommunityLink.style.color = '#22c55e';
-              btnCopyCommunityLink.style.borderColor = 'rgba(34, 197, 94, 0.3)';
-              
-              setTimeout(() => {
-                btnCopyCommunityLinkText.textContent = originalText;
-                btnCopyCommunityLink.style.background = 'rgba(56, 189, 248, 0.1)'; // blue
-                btnCopyCommunityLink.style.color = '#38bdf8';
-                btnCopyCommunityLink.style.borderColor = 'rgba(56, 189, 248, 0.3)';
-              }, 2000);
-            }
-          } catch (e) {
-            console.error('Failed to copy community link', e);
-          }
-        }
-      });
-    }
+    this.settingsFcmToggle = document.getElementById('settingsFcmToggle') as HTMLInputElement;
 
     // 設定ボタンクリック時にモーダルを表示
+    const settingsBtn = document.querySelector('.btn-settings') as HTMLButtonElement;
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
         this.settingsModalEl.classList.add('show');
       });
     }
 
-
-
-    // キャンセルボタン
-    this.settingsCancelBtn.addEventListener('click', () => {
+    // 閉じるボタン
+    const settingsCancelBtn = this.settingsModalEl.querySelector('.btn-settings-cancel') as HTMLButtonElement;
+    settingsCancelBtn.addEventListener('click', () => {
       this.settingsModalEl.classList.remove('show');
     });
 
@@ -264,13 +202,21 @@ export class UIController {
       });
     }
 
+    // オーバーレイクリックで閉じる
+    this.settingsModalEl.addEventListener('click', (e) => {
+      if (e.target === this.settingsModalEl) {
+        this.settingsModalEl.classList.remove('show');
+      }
+    });
+
     // 環境設定モーダル保存
-    this.settingsSaveBtn.addEventListener('click', () => {
+    const settingsSaveBtn = this.settingsModalEl.querySelector('.btn-settings-save') as HTMLButtonElement;
+    settingsSaveBtn.addEventListener('click', () => {
       const newNickname = this.settingsNicknameInput.value.trim();
       const autoplay = this.settingsAutoplayCheck.checked;
       const recordMode = this.settingsRecordModeSelect.value as 'both' | 'audio_only' | 'text_only';
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
-      const callSignEnabled = !this.settingsCallSignCheck.checked;
+      const callSignEnabled = this.settingsCallSignCheck.checked;
       const discordWebhookUrl = this.settingsDiscordWebhookInput.value.trim();
       if (newNickname) {
         onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl);
@@ -281,69 +227,51 @@ export class UIController {
     });
 
     // マイク権限URLコピーボタン (DEC-008)
-    const btnCopyMicUrl = this.settingsModalEl.querySelector('#btnCopyMicUrl') as HTMLButtonElement;
-    const inputMicUrl = this.settingsModalEl.querySelector('#settingsMicUrl') as HTMLInputElement;
-    if (btnCopyMicUrl && inputMicUrl) {
-      btnCopyMicUrl.addEventListener('click', () => {
-        navigator.clipboard.writeText(inputMicUrl.value).then(() => {
-          const originalText = btnCopyMicUrl.textContent;
-          btnCopyMicUrl.textContent = '✅';
-          setTimeout(() => { btnCopyMicUrl.textContent = originalText; }, 2000);
-        }).catch(err => {
-          console.error('Failed to copy text: ', err);
-          alert('コピーに失敗しました。');
+    const bindCopyButton = (btnId: string, inputId: string) => {
+      const btn = this.settingsModalEl.querySelector(`#${btnId}`) as HTMLButtonElement;
+      const input = this.settingsModalEl.querySelector(`#${inputId}`) as HTMLInputElement;
+      if (btn && input) {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(input.value).then(() => {
+            const originalText = btn.textContent;
+            btn.textContent = '✅';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+          }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            alert('コピーに失敗しました。');
+          });
         });
-      });
-    }
+      }
+    };
+    bindCopyButton('btnCopyMicUrl', 'settingsMicUrl');
+    bindCopyButton('btnCopySoundUrl', 'settingsSoundUrl');
 
-    // スピーカー/音声権限URLコピーボタン
-    const btnCopySoundUrl = this.settingsModalEl.querySelector('#btnCopySoundUrl') as HTMLButtonElement;
-    const inputSoundUrl = this.settingsModalEl.querySelector('#settingsSoundUrl') as HTMLInputElement;
-    if (btnCopySoundUrl && inputSoundUrl) {
-      btnCopySoundUrl.addEventListener('click', () => {
-        navigator.clipboard.writeText(inputSoundUrl.value).then(() => {
-          const originalText = btnCopySoundUrl.textContent;
-          btnCopySoundUrl.textContent = '✅';
-          setTimeout(() => { btnCopySoundUrl.textContent = originalText; }, 2000);
-        }).catch(err => {
-          console.error('Failed to copy text: ', err);
-          alert('コピーに失敗しました。');
-        });
-      });
-    }
-
-    // FCM通知ボタンのイベント
-    const btnReg = document.getElementById('btnRegisterNotification') as HTMLButtonElement;
-    if (btnReg) {
-      btnReg.addEventListener('click', async () => {
-        const originalText = btnReg.textContent;
-        btnReg.textContent = '処理中...';
-        btnReg.disabled = true;
-        await onRegisterNotification();
-        if (btnReg) {
-          btnReg.textContent = originalText;
-          btnReg.disabled = false;
+    // FCM通知トグル: ONで登録、OFFで解除 (DEC-024)
+    if (this.settingsFcmToggle) {
+      this.settingsFcmToggle.addEventListener('change', async () => {
+        if (this.fcmUpdating) return;
+        this.fcmUpdating = true;
+        this.settingsFcmToggle.disabled = true;
+        try {
+          if (this.settingsFcmToggle.checked) {
+            await onRegisterNotification();
+          } else {
+            await onUnregisterNotification();
+          }
+        } finally {
+          this.settingsFcmToggle.disabled = false;
+          this.fcmUpdating = false;
         }
       });
     }
 
-    const btnUnreg = document.getElementById('btnUnregisterNotification') as HTMLButtonElement;
-    if (btnUnreg) {
-      btnUnreg.addEventListener('click', async () => {
-        const originalText = btnUnreg.textContent;
-        btnUnreg.textContent = '処理中...';
-        btnUnreg.disabled = true;
-        await onUnregisterNotification();
-        if (btnUnreg) {
-          btnUnreg.textContent = originalText;
-          btnUnreg.disabled = false;
-        }
-      });
-    }
+    // 全画面ローディング要素
+    this.loadingOverlayEl = document.getElementById('globalLoadingOverlay') as HTMLDivElement;
+    this.loadingMessageEl = document.getElementById('globalLoadingMessage') as HTMLParagraphElement;
   }
 
   /**
-   * アプリ状態（State）に基づく画面全体の再描画 (DEC-012)
+   * アプリ状態（State）に基づく画面全体の再描画 (DEC-012, DEC-024)
    */
   render(state: UIState): void {
     // 全画面ローディングの制御
@@ -363,57 +291,37 @@ export class UIController {
     } else {
       this.loginScreenEl.style.display = 'none';
       this.headerUserNicknameEl.textContent = state.currentUser.name;
-      
+
       // 設定画面の初期値をセット（入力中以外の時に値を同期）
       if (document.activeElement !== this.settingsNicknameInput) {
         this.settingsNicknameInput.value = state.currentUser?.name || '';
       }
       this.settingsAutoplayCheck.checked = state.autoplayEnabled;
       this.settingsRecordModeSelect.value = state.recordMode;
-      this.settingsCallSignCheck.checked = !state.callSignEnabled;
+      this.settingsCallSignCheck.checked = state.callSignEnabled;
       this.settingsThemeSelect.value = state.theme;
-      
+
       if (document.activeElement !== this.settingsDiscordWebhookInput) {
         this.settingsDiscordWebhookInput.value = state.currentUser?.discord_webhook_url || '';
-      }
-      
-      // 退会コントロールの表示制御
-      if (state.currentCommunity) {
-        this.settingsLeaveContainerEl.style.display = 'block';
-        this.settingsCurrentCommunityNameEl.textContent = state.currentCommunity.name;
-      } else {
-        this.settingsLeaveContainerEl.style.display = 'none';
-        this.settingsCurrentCommunityNameEl.textContent = '-';
       }
 
       // FCM UIの制御
       const fcmNotSupportedMsg = document.getElementById('fcmNotSupportedMsg') as HTMLDivElement;
-      const fcmButtonsContainer = document.getElementById('fcmButtonsContainer') as HTMLDivElement;
-      const btnRegister = document.getElementById('btnRegisterNotification') as HTMLButtonElement;
-      const btnUnregister = document.getElementById('btnUnregisterNotification') as HTMLButtonElement;
-
+      const fcmToggleRow = document.getElementById('fcmToggleRow') as HTMLDivElement;
       if (state.fcmIsIOS) {
         if (fcmNotSupportedMsg) fcmNotSupportedMsg.style.display = 'block';
-        if (fcmButtonsContainer) fcmButtonsContainer.style.display = 'none';
+        if (fcmToggleRow) fcmToggleRow.style.display = 'none';
       } else {
         if (fcmNotSupportedMsg) fcmNotSupportedMsg.style.display = 'none';
-        if (fcmButtonsContainer) fcmButtonsContainer.style.display = 'flex';
-        if (state.fcmRegistered) {
-          if (btnRegister) btnRegister.style.display = 'none';
-          if (btnUnregister) btnUnregister.style.display = 'block';
-        } else {
-          if (btnRegister) btnRegister.style.display = 'block';
-          if (btnUnregister) btnUnregister.style.display = 'none';
+        if (fcmToggleRow) fcmToggleRow.style.display = 'flex';
+        if (!this.fcmUpdating) {
+          this.settingsFcmToggle.checked = !!state.fcmRegistered;
         }
       }
     }
 
-    // モバイル用表示切り替えクラスの制御 (has-active-chat) とフローティングボタンの表示
+    // モバイル用表示切り替えクラスの制御 (has-active-chat)
     const containerEl = document.querySelector('.app-container') as HTMLElement;
-    
-    // チャットが「開ける状態」かどうか（何かしら選択されているか）
-    const canOpenChat = !!state.activeChatHistoryId || (state.selectedUserIds.length > 0);
-
     if (containerEl) {
       if (state.mobileChatForceOpen) {
         containerEl.classList.add('has-active-chat');
@@ -422,59 +330,59 @@ export class UIController {
       }
     }
 
-    if (this.btnMobileGoToChat) {
-      this.btnMobileGoToChat.disabled = !canOpenChat;
-    }
-
     // 2. コミュニティ接続状態の更新
     const isConnected = !!state.currentCommunity;
-    this.communitySelector.updateConnectionState(
+    this.communityMenu.updateConnectionState(
       isConnected,
       state.currentCommunity?.slug
     );
 
     if (!isConnected) {
       // 未接続時はプレースホルダーと空リストを描画
-      this.userList.render([], [], state.playingUserId);
-      this.groupList.render([], null, state.playingGroupId);
+      this.chatList.render([], [], [], null);
       this.chatWindow.render([], '', 'unconnected');
       return;
     }
 
     // コミュニティ履歴への保存
     if (state.currentCommunity) {
-      this.communitySelector.saveToHistory(
+      this.communityMenu.saveToHistory(
         state.currentCommunity.slug,
         state.currentCommunity.name
       );
     }
 
-    // 3. 個別チャット一覧 (左ペイン) の描画
-    this.userList.render(state.members, state.selectedUserIds, state.playingUserId);
-
-    // 4. グループチャット一覧 (中央ペイン) の描画
-    this.groupList.render(
+    // 3. 統合リスト (サイドバー) の描画
+    this.chatList.render(
+      state.members,
       state.groups,
+      state.selectedUserIds,
       state.activeChatHistoryId,
+      state.playingUserId,
       state.playingGroupId
     );
 
-    // 5. 右ペイン (チャットウィンドウ) の描画
+    // 4. チャットウィンドウの描画
     if (state.activeChatHistoryId) {
       // 既存チャットルームのアクティブ時
       let roomTitle = '';
       let roomMembers = '';
-      if (state.activeChatHistoryId.startsWith('room_g')) {
-        const group = state.groups.find(g => g.id === state.activeChatHistoryId);
-        roomTitle = group ? group.name : 'グループチャット';
-        roomMembers = group ? `${group.memberCount} 人のメンバー` : '';
-      } else {
-        const targetUserId = state.activeChatHistoryId.replace('room_u', 'u'); // room_u1 -> u1 に対応するため
-        const member = state.members.find(m => m.id === targetUserId);
-        roomTitle = member ? member.name : '個別チャット';
+      let canRename = false;
+
+      const group = state.groups.find(g => g.id === state.activeChatHistoryId);
+      if (group) {
+        roomTitle = group.name;
+        roomMembers = group.memberNames || `${group.memberCount} 人のメンバー`;
+        canRename = true; // グループ名はメンバーなら誰でも編集可能 (DEC-023)
+      } else if (state.selectedUserIds.length === 1) {
+        const member = state.members.find(m => m.id === state.selectedUserIds[0]);
+        roomTitle = member ? `#${member.userNumber} ${member.name}` : '個別チャット';
         roomMembers = member ? (member.isOnline ? '● オンライン' : 'オフライン') : '';
+      } else {
+        roomTitle = 'チャット';
       }
-      this.chatWindow.render(state.messages, state.currentUser.id, 'chat', undefined, roomTitle, roomMembers, state.targetMessageIdToFocus, state.currentCommunity?.slug);
+
+      this.chatWindow.render(state.messages, state.currentUser.id, 'chat', undefined, roomTitle, roomMembers, state.targetMessageIdToFocus, state.currentCommunity?.slug, canRename);
     } else if (state.selectedUserIds.length >= 2) {
       // 新規グループ作成中プレースホルダー時 (DEC-011)
       const selectedNames = state.members
@@ -499,7 +407,7 @@ export class UIController {
         'empty',
         {
           title: '💬 チャットを開始しましょう',
-          subtitle: '左ペインから話したいメンバーをチェック（複数選択可）するか、グループを選択してください。'
+          subtitle: 'リストから話したい相手やグループをタップしてください。複数人での新規グループは「＋新規グループ」から作成できます。'
         }
       );
     }
@@ -513,11 +421,11 @@ export class UIController {
   updateDictationPreview(text: string): void { this.chatWindow.updateDictationPreview(text); }
   hideRecordingStopButton(): void { this.chatWindow.hideStopButton(); }
   showMicError(siteUrl: string): void { this.chatWindow.showMicError(siteUrl); }
-  
+
   /**
    * コミュニティ退出時に履歴ドロップダウンから削除
    */
   handleCommunityLeave(slug: string): void {
-    this.communitySelector.removeFromHistory(slug);
+    this.communityMenu.removeFromHistory(slug);
   }
 }

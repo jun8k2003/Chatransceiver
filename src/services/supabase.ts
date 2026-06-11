@@ -29,7 +29,9 @@ export interface SupabaseMember {
 
 export interface SupabaseGroup {
   id: string;
-  name: string;
+  name: string;          // 表示名 (カスタム名があればそれ、無ければメンバー名の羅列)
+  customName?: string;   // chat_rooms.name のカスタム名 (DEC-023)。未設定時は undefined
+  memberNames: string;   // メンバー名のカンマ羅列 (ヘッダーのサブ表示用)
   memberCount: number;
   unreadCount: number;
   latestUnreadTime?: number;
@@ -270,7 +272,7 @@ export class SupabaseService {
     // 自分が参加しているグループルームを取得
     const { data, error } = await supabase
       .from('chat_room_members')
-      .select('room_id, chat_rooms(id, type, community_id)')
+      .select('room_id, chat_rooms(id, type, community_id, name)')
       .eq('user_id', userId);
 
     if (error) throw error;
@@ -295,7 +297,9 @@ export class SupabaseService {
         continue;
       }
 
-      const groupName = (members || []).map((m: any) => m.users?.name).join(', ');
+      const memberNames = (members || []).map((m: any) => m.users?.name).join(', ');
+      // カスタム名があれば優先し、無ければメンバー名の羅列を表示名とする (DEC-023)
+      const groupName = room.name || memberNames;
       
       // 未読数をカウントし、最新の未読メッセージ日時を取得
       const { data: inboxData } = await supabase
@@ -314,6 +318,8 @@ export class SupabaseService {
       result.push({
         id: room.id,
         name: groupName || '名称未設定グループ',
+        customName: room.name || undefined,
+        memberNames: memberNames,
         memberCount: members?.length || 0,
         unreadCount: unreadCount,
         latestUnreadTime: latestUnreadTime || undefined
@@ -321,6 +327,19 @@ export class SupabaseService {
     }
 
     return result;
+  }
+
+  /**
+   * グループ名（表示上のあだ名）の更新 (DEC-023)
+   * 空文字を渡すと NULL に戻し、メンバー名の羅列表示にフォールバックする
+   */
+  async updateRoomName(roomId: string, newName: string): Promise<void> {
+    const { error } = await supabase
+      .from('chat_rooms')
+      .update({ name: newName.trim() || null })
+      .eq('id', roomId);
+
+    if (error) throw error;
   }
 
   /**
