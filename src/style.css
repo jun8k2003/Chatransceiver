@@ -1460,21 +1460,6 @@ select.setting-input {
 /* ========================================================
    バックグラウンド待機モーダル
    ======================================================== */
-/* 再生デバッグログ表示 */
-.audio-debug-log {
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-  background: var(--bg-input);
-  border-radius: 8px;
-  padding: 8px;
-  max-height: 160px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-  margin: 8px 0 0;
-}
-
 /* ヘッダーの待機ボタン: Android対応端末でのみ .supported が付与され表示される (DEC-025) */
 .btn-standby-open {
   display: none;
