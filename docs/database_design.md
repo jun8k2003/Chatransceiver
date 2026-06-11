@@ -32,6 +32,7 @@ erDiagram
     chat_rooms {
         uuid id PK
         varchar type
+        text name
         uuid community_id FK
         timestamptz created_at
     }
@@ -105,6 +106,7 @@ Table community_members {
 Table chat_rooms {
   id uuid [pk, default: `gen_random_uuid()`]
   type varchar [not null, note: 'individual | group']
+  name text [note: 'グループの表示名（あだ名）。NULLの場合はメンバー名の羅列を表示。誰でも編集可']
   community_id uuid [ref: > communities.id]
   created_at timestamptz [default: `now()`]
 }
@@ -216,6 +218,12 @@ create policy "Authenticated users can create chat rooms"
 create policy "Authenticated users can delete chat rooms"
   on chat_rooms for delete
   using (auth.role() = 'authenticated');
+
+-- 全員：ログイン済みならチャットルームを更新（グループ名変更）可能
+create policy "Authenticated users can update chat rooms"
+  on chat_rooms for update
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
 
 --------------------------------------------------
 -- 5. chat_room_members テーブル

@@ -74,6 +74,7 @@ create table public.community_members (
 create table public.chat_rooms (
   id uuid default gen_random_uuid() primary key,
   type varchar not null check (type in ('individual', 'group')),
+  name text, -- グループの表示名（あだ名）。NULLの場合はメンバー名の羅列を表示
   community_id uuid references public.communities on delete cascade,
   created_at timestamptz default now() not null
 );
@@ -145,6 +146,7 @@ create policy "Users can leave a community" on public.community_members for dele
 create policy "Authenticated users can view chat rooms" on public.chat_rooms for select using (auth.role() = 'authenticated');
 create policy "Authenticated users can create chat rooms" on public.chat_rooms for insert with check (auth.role() = 'authenticated');
 create policy "Authenticated users can delete chat rooms" on public.chat_rooms for delete using (auth.role() = 'authenticated');
+create policy "Authenticated users can update chat rooms" on public.chat_rooms for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
 -- 3.5. chat_room_members ポリシー
 create policy "Authenticated users can view room membership" on public.chat_room_members for select using (auth.role() = 'authenticated');
@@ -389,3 +391,29 @@ npx supabase functions deploy delete-audio-on-message-delete
 4. **「Save webhook」** をクリックして保存します。
 
 これで、メッセージが削除された際に自動的に音声ファイルもストレージから消去されるようになります。
+
+---
+
+## 8. 既存環境への変更適用（マイグレーション履歴）
+
+すでに稼働中のSupabaseプロジェクトに対して、後から行われたスキーマ変更を適用するためのSQLです。
+（セクション2のスクリプトで新規構築した場合は適用済みのため不要です）
+
+### 8.1. グループ名（表示上のあだ名）対応 (2026-06-11)
+
+グループチャットに任意の表示名を付けられるようにするための変更です。
+`name` が NULL のグループは従来どおりメンバー名の羅列が表示されるため、**適用後も旧バージョンのフロントエンドはそのまま動作します**（後方互換あり）。
+
+SQL Editor で以下を実行します。
+
+```sql
+-- 1. chat_rooms にグループ名列を追加 (null = メンバー名の羅列を表示)
+alter table public.chat_rooms add column if not exists name text;
+
+-- 2. RLS: ログイン済みユーザーなら誰でもルーム名を変更可能
+--    (グループ削除が全員可能である既存ポリシーの粒度に合わせる)
+create policy "Authenticated users can update chat rooms"
+  on public.chat_rooms for update
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
+```

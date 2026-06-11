@@ -4,54 +4,53 @@ export interface CommunityHistoryItem {
 }
 
 /**
- * CommunitySelectorUI (src/ui/community.ts)
- * 画面最上部（ヘッダー）の「編集可能コンボボックス」を用いた
- * コミュニティ選択・入室履歴・接続アクションを制御します。
+ * CommunityMenuUI (src/ui/community.ts)
+ * ヘッダーの「コミュニティ名ピル」とそのドロップダウンメニューを制御します (DEC-024)。
+ * 接続・入室履歴・招待リンクコピー・切断・退会の操作をここに集約します。
  */
-export class CommunitySelectorUI {
-  private inputEl: HTMLInputElement;
-  private dropdownEl: HTMLDivElement;
+export class CommunityMenuUI {
+  private pillEl: HTMLButtonElement;
+  private pillNameEl: HTMLSpanElement;
+  private menuEl: HTMLDivElement;
+  private slugInputEl: HTMLInputElement;
   private connectBtnEl: HTMLButtonElement;
-  private disconnectBtnEl: HTMLButtonElement;
-  private arrowEl: HTMLElement;
-  
+  private historyListEl: HTMLDivElement;
+  private connectedSectionEl: HTMLDivElement;
+  private copyLinkTextEl: HTMLSpanElement;
+
   private onConnect: (slug: string) => void;
   private onDisconnect: () => void;
+  private onLeave: () => void;
 
   private history: CommunityHistoryItem[] = [];
+  private currentSlug: string | null = null;
 
   constructor(
     containerId: string,
     onConnect: (slug: string) => void,
-    onDisconnect: () => void
+    onDisconnect: () => void,
+    onLeave: () => void
   ) {
     this.onConnect = onConnect;
     this.onDisconnect = onDisconnect;
+    this.onLeave = onLeave;
 
-    // DOM要素のバインド
     const container = document.getElementById(containerId);
     if (!container) throw new Error(`Container #${containerId} not found`);
 
-    this.inputEl = container.querySelector('.combobox-input') as HTMLInputElement;
-    this.dropdownEl = container.querySelector('.combobox-dropdown') as HTMLDivElement;
+    this.pillEl = container.querySelector('.community-pill') as HTMLButtonElement;
+    this.pillNameEl = container.querySelector('.community-pill-name') as HTMLSpanElement;
+    this.menuEl = container.querySelector('.community-menu') as HTMLDivElement;
+    this.slugInputEl = container.querySelector('.community-slug-input') as HTMLInputElement;
     this.connectBtnEl = container.querySelector('.btn-connect') as HTMLButtonElement;
-    this.disconnectBtnEl = container.querySelector('.btn-disconnect') as HTMLButtonElement;
-
-    // 切断ボタンのイベント登録
-    if (this.disconnectBtnEl) {
-      this.disconnectBtnEl.addEventListener('click', () => {
-        this.onDisconnect();
-      });
-    }
-    this.arrowEl = container.querySelector('.combobox-arrow') as HTMLElement;
+    this.historyListEl = container.querySelector('.community-history-list') as HTMLDivElement;
+    this.connectedSectionEl = container.querySelector('.menu-connected-section') as HTMLDivElement;
+    this.copyLinkTextEl = container.querySelector('.copy-link-text') as HTMLSpanElement;
 
     this.loadHistory();
     this.initEvents();
   }
 
-  /**
-   * LocalStorage から入室履歴をロード
-   */
   private loadHistory(): void {
     try {
       const stored = localStorage.getItem('chatransceiver_community_history');
@@ -64,14 +63,11 @@ export class CommunitySelectorUI {
     }
   }
 
-  /**
-   * LocalStorage に入室履歴を保存
-   */
   saveToHistory(slug: string, name: string): void {
     // 重複を削除して先頭に追加
     this.history = this.history.filter((item) => item.slug !== slug);
     this.history.unshift({ slug, name });
-    
+
     // 最大10件まで保持
     if (this.history.length > 10) {
       this.history.pop();
@@ -83,12 +79,9 @@ export class CommunitySelectorUI {
       console.error('Failed to save community history to LocalStorage:', e);
     }
 
-    this.renderDropdown();
+    this.renderHistory();
   }
 
-  /**
-   * 指定したコミュニティを履歴から削除 (退出時など)
-   */
   removeFromHistory(slug: string): void {
     this.history = this.history.filter((item) => item.slug !== slug);
     try {
@@ -96,131 +89,146 @@ export class CommunitySelectorUI {
     } catch (e) {
       console.error('Failed to update community history in LocalStorage:', e);
     }
-    this.renderDropdown();
+    this.renderHistory();
   }
 
-  /**
-   * イベントハンドラの初期化
-   */
   private initEvents(): void {
+    // ピルクリックでメニュー開閉
+    this.pillEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.menuEl.classList.contains('show')) {
+        this.closeMenu();
+      } else {
+        this.openMenu();
+      }
+    });
+
+    // メニュー内クリックは外側クリック判定に伝搬させない
+    this.menuEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    // 画面外クリックでメニューを閉じる
+    document.addEventListener('click', () => {
+      this.closeMenu();
+    });
+
     // 接続ボタン
     this.connectBtnEl.addEventListener('click', () => {
-      const value = this.inputEl.value.trim();
+      const value = this.slugInputEl.value.trim();
       if (value) {
+        this.closeMenu();
         this.onConnect(value);
       }
     });
 
     // キーボード Enter での接続
-    this.inputEl.addEventListener('keydown', (e) => {
+    this.slugInputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        const value = this.inputEl.value.trim();
+        const value = this.slugInputEl.value.trim();
         if (value) {
+          this.closeMenu();
           this.onConnect(value);
-          this.closeDropdown();
         }
       }
     });
 
-    // 矢印ボタンでのドロップダウン開閉
-    this.arrowEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleDropdown();
-    });
-
-    // インプットフォーカス時にもし履歴があればドロップダウンを開く
-    this.inputEl.addEventListener('focus', () => {
-      if (this.history.length > 0) {
-        this.openDropdown();
+    // 招待リンクコピー
+    const copyLinkItem = this.menuEl.querySelector('.menu-item-copy-link') as HTMLDivElement;
+    copyLinkItem.addEventListener('click', async () => {
+      if (!this.currentSlug) return;
+      const url = window.location.origin + window.location.pathname + '?c=' + this.currentSlug;
+      try {
+        await navigator.clipboard.writeText(url);
+        const originalText = this.copyLinkTextEl.textContent;
+        this.copyLinkTextEl.textContent = 'コピーしました！';
+        setTimeout(() => {
+          this.copyLinkTextEl.textContent = originalText;
+        }, 2000);
+      } catch (e) {
+        console.error('Failed to copy community link', e);
       }
     });
 
-    // 画面外クリックでドロップダウンを閉じる
-    document.addEventListener('click', () => {
-      this.closeDropdown();
+    // 切断
+    const disconnectItem = this.menuEl.querySelector('.menu-item-disconnect') as HTMLDivElement;
+    disconnectItem.addEventListener('click', () => {
+      this.closeMenu();
+      this.onDisconnect();
+    });
+
+    // 退会
+    const leaveItem = this.menuEl.querySelector('.menu-item-leave') as HTMLDivElement;
+    leaveItem.addEventListener('click', () => {
+      if (confirm('本当にこのコミュニティから退会しますか？\n自分が参加していたチャット履歴はすべて削除され、参加履歴からも削除されます。')) {
+        this.closeMenu();
+        this.onLeave();
+      }
     });
   }
 
-  /**
-   * ドロップダウンの描画
-   */
-  renderDropdown(): void {
-    this.dropdownEl.innerHTML = '';
-    
+  private renderHistory(): void {
+    this.historyListEl.innerHTML = '';
+
     if (this.history.length === 0) {
-      this.dropdownEl.innerHTML = '<div class="dropdown-item" style="color:var(--color-text-muted); cursor:default;">履歴がありません</div>';
+      this.historyListEl.innerHTML = '<div class="history-empty">履歴がありません</div>';
       return;
     }
 
     this.history.forEach((item) => {
       const itemEl = document.createElement('div');
-      itemEl.className = 'dropdown-item';
-      itemEl.style.display = 'flex';
-      itemEl.style.justifyContent = 'space-between';
-      itemEl.style.alignItems = 'center';
-      
+      itemEl.className = 'history-item';
       itemEl.innerHTML = `
-        <span class="item-slug" style="font-weight:500;">${item.slug}</span>
-        <button class="btn-delete-history" style="background:transparent; border:none; cursor:pointer; color:var(--color-text-muted); padding:4px;" title="履歴から削除">
+        <span class="history-item-slug">${item.slug}</span>
+        <button class="btn-delete-history" title="履歴から削除">
           <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
         </button>
       `;
-      
-      // クリック時に選択状態をセットするのみ（即時接続はしない）
+
+      // 履歴クリックで即接続
       itemEl.addEventListener('click', (e) => {
         if ((e.target as HTMLElement).closest('.btn-delete-history')) {
-          return; // ごみ箱ボタンのクリックは下で処理
+          return;
         }
-        e.stopPropagation();
-        this.inputEl.value = item.slug;
-        this.closeDropdown();
+        this.closeMenu();
+        this.onConnect(item.slug);
       });
 
       const deleteBtn = itemEl.querySelector('.btn-delete-history') as HTMLButtonElement;
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.removeFromHistory(item.slug);
-        });
-      }
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeFromHistory(item.slug);
+      });
 
-      this.dropdownEl.appendChild(itemEl);
+      this.historyListEl.appendChild(itemEl);
     });
   }
 
-  private toggleDropdown(): void {
-    this.dropdownEl.classList.toggle('show');
+  private openMenu(): void {
+    this.renderHistory();
+    this.menuEl.classList.add('show');
+    if (!this.currentSlug) {
+      this.slugInputEl.focus();
+    }
   }
 
-  private openDropdown(): void {
-    this.renderDropdown();
-    this.dropdownEl.classList.add('show');
-  }
-
-  private closeDropdown(): void {
-    this.dropdownEl.classList.remove('show');
+  private closeMenu(): void {
+    this.menuEl.classList.remove('show');
   }
 
   /**
    * UIの接続状態を更新
-   * @param connected 接続しているかどうか
-   * @param activeSlug 接続中のコミュニティスラッグ
    */
   updateConnectionState(isConnected: boolean, currentSlug?: string): void {
     if (isConnected && currentSlug) {
-      this.inputEl.value = currentSlug;
-      this.inputEl.readOnly = true;
-      this.inputEl.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-      this.arrowEl.style.display = 'none';
-      this.connectBtnEl.style.display = 'none';
-      if (this.disconnectBtnEl) this.disconnectBtnEl.style.display = 'block';
+      this.currentSlug = currentSlug;
+      this.pillNameEl.textContent = currentSlug;
+      this.connectedSectionEl.style.display = 'block';
     } else {
-      this.inputEl.value = '';
-      this.inputEl.readOnly = false;
-      this.inputEl.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
-      this.arrowEl.style.display = 'flex';
-      this.connectBtnEl.style.display = 'block';
-      if (this.disconnectBtnEl) this.disconnectBtnEl.style.display = 'none';
+      this.currentSlug = null;
+      this.pillNameEl.textContent = '未接続';
+      this.connectedSectionEl.style.display = 'none';
+      this.slugInputEl.value = '';
     }
   }
 }

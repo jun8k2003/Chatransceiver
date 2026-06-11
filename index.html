@@ -7,7 +7,6 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" href="/chatora.png" />
     <link rel="apple-touch-icon" href="/chatora.png" />
-    <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#111827" />
     <script>
       // 動的な高さを計算して--vhカスタムプロパティに設定する
@@ -24,127 +23,136 @@
     <!-- 1. ログイン画面 (Full Screen Overlay) -->
     <div id="loginScreen" class="login-screen">
       <div class="login-card">
-        <h1 class="login-logo" style="display: flex; align-items: center; justify-content: center; gap: 12px;">
-          <img src="/chatora.png" alt="Logo" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover;">
+        <h1 class="login-logo">
+          <img src="/chatora.png" alt="Logo" class="login-logo-img">
           Chatransceiver
         </h1>
         <p class="login-subtitle">文字起こし付きトランシーバーアプリ</p>
-        
+
         <!-- 認証用入力フォーム -->
-        <div class="login-form-container" style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 20px;">
-          <button id="btnAuthGoogle" class="btn-mock-login" style="background-color: #ffffff; color: #444; border: 1px solid #ddd; border-radius: 8px; padding: 12px 24px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 300px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s ease;">
+        <div class="login-form-container">
+          <button id="btnAuthGoogle" class="btn-google-login">
             <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/><path d="M1 1h22v22H1z" fill="none"/></svg>
             Google でログイン
           </button>
-          <div id="authErrorMessage" style="color: var(--color-danger); font-size: 12px; margin-top: 12px; text-align: center; display: none; line-height: 1.4;"></div>
+          <div id="authErrorMessage" class="auth-error-message"></div>
         </div>
-        
-        <div style="margin-top: 24px; font-size: 11px; color: var(--color-text-muted); text-align: center; line-height: 1.5; background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+
+        <div class="login-notice">
           <strong>【注意事項】</strong><br>
           このアプリはPoCです。通信内容は暗号化されますが、保存データは暗号化されませんので機密情報は発信しないでください。
         </div>
       </div>
     </div>
 
-    <!-- 2. アプリケーションヘッダー (最上部接続コントロール) (DEC-017) -->
+    <!-- 2. アプリケーションヘッダー (ブランド + コミュニティ名ピル + ユーザー) -->
     <header class="app-header">
-      <div class="brand" style="display: flex; align-items: center; gap: 8px;">
-        <img src="/chatora.png" alt="Logo" style="width: 24px; height: 24px; border-radius: 4px; object-fit: cover;"> Chatransceiver
+      <div class="brand">
+        <img src="/chatora.png" alt="Logo" class="brand-logo"><span class="brand-label">Chatransceiver</span>
       </div>
 
-      <!-- コミュニティ接続コントロール (編集可能コンボボックス) -->
+      <!-- コミュニティ名ピル: クリックでドロップダウンメニュー (DEC-024) -->
       <div id="communityConnector" class="community-connector">
-        <div class="combobox-container">
-          <input type="text" class="combobox-input" placeholder="コミュニティID (英数字) を入力..." />
-          <span class="combobox-arrow">▼</span>
-          <div class="combobox-dropdown">
-            <!-- JavaScript で入室履歴を動的レンダリング -->
+        <button class="community-pill">
+          <span class="community-pill-name">未接続</span>
+          <span class="community-pill-arrow">▼</span>
+        </button>
+        <div class="community-menu">
+          <div class="menu-section menu-connect-section">
+            <div class="menu-label">コミュニティに接続</div>
+            <input type="text" class="community-slug-input" placeholder="コミュニティID (英数字) を入力..." />
+            <button class="btn-connect">接続する</button>
+          </div>
+          <div class="menu-section menu-history-section">
+            <div class="menu-label">入室履歴</div>
+            <div class="community-history-list">
+              <!-- JavaScript で入室履歴を動的レンダリング -->
+            </div>
+          </div>
+          <div class="menu-section menu-connected-section">
+            <div class="menu-item menu-item-copy-link">
+              🔗 <span class="copy-link-text">招待リンクをコピー</span>
+            </div>
+            <div class="menu-item menu-item-disconnect">⏏ 切断する</div>
+            <div class="menu-item menu-item-leave danger">🚪 コミュニティから退会</div>
           </div>
         </div>
-        <button class="btn-connect">接続する</button>
-        <button class="btn-disconnect" title="現在のコミュニティから一時的に切断します">切断</button>
       </div>
 
       <!-- ユーザープロフィール (ニックネーム表示) -->
       <div class="user-profile">
-        <span>👤</span>
+        <span class="user-profile-icon">👤</span>
         <span id="userNickname" class="user-nickname">-</span>
         <button class="btn-settings" title="設定">⚙️</button>
       </div>
     </header>
 
-    <!-- 3. メインレイアウト (2カラム・上下分割構成) -->
+    <!-- 3. メインレイアウト (統合リスト + チャット) (DEC-024) -->
     <main class="app-container">
-      
-      <!-- 左サイドバー (上下分割) -->
+
+      <!-- 統合サイドバー (個別チャット + グループチャットの1リスト) -->
       <aside class="sidebar" id="appSidebar">
-        <!-- モバイル用 チャット画面へ遷移するヘッダー -->
-        <div id="mobileSidebarHeader" class="mobile-sidebar-header">
-          <div style="flex: 1;"></div>
-          <button id="btnMobileGoToChat" class="btn-mobile-nav" disabled>チャット →</button>
+        <div class="sidebar-toolbar">
+          <button class="filter-chip active" data-filter="all">すべて</button>
+          <button class="filter-chip" data-filter="user">個別</button>
+          <button class="filter-chip" data-filter="group">グループ</button>
+          <span class="toolbar-spacer"></span>
+          <input type="text" id="chatListSearchInput" class="chat-list-search" placeholder="検索...">
+          <button id="btnChatListSearch" class="btn-icon" title="検索">🔍</button>
         </div>
 
-        <!-- 左上ペイン: 個別チャット一覧 (ユーザー一覧) -->
-        <section id="userPane" class="pane user-pane">
-          <div class="pane-header" style="display: flex; justify-content: space-between; align-items: center;">
-            <h2 class="pane-title">個別チャット</h2>
-            <div id="userSearchContainer" style="display: flex; align-items: center;">
-              <input type="text" id="userSearchInput" placeholder="検索..." style="display: none; padding: 2px 6px; font-size: 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--color-text-primary); margin-right: 4px; width: 100px; outline: none;">
-              <button id="btnUserSearch" style="background: transparent; border: none; cursor: pointer; padding: 4px; color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center;" title="検索">
-                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              </button>
-              <button id="btnUserSelectAll" style="background: #fff; border: 1px solid #000; border-radius: 4px; cursor: pointer; width: 18px; height: 18px; padding: 0; color: #000; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; margin-left: 6px;" title="すべて選択/解除">
-                全
-              </button>
-            </div>
-          </div>
-          <div class="pane-content">
-            <!-- ユーザーリストが動的に挿入されます -->
-          </div>
-        </section>
+        <div id="chatList" class="chat-list">
+          <!-- ユーザー/グループの統合リストが動的に挿入されます -->
+        </div>
 
-        <!-- 上下スプリッターバー -->
-        <div id="sidebarSplitter" class="splitter-v"></div>
+        <!-- 新規グループ作成: 選択モード時の操作バー -->
+        <div id="selectModeBar" class="select-mode-bar">
+          <span id="selectModeCount" class="select-mode-count">0人を選択中</span>
+          <button id="btnSelectModeCancel" class="btn-sm ghost">キャンセル</button>
+          <button id="btnSelectModeStart" class="btn-sm primary" disabled>開始</button>
+        </div>
 
-        <!-- 左下ペイン: グループチャット一覧 -->
-        <section id="groupPane" class="pane group-pane">
-          <div class="pane-header">
-            <h2 class="pane-title">グループチャット</h2>
-          </div>
-          <div class="pane-content">
-            <!-- グループリストが動的に挿入されます -->
-          </div>
-        </section>
+        <div class="sidebar-footer">
+          <button id="btnNewGroup" class="btn-new-group">＋ 新規グループ（メンバーを選択）</button>
+        </div>
       </aside>
 
       <!-- 左右スプリッターバー -->
       <div id="mainSplitter" class="splitter-h"></div>
 
-      <!-- 右ペイン: チャットウィンドウ -->
-      <section id="chatPane" class="pane chat-pane">
+      <!-- チャットペイン -->
+      <section id="chatPane" class="chat-pane">
         <div class="chat-header">
           <!-- モバイル用戻るボタン -->
-          <button class="btn-back-to-sidebar btn-mobile-nav" style="display: none;">← ユーザーリスト</button>
-          
+          <button class="btn-back-to-sidebar" title="リストへ戻る">←</button>
+
           <div class="chat-room-info">
-            <h3 class="chat-room-title">-</h3>
+            <div class="chat-room-title-row">
+              <h3 class="chat-room-title">-</h3>
+              <button class="btn-rename-group" title="グループ名を編集">✏️</button>
+            </div>
             <span class="chat-room-members-text">-</span>
           </div>
         </div>
-        
+
         <!-- チャット履歴タイムライン -->
         <div class="chat-messages">
           <!-- プレースホルダーまたはメッセージバブルが動的に挿入されます -->
         </div>
 
         <footer class="chat-footer">
-          <!-- 音声発話（録音）トリガーボタン -->
-          <button class="btn-talk-trigger" title="発話する">🎙️</button>
-          
-          <!-- テキストメッセージ入力エリア -->
-          <input type="text" class="chat-input" placeholder="メッセージを入力..." disabled />
-          
-          <button class="btn-send-message" disabled>➔</button>
+          <!-- 音声発話（録音）トリガーボタン: PCは左端の控えめ円形 / スマホは下段中央の大型 (DEC-024) -->
+          <div class="footer-ptt-row">
+            <button class="btn-talk-trigger" title="タップで録音開始">
+              🎙️
+              <span class="ptt-label">TALK</span>
+            </button>
+          </div>
+
+          <div class="footer-text-row">
+            <input type="text" class="chat-input" placeholder="メッセージを入力..." disabled />
+            <button class="btn-send-message" disabled>➤</button>
+          </div>
         </footer>
       </section>
 
@@ -153,164 +161,124 @@
     <!-- 4. 録音モーダルダイアログ (DEC-006 / 音量レベルメーター) -->
     <div id="recordingModal" class="modal-overlay">
       <div class="modal-content">
-        <div class="recording-status-container" style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%;">
+        <div class="recording-status-container">
           <div class="recording-status">
             <span class="status-dot"></span>
             <span id="recordingStatusText">音声録音中...</span>
-            <span id="recordingTimer" style="margin-left:10px; font-variant-numeric: tabular-nums;">00:15</span>
+            <span id="recordingTimer" class="recording-timer">00:15</span>
           </div>
-          <div style="width: 140px; height: 2px; background: rgba(255,255,255,0.1); border-radius: 1px; overflow: hidden;">
-            <div id="recordingProgressBar" style="width: 0%; height: 100%; background: var(--color-success); transition: width 0.1s linear;"></div>
+          <div class="recording-progress-track">
+            <div id="recordingProgressBar" class="recording-progress-bar"></div>
           </div>
         </div>
         <p class="recording-title">話しかけてください</p>
-        <p id="mobileDictationWarning" style="display: none; font-size: 12px; color: var(--color-text-secondary); text-align: center; margin-top: -5px; margin-bottom: 5px;">※ モバイル端末では録音または文字おこしのどちらかのみ設定してください</p>
-        <div id="recordingDictationPreview" style="margin: 10px 0; min-height: 24px; font-size: 14px; color: var(--color-text-secondary); text-align: center; word-break: break-all;"></div>
-        
+        <p id="mobileDictationWarning" class="mobile-dictation-warning">※ モバイル端末では録音または文字おこしのどちらかのみ設定してください</p>
+        <div id="recordingDictationPreview" class="recording-dictation-preview"></div>
+
         <!-- マイク入力レベルメーター -->
         <div class="meter-container">
           <!-- 20本のバーがJavaScriptで動的生成されます -->
         </div>
-        
-        <div class="recording-actions" style="display: grid; grid-template-columns: 3fr 2fr; gap: 12px; width: 100%;">
-          <button class="btn-modal btn-modal-stop" style="background-color: var(--color-danger); color: white;">停止</button>
-          <button class="btn-modal btn-modal-preview" style="background-color: var(--color-accent); color: white;" disabled>▶ プレビュー</button>
+
+        <div class="recording-actions recording-actions-grid">
+          <button class="btn-modal btn-modal-stop">停止</button>
+          <button class="btn-modal btn-modal-preview" disabled>▶ プレビュー</button>
           <button class="btn-modal btn-modal-send">送信</button>
           <button class="btn-modal btn-modal-cancel">キャンセル</button>
         </div>
       </div>
     </div>
 
-    <!-- 5. 設定モーダルダイアログ (Settings Modal) -->
+    <!-- 5. 環境設定モーダルダイアログ (個人設定のみ・セクション構成) (DEC-024) -->
     <div id="settingsModal" class="modal-overlay">
-      <div class="modal-content" style="position: relative;">
-        <button id="btnSettingsCloseTop" class="modal-close-top" aria-label="閉じる">&times;</button>
-        <p class="modal-title" style="margin-bottom: 15px;">環境設定</p>
-        
-        <div class="recording-actions" style="margin-bottom: 25px;">
-          <button class="btn-modal btn-settings-save">保存</button>
-          <button class="btn-modal btn-settings-cancel">閉じる</button>
-        </div>
-        
-        <!-- ニックネーム設定 -->
-        <div class="settings-group">
-          <label for="settingsNickname">ニックネーム</label>
-          <input type="text" id="settingsNickname" class="mock-input" placeholder="ニックネームを入力..." />
-        </div>
-        
-        <!-- 音声自動再生設定 -->
-        <div class="settings-group" style="margin-top: 10px; width: 100%;">
-          <label class="checkbox-wrapper">
-            <input type="checkbox" id="settingsAutoplay" checked />
-            <span class="checkbox-custom"></span>
-            <span class="checkbox-label" style="margin-left: 10px; font-size: 14px;">音声新着時の自動再生を有効にする</span>
-          </label>
+      <div class="settings-modal">
+        <div class="settings-header">
+          <span class="settings-title">⚙️ 環境設定</span>
+          <button id="btnSettingsCloseTop" class="btn-icon" aria-label="閉じる">✕</button>
         </div>
 
-        <!-- コールサインフォン設定 -->
-        <div class="settings-group" style="margin-top: 10px; width: 100%;">
-          <label class="checkbox-wrapper">
-            <input type="checkbox" id="settingsCallSignOff" />
-            <span class="checkbox-custom"></span>
-            <span class="checkbox-label" style="margin-left: 10px; font-size: 14px;">疑似コールサインフォンをOFFにする</span>
-          </label>
-        </div>
-        
-        <!-- テーマ設定 -->
-        <div class="settings-group" style="margin-top: 15px; width: 100%;">
-          <label for="settingsTheme" style="margin-bottom: 8px; display: block;">カラーテーマ</label>
-          <select id="settingsTheme" class="mock-input" style="cursor: pointer;">
-            <option value="dark">ダークモード (標準)</option>
-            <option value="light">ライトモード</option>
-          </select>
-        </div>
-
-        <!-- 録音設定 -->
-        <div class="settings-group" style="margin-top: 15px; width: 100%;">
-          <label for="settingsRecordMode" style="margin-bottom: 8px; display: block;">録音設定</label>
-          <select id="settingsRecordMode" class="mock-input" style="cursor: pointer;">
-            <option value="both">両方 (音声録音 ＋ 文字おこし)</option>
-            <option value="audio_only">録音のみ (音声ファイルのみ送信)</option>
-            <option value="text_only">文字おこしのみ (テキストのみ送信)</option>
-          </select>
-          <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 5px;">
-            ※ モバイルの場合は録音と文字おこしを両方動かすことができません。
-          </div>
-        </div>
-        
-        <!-- PCの場合の設定 -->
-        <fieldset style="margin-top: 20px; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 15px 15px;">
-          <legend style="font-size: 13px; font-weight: bold; color: var(--color-text-secondary); padding: 0 5px;">PCの場合の設定</legend>
-
-          <!-- マイク権限設定URLコピー (DEC-008) -->
-          <div class="settings-group" style="margin-top: 5px;">
-            <label>マイクが使えない・音声が認識されない場合</label>
-            <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">
-              ブラウザのマイク権限がブロックされている可能性があります。以下のURLをコピーして新しいタブで開き、「マイク」の許可を行ってください。
-            </div>
-            <div class="message-input-container">
-              <input type="text" id="settingsMicUrl" class="chat-input" value="chrome://settings/content/microphone" readonly />
-              <button id="btnCopyMicUrl" class="btn-send-message" style="background: var(--color-primary);" title="マイク設定URLをコピー">📋</button>
+        <div class="settings-body">
+          <div class="settings-section">
+            <div class="section-label">プロフィール</div>
+            <div class="setting-row">
+              <label for="settingsNickname">ニックネーム</label>
+              <input type="text" id="settingsNickname" class="setting-input" placeholder="ニックネームを入力..." />
             </div>
           </div>
 
-          <!-- スピーカー/音声設定URLコピー -->
-          <div class="settings-group" style="margin-top: 15px;">
-            <label>相手の声が聞こえない・自動再生されない場合</label>
-            <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">
-              ブラウザの音声再生（スピーカー）がミュートされている可能性があります。以下のURLをコピーして新しいタブで開き、「音声」の許可を行ってください。
+          <div class="settings-section">
+            <div class="section-label">再生と録音</div>
+            <div class="setting-row">
+              <div class="setting-label-area">新着メッセージの自動再生</div>
+              <label class="toggle"><input type="checkbox" id="settingsAutoplay" checked /><span class="toggle-track"></span></label>
             </div>
-            <div class="message-input-container">
-              <input type="text" id="settingsSoundUrl" class="chat-input" value="chrome://settings/content/sound" readonly />
-              <button id="btnCopySoundUrl" class="btn-send-message" style="background: var(--color-primary);" title="音声設定URLをコピー">📋</button>
+            <div class="setting-row">
+              <div class="setting-label-area">疑似コールサイン音<div class="setting-desc">再生の前後に効果音を鳴らします</div></div>
+              <label class="toggle"><input type="checkbox" id="settingsCallSign" checked /><span class="toggle-track"></span></label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label-area">録音モード<div class="setting-desc">※ モバイルでは録音と文字おこしの併用不可</div></div>
+              <select id="settingsRecordMode" class="setting-input">
+                <option value="both">両方 (音声 ＋ 文字おこし)</option>
+                <option value="audio_only">録音のみ</option>
+                <option value="text_only">文字おこしのみ</option>
+              </select>
             </div>
           </div>
-        </fieldset>
-        
-        <!-- プッシュ通知設定 -->
-        <div class="settings-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">
-          <label>プッシュ通知設定</label>
-          <div id="fcmNotSupportedMsg" style="font-size: 12px; color: var(--color-danger); margin-bottom: 10px; display: none;">
-            お使いの端末（iOS等）またはブラウザは、プッシュ通知の登録に非対応です。
+
+          <div class="settings-section">
+            <div class="section-label">外観</div>
+            <div class="setting-row">
+              <label for="settingsTheme">カラーテーマ</label>
+              <select id="settingsTheme" class="setting-input">
+                <option value="dark">ダークモード (標準)</option>
+                <option value="light">ライトモード</option>
+              </select>
+            </div>
           </div>
-          <div id="fcmButtonsContainer" style="display: flex; gap: 10px; margin-top: 10px;">
-            <button id="btnRegisterNotification" class="btn-modal" style="background-color: var(--color-accent); color: white; flex: 1;">通知を登録する</button>
-            <button id="btnUnregisterNotification" class="btn-modal" style="background-color: rgba(239, 68, 68, 0.1); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.3); flex: 1; display: none;">通知を解除する</button>
+
+          <div class="settings-section">
+            <div class="section-label">通知</div>
+            <div id="fcmNotSupportedMsg" class="setting-desc danger-text">
+              お使いの端末（iOS等）またはブラウザは、プッシュ通知の登録に非対応です。
+            </div>
+            <div id="fcmToggleRow" class="setting-row">
+              <div class="setting-label-area">プッシュ通知<div class="setting-desc">バックグラウンドでも新着を受け取ります</div></div>
+              <label class="toggle"><input type="checkbox" id="settingsFcmToggle" /><span class="toggle-track"></span></label>
+            </div>
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">Discord Webhook URL（オプション）<div class="setting-desc">iOS等のプッシュ通知代替。個人用Webhookを使用し、他人と共有しないでください</div></div>
+              <input type="text" id="settingsDiscordWebhook" class="setting-input wide" placeholder="https://discord.com/api/webhooks/..." />
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <details>
+              <summary>🔧 マイク・音声のトラブルシューティング（PC）</summary>
+              <div class="setting-desc">マイクや自動再生がブロックされている場合、以下のURLをコピーして新しいタブで開き、許可を行ってください。</div>
+              <div class="copy-row">
+                <input type="text" id="settingsMicUrl" class="setting-input" value="chrome://settings/content/microphone" readonly />
+                <button id="btnCopyMicUrl" class="btn-copy" title="マイク設定URLをコピー">📋</button>
+              </div>
+              <div class="copy-row">
+                <input type="text" id="settingsSoundUrl" class="setting-input" value="chrome://settings/content/sound" readonly />
+                <button id="btnCopySoundUrl" class="btn-copy" title="音声設定URLをコピー">📋</button>
+              </div>
+            </details>
+          </div>
+
+          <div class="settings-footnote">
+            <p class="build-info">Build: <span id="appBuildNumber">-</span> (<span id="appBuildTime">-</span>)</p>
+            <button id="btnReloadApp" class="btn-copy">🔄 アプリを再読み込み（最新化）</button>
+            <div class="logout-row">
+              <button id="btnSignOut" class="link-danger">アカウントからログアウトする</button>
+            </div>
           </div>
         </div>
 
-        <!-- Discord Webhook 通知設定 -->
-        <div class="settings-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color);">
-          <label for="settingsDiscordWebhook">Discord Webhook URL (オプション)</label>
-          <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 5px;">
-            iOS等のプッシュ通知の代替として利用できます。DiscordのWebhook URLを入力すると、新着メッセージが指定したチャンネルに通知されます。Webhookは個人用のものを作成して使用してください。他人と共有しないようにしてください。
-          </div>
-          <input type="text" id="settingsDiscordWebhook" class="mock-input" placeholder="https://discord.com/api/webhooks/..." />
-        </div>
-        
-        <div id="settingsLeaveContainer" style="margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border-color); display: none; width: 100%; text-align: center;">
-          <p style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 12px;">現在参加中のコミュニティ: <br><strong id="settingsCurrentCommunityName" style="color: var(--color-text-primary); font-size: 15px;">-</strong></p>
-          
-          <button id="btnCopyCommunityLink" class="btn-modal" style="background: rgba(56, 189, 248, 0.1); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); margin-bottom: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            <span id="btnCopyCommunityLinkText">コミュニティリンクをコピー</span>
-          </button>
-          
-          <button id="btnSettingsLeave" class="btn-modal" style="background: rgba(239, 68, 68, 0.1); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.3);">コミュニティから退会</button>
-        </div>
-        
-        <div style="margin-top: 20px; text-align: center;">
-          <p style="font-size: 11px; color: var(--color-text-muted); margin-bottom: 8px;">
-            Build: <span id="appBuildNumber">-</span> (<span id="appBuildTime">-</span>)
-          </p>
-          <button id="btnReloadApp" style="background: transparent; border: 1px solid var(--border-color); color: var(--color-text-primary); cursor: pointer; font-size: 13px; padding: 6px 12px; border-radius: 4px; margin-bottom: 15px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path></svg>
-            アプリを再読み込み（最新化）
-          </button><br>
-          <button id="btnSignOut" style="background: transparent; border: none; color: var(--color-danger); text-decoration: underline; cursor: pointer; font-size: 13px;">アカウントからログアウトする</button>
+        <div class="settings-footer">
+          <button class="btn-sm ghost btn-settings-cancel">閉じる</button>
+          <button class="btn-sm primary btn-settings-save">保存</button>
         </div>
       </div>
     </div>
@@ -320,26 +288,21 @@
       <div class="modal-content">
         <button id="btnStandbyClose" class="btn-modal-close" title="閉じる">×</button>
         <h3 class="modal-title">バックグラウンド待機</h3>
-        
+
         <div class="settings-group">
-          <p style="font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; margin-bottom: 15px;">
+          <p class="standby-description">
             この機能を使うと、画面をロックしたり別のアプリを開いていても、Bluetoothイヤホンのボタン等から発話（PTT）を開始できるようになります。
           </p>
-          <div style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; padding: 10px; margin-bottom: 20px;">
-            <p style="font-size: 12px; color: #f59e0b; margin: 0; line-height: 1.4;">
+          <div class="standby-warning">
+            <p>
               <strong>仕組みと注意点:</strong><br>
               OSによってアプリが停止されるのを防ぐため、背後で極小音量（耳には聞こえません）のノイズをループ再生し、<strong>音楽プレーヤーのように振る舞います</strong>。<br>
               そのため、待機中は通常より<strong>スマートフォンの電池を消耗します</strong>。使用が終わったら必ず待機を解除してください。
             </p>
           </div>
-          
-          <button id="btnStartStandby" class="btn-modal" style="margin-bottom: 10px; background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">
-            待ち受け開始
-          </button>
-          
-          <button id="btnStopStandby" class="btn-modal" style="display: none; background: rgba(239, 68, 68, 0.1); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.3);">
-            待ち受けを停止
-          </button>
+
+          <button id="btnStartStandby" class="btn-modal btn-standby-start">待ち受け開始</button>
+          <button id="btnStopStandby" class="btn-modal btn-standby-stop">待ち受けを停止</button>
         </div>
       </div>
     </div>

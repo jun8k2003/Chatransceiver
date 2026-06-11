@@ -67,10 +67,12 @@ export class App {
       (slug: string) => this.handleConnectCommunity(slug),
       () => this.handleDisconnectCommunity(),
       () => this.handleLeaveCommunity(),
-      (userIds: string[]) => this.handleUserCheckChange(userIds),
+      (userId: string) => this.handleOpenUser(userId),
+      (groupId: string) => this.handleOpenGroup(groupId),
+      (userIds: string[]) => this.handleCreateGroup(userIds),
       (userId: string, userName: string) => this.handleUserChatClear(userId, userName),
-      (groupId: string | null) => this.handleGroupSelect(groupId),
       (groupId: string, groupName: string) => this.handleGroupDelete(groupId, groupName),
+      (newName: string) => this.handleRenameGroup(newName),
       (text: string) => this.handleSendText(text),
       () => this.handleStartTalk(),
       () => this.handleStopTalk(),
@@ -80,7 +82,6 @@ export class App {
       (msgId: string) => this.handlePlayMessage(msgId),
       () => this.audioManager.stopAllPlayback(),
       (msgId: string) => this.handleRevokeMessage(msgId),
-      () => this.handleMobileGoToChat(),
       () => this.handleSignInWithGoogle(),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
@@ -452,6 +453,54 @@ export class App {
     // UIに退出した履歴削除を通知
     if (slug) {
       this.uiController.handleCommunityLeave(slug);
+    }
+  }
+
+  /**
+   * 統合リスト: 個別チャットを開く (タップで即オープン) (DEC-024)
+   */
+  private async handleOpenUser(userId: string): Promise<void> {
+    this.state.mobileChatForceOpen = true;
+    await this.handleUserCheckChange([userId]);
+  }
+
+  /**
+   * 統合リスト: グループチャットを開く (タップで即オープン) (DEC-024)
+   */
+  private async handleOpenGroup(groupId: string): Promise<void> {
+    this.state.mobileChatForceOpen = true;
+    await this.handleGroupSelect(groupId);
+  }
+
+  /**
+   * 統合リスト: 複数メンバー選択からの新規グループ開始 (DEC-024)
+   * 既存グループとメンバー構成が一致すればそれを開き、無ければ新規作成プレースホルダーへ
+   */
+  private async handleCreateGroup(userIds: string[]): Promise<void> {
+    this.state.mobileChatForceOpen = true;
+    await this.handleUserCheckChange(userIds);
+  }
+
+  /**
+   * グループ名（表示上のあだ名）の変更 (DEC-023)
+   */
+  private async handleRenameGroup(newName: string): Promise<void> {
+    const roomId = this.state.activeChatHistoryId;
+    if (!roomId) return;
+
+    try {
+      await this.supabaseService.updateRoomName(roomId, newName);
+
+      // ローカル状態へ即時反映
+      const group = this.state.groups.find(g => g.id === roomId);
+      if (group) {
+        group.customName = newName.trim() || undefined;
+        group.name = group.customName || group.memberNames;
+      }
+      this.updateUI();
+    } catch (e) {
+      console.error('Failed to rename group:', e);
+      alert('グループ名の変更に失敗しました。');
     }
   }
 
@@ -933,14 +982,6 @@ export class App {
     } catch (e) {
       console.error(e);
     }
-  }
-
-  /**
-   * モバイル用: 手動でチャットペインへスライドする
-   */
-  private handleMobileGoToChat(): void {
-    this.state.mobileChatForceOpen = true;
-    this.updateUI();
   }
 
   /**
