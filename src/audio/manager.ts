@@ -12,9 +12,19 @@ export class AudioManager {
   private micStream: MediaStream | null = null;
   private levelIntervalId: number | null = null;
   
-  private recognition: any = null; // SpeechRecognition
+  private recognition: any = null; // SpeechRecognition (録音時文字おこし用)
   private isRecognitionActive: boolean = false;
   private activeAudioElement: HTMLAudioElement | null = null;
+
+  // ウェイクワード監視用 SpeechRecognition (TTT モード専用)
+  private wakeRecognition: any = null;
+  private wakeListening: boolean = false;
+  private wakeWordRegex: RegExp | null = null;
+  private wakeMatchCallback: (() => void) | null = null;
+  private wakeTextCallback: ((text: string) => void) | null = null;
+  private wakeFatalCallback: ((reason: string) => void) | null = null;
+  private wakeRestartTimerId: number | null = null;
+  private wakeConsecutiveErrors: number = 0;
 
   constructor() {
     this.initSpeechRecognition();
@@ -353,6 +363,157 @@ export class AudioManager {
         }
       }
     });
+  }
+
+  /**
+   * TTT ウェイクワード監視の開始
+   * continuous SpeechRecognition でテキストを常時監視し、正規表現ヒット時にコールバックを呼ぶ
+   *
+   * Android Chrome では continuous 指定でも発話・無音のたびに認識が頻繁に終了するため、
+   * onend からの遅延再起動でループを維持する。終了直後の start() は InvalidStateError を
+   * 投げることがあるため、同期再起動ではなくタイマー経由でリトライする。
+   *
+   * @param onFatalError 回復不能なエラー (権限剥奪・連続失敗) で監視を断念した時に呼ばれる
+   */
+  startWakeWordListening(
+    regex: RegExp,
+    onMatch: () => void,
+    onTextUpdate: (text: string) => void,
+    onFatalError?: (reason: string) => void
+  ): void {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn('SpeechRecognition はサポートされていません。');
+      onFatalError?.('unsupported');
+      return;
+    }
+
+    // 二重起動防止: 既存の監視があれば先に破棄する (バックグラウンド復帰時の再開で重要)
+    this.stopWakeWordListening();
+
+    this.wakeWordRegex = regex;
+    this.wakeMatchCallback = onMatch;
+    this.wakeTextCallback = onTextUpdate;
+    this.wakeFatalCallback = onFatalError || null;
+    this.wakeListening = true;
+    this.wakeConsecutiveErrors = 0;
+
+    this.wakeRecognition = new SpeechRecognition();
+    this.wakeRecognition.continuous = true;
+    this.wakeRecognition.interimResults = true;
+    this.wakeRecognition.lang = 'ja-JP';
+
+    this.wakeRecognition.onresult = (event: any) => {
+      // 認識が機能している間はエラーカウンタをリセット
+      this.wakeConsecutiveErrors = 0;
+
+      // 最新の認識セグメントを取得
+      // (Android では interim が届かず final のみ通知される端末があるが、いずれも onresult に乗る)
+      let recent = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        recent += event.results[i][0].transcript;
+      }
+      this.wakeTextCallback?.(recent);
+
+      if (this.wakeWordRegex?.test(recent)) {
+        // ヒット: 監視を即時停止してコールバック
+        // stop() ではなく abort() を使う。Android は stop() だとマイク解放が遅く、
+        // 直後の録音開始 (getUserMedia) と競合するため。
+        this.wakeListening = false;
+        try { this.wakeRecognition?.abort(); } catch (_) {
+          try { this.wakeRecognition?.stop(); } catch (_) {}
+        }
+        this.wakeMatchCallback?.();
+      }
+    };
+
+    this.wakeRecognition.onerror = (event: any) => {
+      // no-speech: 無音タイムアウト (Android では数秒おきに頻発する正常系) / aborted: 自前の停止
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
+
+      // 権限系のエラーは再起動しても回復しないため即座に断念する
+      // (再起動ループを続けると Android では開始音が鳴り続ける)
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        console.warn('Wake word recognition permission error:', event.error);
+        this.failWakeWordListening(event.error);
+        return;
+      }
+
+      // network / audio-capture 等は一時障害の可能性があるためカウントして再起動に委ねる
+      console.warn('Wake word recognition error:', event.error);
+      this.wakeConsecutiveErrors++;
+      if (this.wakeConsecutiveErrors >= 5) {
+        this.failWakeWordListening(event.error);
+      }
+    };
+
+    this.wakeRecognition.onend = () => {
+      if (this.wakeListening) {
+        // Android は発話のたびに認識が終了する。マイク解放を待ってから遅延再起動する
+        this.scheduleWakeRestart();
+      }
+    };
+
+    try {
+      this.wakeRecognition.start();
+    } catch (e) {
+      // 初回起動失敗 (まれに前セッションの解放待ち) はリトライに回す
+      console.warn('Failed to start wake word recognition, retrying:', e);
+      this.scheduleWakeRestart();
+    }
+  }
+
+  /**
+   * ウェイクワード認識の遅延再起動 (Android の頻繁な onend に対応)
+   */
+  private scheduleWakeRestart(): void {
+    if (!this.wakeListening || this.wakeRestartTimerId !== null) return;
+    this.wakeRestartTimerId = window.setTimeout(() => {
+      this.wakeRestartTimerId = null;
+      if (!this.wakeListening || !this.wakeRecognition) return;
+      try {
+        this.wakeRecognition.start();
+      } catch (e) {
+        // start() が InvalidStateError 等を投げた場合はリトライ。連続失敗は断念する
+        this.wakeConsecutiveErrors++;
+        if (this.wakeConsecutiveErrors >= 5) {
+          this.failWakeWordListening('restart-failed');
+        } else {
+          this.scheduleWakeRestart();
+        }
+      }
+    }, 300);
+  }
+
+  /**
+   * 回復不能エラーによる監視の断念 (権限剥奪・連続失敗)
+   */
+  private failWakeWordListening(reason: string): void {
+    const callback = this.wakeFatalCallback;
+    this.stopWakeWordListening();
+    callback?.(reason);
+  }
+
+  /**
+   * TTT ウェイクワード監視の停止
+   */
+  stopWakeWordListening(): void {
+    this.wakeListening = false;
+    this.wakeWordRegex = null;
+    this.wakeMatchCallback = null;
+    this.wakeTextCallback = null;
+    this.wakeFatalCallback = null;
+    this.wakeConsecutiveErrors = 0;
+    if (this.wakeRestartTimerId !== null) {
+      clearTimeout(this.wakeRestartTimerId);
+      this.wakeRestartTimerId = null;
+    }
+    if (this.wakeRecognition) {
+      try { this.wakeRecognition.abort(); } catch (_) {
+        try { this.wakeRecognition.stop(); } catch (_) {}
+      }
+      this.wakeRecognition = null;
+    }
   }
 
   /**

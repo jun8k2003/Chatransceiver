@@ -27,6 +27,8 @@ export interface UIState {
   callSignEnabled: boolean;
   isLoading: boolean;
   loadingMessage?: string;
+  isTTTMode: boolean;
+  tttWakeWord: string;
 }
 
 /**
@@ -65,6 +67,14 @@ export class UIController {
   // メディアボタンPTT トグルボタン (DEC-027)
   private btnMediaPtt: HTMLButtonElement | null;
 
+  // TTT (TalkToTalk) ウェイクワード待機トグル (DEC-028)
+  private tttToggleInput: HTMLInputElement | null = null;
+  private tttToggleLabel: HTMLLabelElement | null = null;
+  private tttWakeOverlayEl: HTMLDivElement | null = null;
+  private tttWakeTextEl: HTMLSpanElement | null = null;
+  private settingsWakeWordInput: HTMLInputElement | null = null;
+  private settingsWakeWordErrorEl: HTMLDivElement | null = null;
+
   constructor(
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
@@ -88,11 +98,12 @@ export class UIController {
     onSignInWithMagicLink: (email: string) => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => void,
+    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>,
     onToggleWakeLock: () => Promise<boolean>,
-    onToggleMediaPtt: () => Promise<boolean>
+    onToggleMediaPtt: () => Promise<boolean>,
+    onToggleTTT: () => void
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -260,12 +271,26 @@ export class UIController {
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
       const callSignEnabled = this.settingsCallSignCheck.checked;
       const discordWebhookUrl = this.settingsDiscordWebhookInput.value.trim();
-      if (newNickname) {
-        onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl);
-        this.settingsModalEl.classList.remove('show');
-      } else {
+      const wakeWord = this.settingsWakeWordInput?.value.trim() || '';
+
+      if (!newNickname) {
         alert('ニックネームを入力してください。');
+        return;
       }
+
+      // ウェイクワード正規表現バリデーション
+      if (wakeWord) {
+        try {
+          new RegExp(wakeWord);
+          if (this.settingsWakeWordErrorEl) this.settingsWakeWordErrorEl.textContent = '';
+        } catch (e) {
+          if (this.settingsWakeWordErrorEl) this.settingsWakeWordErrorEl.textContent = '正規表現が無効です。';
+          return;
+        }
+      }
+
+      onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, wakeWord);
+      this.settingsModalEl.classList.remove('show');
     });
 
     // マイク権限URLコピーボタン (DEC-008)
@@ -342,6 +367,20 @@ export class UIController {
         }
       });
     }
+
+    // TTT (TalkToTalk) ウェイクワード待機トグル (DEC-028)
+    this.tttToggleInput = document.getElementById('tttToggleInput') as HTMLInputElement | null;
+    this.tttToggleLabel = document.getElementById('tttToggle') as HTMLLabelElement | null;
+    this.tttWakeOverlayEl = document.getElementById('tttWakeOverlay') as HTMLDivElement | null;
+    this.tttWakeTextEl = document.getElementById('tttWakeText') as HTMLSpanElement | null;
+    this.settingsWakeWordInput = document.getElementById('settingsWakeWord') as HTMLInputElement | null;
+    this.settingsWakeWordErrorEl = document.getElementById('settingsWakeWordError') as HTMLDivElement | null;
+
+    if (this.tttToggleInput) {
+      this.tttToggleInput.addEventListener('change', () => {
+        onToggleTTT();
+      });
+    }
   }
 
   /**
@@ -399,6 +438,20 @@ export class UIController {
 
       if (document.activeElement !== this.settingsDiscordWebhookInput) {
         this.settingsDiscordWebhookInput.value = state.currentUser?.discord_webhook_url || '';
+      }
+
+      // TTT ウェイクワード設定の同期
+      if (this.settingsWakeWordInput && document.activeElement !== this.settingsWakeWordInput) {
+        this.settingsWakeWordInput.value = state.tttWakeWord || '';
+      }
+
+      // TTT トグルの状態同期（録音中はロック）
+      if (this.tttToggleInput) {
+        this.tttToggleInput.checked = state.isTTTMode;
+        this.tttToggleInput.disabled = state.isRecording;
+      }
+      if (this.tttToggleLabel) {
+        this.tttToggleLabel.classList.toggle('listening', state.isTTTMode);
       }
 
       // FCM UIの制御
@@ -517,6 +570,34 @@ export class UIController {
   updateDictationPreview(text: string): void { this.chatWindow.updateDictationPreview(text); }
   hideRecordingStopButton(): void { this.chatWindow.hideStopButton(); }
   showMicError(siteUrl: string): void { this.chatWindow.showMicError(siteUrl); }
+
+  /** TTT トグルの ON/OFF をUIに反映する (DEC-028) */
+  updateTTTState(isActive: boolean): void {
+    if (this.tttToggleInput) this.tttToggleInput.checked = isActive;
+    if (this.tttToggleLabel) this.tttToggleLabel.classList.toggle('listening', isActive);
+    if (!isActive) this.updateTTTWakeText('');
+  }
+
+  /** ウェイクワード認識中テキストをオーバーレイに表示する (DEC-028) */
+  updateTTTWakeText(text: string): void {
+    if (!this.tttWakeTextEl || !this.tttWakeOverlayEl) return;
+    this.tttWakeTextEl.textContent = text;
+    this.tttWakeOverlayEl.classList.toggle('visible', text.length > 0);
+  }
+
+  /** ウェイクワードヒット演出: 0.3秒テキストを濃く表示してからクリア (DEC-028) */
+  showTTTWakeHit(): void {
+    if (!this.tttWakeTextEl || !this.tttWakeOverlayEl) return;
+    this.tttWakeOverlayEl.classList.add('visible');
+    this.tttWakeTextEl.classList.add('hit');
+    setTimeout(() => {
+      if (this.tttWakeTextEl) {
+        this.tttWakeTextEl.classList.remove('hit');
+        this.tttWakeTextEl.textContent = '';
+      }
+      this.tttWakeOverlayEl?.classList.remove('visible');
+    }, 300);
+  }
 
   /**
    * コミュニティ退出時に履歴ドロップダウンから削除
