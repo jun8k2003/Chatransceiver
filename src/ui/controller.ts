@@ -29,6 +29,7 @@ export interface UIState {
   loadingMessage?: string;
   isTTTMode: boolean;
   tttWakeWord: string;
+  vibrationEnabled: boolean;
 }
 
 /**
@@ -55,6 +56,8 @@ export class UIController {
   private settingsThemeSelect: HTMLSelectElement;
   private settingsDiscordWebhookInput: HTMLInputElement;
   private settingsFcmToggle: HTMLInputElement;
+  private settingsVibrationToggle: HTMLInputElement | null = null;
+  private settingsVibrationRow: HTMLDivElement | null = null;
   private fcmUpdating: boolean = false;
 
   // 全画面ローディング
@@ -103,7 +106,8 @@ export class UIController {
     onUnregisterNotification: () => Promise<void>,
     onToggleWakeLock: () => Promise<boolean>,
     onToggleMediaPtt: () => Promise<boolean>,
-    onToggleTTT: () => void
+    onToggleTTT: () => void,
+    onToggleVibration: (enabled: boolean) => void
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -332,6 +336,15 @@ export class UIController {
       });
     }
 
+    // バイブレーショントグル
+    this.settingsVibrationToggle = document.getElementById('settingsVibrationToggle') as HTMLInputElement | null;
+    this.settingsVibrationRow = document.getElementById('vibrationToggleRow') as HTMLDivElement | null;
+    if (this.settingsVibrationToggle) {
+      this.settingsVibrationToggle.addEventListener('change', () => {
+        onToggleVibration(this.settingsVibrationToggle!.checked);
+      });
+    }
+
     // 全画面ローディング要素
     this.loadingOverlayEl = document.getElementById('globalLoadingOverlay') as HTMLDivElement;
     this.loadingMessageEl = document.getElementById('globalLoadingMessage') as HTMLParagraphElement;
@@ -465,6 +478,13 @@ export class UIController {
         if (fcmToggleRow) fcmToggleRow.style.display = 'flex';
         if (!this.fcmUpdating) {
           this.settingsFcmToggle.checked = !!state.fcmRegistered;
+        }
+        // バイブレーション行はFCM非対応環境では非表示
+        if (this.settingsVibrationRow) {
+          this.settingsVibrationRow.style.display = 'flex';
+        }
+        if (this.settingsVibrationToggle) {
+          this.settingsVibrationToggle.checked = !!state.vibrationEnabled;
         }
       }
     }
