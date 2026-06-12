@@ -49,7 +49,9 @@ export class App {
     fcmRegistered: false,
     callSignEnabled: true,
     isLoading: true,
-    loadingMessage: '初期化中...'
+    loadingMessage: '初期化中...',
+    isTTTMode: false,
+    tttWakeWord: ''
   };
 
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
@@ -62,6 +64,12 @@ export class App {
 
   // メディアボタンPTT経由で録音を開始したか (15秒タイムアウト時に自動送信するため) (DEC-027)
   private mediaPttTalkActive: boolean = false;
+
+  // TTT (TalkToTalk) ウェイクワード待機モード (DEC-028)
+  private isTTTMode: boolean = false;
+  private tttWakeWord: string = '';
+  // ウェイクワード起点で録音を開始したか (録音停止時に自動送信するため)
+  private tttTalkActive: boolean = false;
 
   constructor() {
     this.audioManager = new AudioManager();
@@ -98,12 +106,21 @@ export class App {
       (email: string) => this.handleSignInWithMagicLink(email),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl),
+      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, tttWakeWord),
       async () => await this.handleRegisterNotification(),
       async () => await this.handleUnregisterNotification(),
       async () => await this.handleToggleWakeLock(),
-      async () => await this.handleToggleMediaPtt()
+      async () => await this.handleToggleMediaPtt(),
+      () => this.handleToggleTTT()
     );
+
+    // TTT: バックグラウンド復帰時にウェイクワード待機を再開する (DEC-028)
+    // (Android はバックグラウンド移行時に SpeechRecognition を強制終了するため)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.isTTTMode && !this.state.isRecording) {
+        this.startTTTListening();
+      }
+    });
   }
 
   /**
@@ -120,6 +137,13 @@ export class App {
     const savedRecordMode = localStorage.getItem('chatransceiver_record_mode');
     if (savedRecordMode === 'both' || savedRecordMode === 'audio_only' || savedRecordMode === 'text_only') {
       this.state.recordMode = savedRecordMode;
+    }
+
+    // TTT ウェイクワード設定の読み込み
+    const savedWakeWord = localStorage.getItem('chatransceiver_ttt_wake_word');
+    if (savedWakeWord !== null) {
+      this.tttWakeWord = savedWakeWord;
+      this.state.tttWakeWord = savedWakeWord;
     }
 
     // コールサインフォン設定の読み込み
@@ -416,6 +440,18 @@ export class App {
   }
 
   /**
+   * TTT モードを強制終了する（コミュニティ切断・サインアウト時に呼ぶ）
+   */
+  private stopTTTMode(): void {
+    if (!this.isTTTMode) return;
+    this.isTTTMode = false;
+    this.state.isTTTMode = false;
+    this.tttTalkActive = false;
+    this.audioManager.stopWakeWordListening();
+    this.uiController.updateTTTState(false);
+  }
+
+  /**
    * コミュニティ切断 (一時的)
    */
   private async handleDisconnectCommunity(): Promise<void> {
@@ -437,6 +473,7 @@ export class App {
       this.communityMembersSubscription = null;
     }
 
+    this.stopTTTMode();
     this.state.currentCommunity = null;
     localStorage.removeItem('chatransceiver_current_community');
 
@@ -819,6 +856,98 @@ export class App {
   }
 
   /**
+   * TTT (TalkToTalk) モードのON/OFFトグル (DEC-028)
+   */
+  private handleToggleTTT(): void {
+    if (this.state.isRecording) {
+      // 録音中はOFF操作を無視してトグルを元に戻す
+      this.uiController.updateTTTState(this.isTTTMode);
+      return;
+    }
+
+    if (this.isTTTMode) {
+      // OFF: 監視停止
+      this.isTTTMode = false;
+      this.state.isTTTMode = false;
+      this.audioManager.stopWakeWordListening();
+      this.uiController.updateTTTState(false);
+    } else {
+      // ON: バリデーション
+      if (!this.tttWakeWord) {
+        alert('TTTモードを有効にするには、設定からウェイクワードを登録してください。');
+        this.uiController.updateTTTState(false);
+        return;
+      }
+      let regex: RegExp;
+      try {
+        regex = new RegExp(this.tttWakeWord);
+      } catch (e) {
+        alert('ウェイクワードの正規表現が無効です。設定を確認してください。');
+        this.uiController.updateTTTState(false);
+        return;
+      }
+      if (!this.state.activeChatHistoryId && this.state.selectedUserIds.length === 0) {
+        alert('TTTモードを有効にするには送信先を選択してください。');
+        this.uiController.updateTTTState(false);
+        return;
+      }
+      this.isTTTMode = true;
+      this.state.isTTTMode = true;
+      this.uiController.updateTTTState(true);
+      this.startTTTListening(regex);
+    }
+  }
+
+  /**
+   * TTT ウェイクワード監視を（再）開始する (DEC-028)
+   */
+  private startTTTListening(regex?: RegExp): void {
+    if (!this.isTTTMode) return;
+    if (!regex) {
+      try {
+        regex = new RegExp(this.tttWakeWord);
+      } catch (e) {
+        this.isTTTMode = false;
+        this.state.isTTTMode = false;
+        this.uiController.updateTTTState(false);
+        return;
+      }
+    }
+    this.audioManager.startWakeWordListening(
+      regex,
+      () => this.handleTTTWakeWordMatch(),
+      (text) => this.uiController.updateTTTWakeText(text),
+      (reason) => this.handleTTTFatalError(reason)
+    );
+  }
+
+  /**
+   * ウェイクワード監視の回復不能エラー (マイク権限剥奪・連続失敗等) (DEC-028)
+   * 再起動ループを断念して TTT を OFF にし、ユーザーに通知する
+   */
+  private handleTTTFatalError(reason: string): void {
+    console.warn('TTT wake word listening aborted:', reason);
+    this.stopTTTMode();
+    const message = (reason === 'not-allowed' || reason === 'service-not-allowed')
+      ? 'マイクの使用が許可されていないため、TTTを停止しました。ブラウザのマイク権限を確認してください。'
+      : 'ウェイクワードの待ち受けに連続して失敗したため、TTTを停止しました。通信状況やマイクを確認して再度ONにしてください。';
+    alert(message);
+  }
+
+  /**
+   * TTT ウェイクワードヒット時の処理 (DEC-028)
+   * 0.3秒ヒット演出 → 録音開始
+   */
+  private handleTTTWakeWordMatch(): void {
+    this.uiController.showTTTWakeHit();
+    setTimeout(() => {
+      if (!this.isTTTMode) return;
+      this.tttTalkActive = true;
+      this.handleStartTalk();
+    }, 300);
+  }
+
+  /**
    * メディアボタン (MediaPlay/Pause) 押下時の処理 (DEC-027)
    * 1回目: 録音開始 / 2回目: 録音停止して送信
    */
@@ -895,15 +1024,16 @@ export class App {
 
     this.recordingTimerId = window.setTimeout(() => {
       if (this.state.isRecording) {
-        this.handleStopTalk();
+        this.handleStopTalk(true);
       }
     }, 15000);
   }
 
   /**
    * 音声発話停止 (録音を停止し、送信待機)
+   * @param fromTimeout 15秒タイムアウトによる自動停止か (TTT時の自動送信判定に使用)
    */
-  private async handleStopTalk(): Promise<void> {
+  private async handleStopTalk(fromTimeout: boolean = false): Promise<void> {
     if (!this.state.isRecording) return;
     this.clearRecordingState();
     
@@ -936,10 +1066,18 @@ export class App {
         this.mediaButtonPtt.beepEnd();
         this.mediaButtonPtt.setRecordingState(false);
         await this.handleSendAudio();
+      } else if (this.tttTalkActive) {
+        // TTT (ウェイクワード起点) の録音は15秒タイムアウト時のみ自動送信する (DEC-028)
+        // 手動停止時はプレビュー・送信・キャンセルをユーザーに委ねる
+        this.tttTalkActive = false;
+        if (fromTimeout) {
+          await this.handleSendAudio();
+        }
       }
     } catch (error) {
       console.error('Failed to stop recording:', error);
       this.mediaPttTalkActive = false;
+      this.tttTalkActive = false;
       this.uiController.hideRecordingModal();
     }
   }
@@ -986,6 +1124,11 @@ export class App {
     } catch (e) {
       console.error('Failed to send audio message:', e);
     }
+
+    // TTT モード: 送信完了後にウェイクワード待機を再開
+    if (this.isTTTMode) {
+      this.startTTTListening();
+    }
   }
 
   /**
@@ -993,12 +1136,18 @@ export class App {
    */
   private handleCancelTalk(): void {
     this.mediaPttTalkActive = false;
+    this.tttTalkActive = false;
     this.mediaButtonPtt.setRecordingState(false);
     this.clearRecordingState();
     this.uiController.hideRecordingModal();
     this.audioManager.stopRecording().catch(() => {});
     this.audioManager.stopDictation().catch(() => {});
     this.playbackQueue.resume();
+
+    // TTT モード: キャンセル後もウェイクワード待機を再開
+    if (this.isTTTMode) {
+      this.startTTTListening();
+    }
   }
 
   /**
@@ -1104,7 +1253,7 @@ export class App {
   /**
    * 環境設定の保存
    */
-  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string): Promise<void> {
+  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string): Promise<void> {
     if (this.state.currentUser) {
       try {
         await this.supabaseService.updateNickname(this.state.currentUser.id, nickname);
@@ -1143,7 +1292,14 @@ export class App {
     this.state.theme = theme;
     localStorage.setItem('chatransceiver_theme', theme);
     this.applyTheme(theme);
-    
+
+    // TTT ウェイクワードの保存
+    if (tttWakeWord !== undefined) {
+      this.tttWakeWord = tttWakeWord;
+      this.state.tttWakeWord = tttWakeWord;
+      localStorage.setItem('chatransceiver_ttt_wake_word', tttWakeWord);
+    }
+
     this.updateUI();
   }
   

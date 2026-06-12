@@ -45,7 +45,6 @@
             <button id="btnAuthMagicLink" type="submit" class="btn-magic-link">
               メールでログインリンクを受け取る
             </button>
-            <p class="magic-link-note">入力したメール宛にログイン用リンクを送信します（試用版につき時間あたり2回まで）</p>
           </form>
           <div id="magicLinkSuccess" class="magic-link-success">
             ✉️ ログインリンクを送信しました。メールを確認し、リンクを開いてください。
@@ -103,7 +102,7 @@
         <button id="btnKeepAwake" class="btn-keep-awake" title="常時表示: 画面の自動ロックを防ぎます">☀️</button>
         <!-- メディアボタンPTTトグル: Media Session対応環境のみ表示 (DEC-027) -->
         <button id="btnMediaPtt" class="btn-media-ptt" title="メディアボタンPTT: イヤフォンの再生/停止ボタンで録音・送信できるようにします">🎧</button>
-        <button class="btn-settings" title="設定">⚙️</button>
+        <button class="btn-icon btn-settings" title="設定">⚙️</button>
       </div>
     </header>
 
@@ -163,6 +162,13 @@
         <footer class="chat-footer">
           <!-- 音声発話（録音）トリガーボタン: PCは左端の控えめ円形 / スマホは下段中央の大型 (DEC-024) -->
           <div class="footer-ptt-row">
+            <!-- TTT (TalkToTalk) ウェイクワード待機トグル (DEC-028) -->
+            <label class="ttt-toggle" id="tttToggle" title="TTT:Trigger word To Talk: 音声（合言葉）で録音ダイアログ起動">
+              <input type="checkbox" id="tttToggleInput" />
+              <span class="ttt-track"><span class="ttt-thumb"></span></span>
+              <span class="ttt-label">TTT</span>
+            </label>
+
             <button class="btn-talk-trigger" title="タップで録音開始">
               🎙️
               <span class="ptt-label">TALK</span>
@@ -177,6 +183,11 @@
       </section>
 
     </main>
+
+    <!-- TTT ウェイクワード認識オーバーレイ (DEC-028) -->
+    <div id="tttWakeOverlay" class="ttt-wake-overlay">
+      <span id="tttWakeText" class="ttt-wake-text"></span>
+    </div>
 
     <!-- 4. 録音モーダルダイアログ (DEC-006 / 音量レベルメーター) -->
     <div id="recordingModal" class="modal-overlay">
@@ -236,6 +247,12 @@
               <div class="setting-label-area">疑似コールサイン音<div class="setting-desc">再生の前後に効果音を鳴らします</div></div>
               <label class="toggle"><input type="checkbox" id="settingsCallSign" checked /><span class="toggle-track"></span></label>
             </div>
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">ウェイクワード（正規表現）<div class="setting-desc">TTT (Trigger word To Talk): 音声（合言葉）で録音ダイアログを起動するハンズフリー機能です。チャット画面下部のTTTスイッチをONにすると合言葉の待ち受けを開始します。ここでは合言葉を正規表現で設定します。未設定時はTTTを有効化できません。</div></div>
+              <input type="text" id="settingsWakeWord" class="setting-input wide" placeholder="例: (?:ちょっといいですか)" />
+              <div id="settingsWakeWordError" class="setting-error-msg"></div>
+            </div>
+
             <div class="setting-row">
               <div class="setting-label-area">録音モード<div class="setting-desc">※ モバイルでは録音と文字おこしの併用不可</div></div>
               <select id="settingsRecordMode" class="setting-input">
