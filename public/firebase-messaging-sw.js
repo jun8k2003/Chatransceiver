@@ -38,21 +38,14 @@ self.addEventListener('push', function(event) {
   const notificationTitle = `[${communityName}] ${senderName}`;
   const notificationBody = messageType === 'audio' ? `🎤 ${textContent}` : textContent;
 
-  // バイブレーション設定を Cache API から読み込む（非同期、失敗時はバイブレーションなし）
-  const getVibrationEnabled = () => {
-    if (!('caches' in self)) return Promise.resolve(false);
-    return caches.open('chatransceiver-settings')
-      .then(cache => cache.match('/vibration-enabled'))
-      .then(res => res ? res.text() : '0')
-      .then(val => val === '1')
-      .catch(() => false);
+  const notificationOptions = {
+    body: notificationBody,
+    icon: '/chatora.png',
+    data: { url: `/?c=${communitySlug}&m=${messageId}` }
   };
 
   event.waitUntil(
-    Promise.all([
-      clients.matchAll({ type: 'window', includeUncontrolled: true }),
-      getVibrationEnabled()
-    ]).then(([windowClients, vibrationEnabled]) => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       // 画面が開いていて、アクティブで、同じコミュニティを見ている場合は通知を出さない
       let isVisibleAndSameCommunity = false;
       for (let i = 0; i < windowClients.length; i++) {
@@ -68,15 +61,9 @@ self.addEventListener('push', function(event) {
 
       if (isVisibleAndSameCommunity) {
         return Promise.resolve(); // 通知不要
+      } else {
+        return self.registration.showNotification(notificationTitle, notificationOptions);
       }
-
-      const notificationOptions = {
-        body: notificationBody,
-        icon: '/chatora.png',
-        data: { url: `/?c=${communitySlug}&m=${messageId}` },
-        ...(vibrationEnabled ? { vibrate: [200, 100, 200] } : {})
-      };
-      return self.registration.showNotification(notificationTitle, notificationOptions);
     })
   );
 });

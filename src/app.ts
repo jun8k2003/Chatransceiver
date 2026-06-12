@@ -51,8 +51,7 @@ export class App {
     isLoading: true,
     loadingMessage: '初期化中...',
     isTTTMode: false,
-    tttWakeWord: '',
-    vibrationEnabled: false
+    tttWakeWord: ''
   };
 
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
@@ -112,8 +111,7 @@ export class App {
       async () => await this.handleUnregisterNotification(),
       async () => await this.handleToggleWakeLock(),
       async () => await this.handleToggleMediaPtt(),
-      () => this.handleToggleTTT(),
-      (enabled: boolean) => this.handleToggleVibration(enabled)
+      () => this.handleToggleTTT()
     );
 
     // TTT: バックグラウンド復帰時にウェイクワード待機を再開する (DEC-028)
@@ -148,12 +146,6 @@ export class App {
       this.state.tttWakeWord = savedWakeWord;
     }
 
-    // バイブレーション設定の読み込み
-    const savedVibration = localStorage.getItem('chatransceiver_vibration_enabled');
-    if (savedVibration === 'true') {
-      this.state.vibrationEnabled = true;
-      this.syncVibrationToCache(true);
-    }
 
     // コールサインフォン設定の読み込み
     const savedCallSign = localStorage.getItem('chatransceiver_callsign_enabled');
@@ -1404,20 +1396,4 @@ export class App {
     }
   }
 
-  private handleToggleVibration(enabled: boolean): void {
-    this.state.vibrationEnabled = enabled;
-    localStorage.setItem('chatransceiver_vibration_enabled', String(enabled));
-    this.syncVibrationToCache(enabled);
-    this.updateUI();
-  }
-
-  // Service Worker が push イベントで参照できるよう Cache API に設定を書き込む
-  private syncVibrationToCache(enabled: boolean): void {
-    if (!('caches' in window)) return;
-    caches.open('chatransceiver-settings').then(cache => {
-      cache.put('/vibration-enabled', new Response(enabled ? '1' : '0', {
-        headers: { 'Content-Type': 'text/plain' }
-      }));
-    }).catch(() => {/* Cache API が使えない環境では無視 */});
-  }
 }
