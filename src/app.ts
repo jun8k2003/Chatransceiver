@@ -6,6 +6,7 @@ import { supabase, SupabaseService } from './services/supabase';
 import { FCMService } from './services/FCMService';
 import { WakeLockService } from './services/wakelock';
 import { MediaButtonPttService } from './services/mediabutton';
+import { saveBackgroundImage, loadBackgroundImage, deleteBackgroundImage } from './utils/db';
 import pttStartUrl from './assets/ptt-start.wav';
 
 /**
@@ -106,7 +107,7 @@ export class App {
       (email: string) => this.handleSignInWithMagicLink(email),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, tttWakeWord),
+      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string, bgImageFile?: File | null, bgImageClear?: boolean, bgSize?: 'cover'|'contain', bgBlur?: boolean) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, tttWakeWord, bgImageFile, bgImageClear, bgSize, bgBlur),
       async () => await this.handleRegisterNotification(),
       async () => await this.handleUnregisterNotification(),
       async () => await this.handleToggleWakeLock(),
@@ -160,6 +161,24 @@ export class App {
       this.state.theme = savedTheme;
     }
     this.applyTheme(this.state.theme);
+
+    // 背景設定の読み込み
+    const savedBgSize = localStorage.getItem('chatransceiver_bg_size') as 'cover' | 'contain' | null;
+    if (savedBgSize === 'cover' || savedBgSize === 'contain') {
+      this.state.bgSize = savedBgSize;
+    } else {
+      this.state.bgSize = 'cover';
+    }
+    const savedBgBlur = localStorage.getItem('chatransceiver_bg_blur');
+    this.state.bgBlur = savedBgBlur === 'true';
+
+    try {
+      const bgBlob = await loadBackgroundImage();
+      this.applyBackgroundSettings(bgBlob || undefined, this.state.bgSize, this.state.bgBlur);
+    } catch (e) {
+      console.error('Failed to load background image from IndexedDB:', e);
+      this.applyBackgroundSettings(undefined, this.state.bgSize, this.state.bgBlur);
+    }
 
     // FCM初期状態のセットアップ
     this.state.fcmIsIOS = this.fcmService.isIOSTerminal();
@@ -1254,7 +1273,7 @@ export class App {
   /**
    * 環境設定の保存
    */
-  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string): Promise<void> {
+  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string, bgImageFile?: File | null, bgImageClear?: boolean, bgSize?: 'cover'|'contain', bgBlur?: boolean): Promise<void> {
     if (this.state.currentUser) {
       try {
         await this.supabaseService.updateNickname(this.state.currentUser.id, nickname);
@@ -1301,7 +1320,63 @@ export class App {
       localStorage.setItem('chatransceiver_ttt_wake_word', tttWakeWord);
     }
 
+    // 背景設定の保存
+    if (bgSize) {
+      this.state.bgSize = bgSize;
+      localStorage.setItem('chatransceiver_bg_size', bgSize);
+    }
+    if (bgBlur !== undefined) {
+      this.state.bgBlur = bgBlur;
+      localStorage.setItem('chatransceiver_bg_blur', bgBlur ? 'true' : 'false');
+    }
+
+    try {
+      if (bgImageClear) {
+        await deleteBackgroundImage();
+        this.applyBackgroundSettings(undefined, this.state.bgSize, this.state.bgBlur);
+      } else if (bgImageFile) {
+        await saveBackgroundImage(bgImageFile);
+        this.applyBackgroundSettings(bgImageFile, this.state.bgSize, this.state.bgBlur);
+      } else {
+        // 画像変更なしでもサイズやブラーが変更された可能性があるため再適用
+        const bgBlob = await loadBackgroundImage();
+        this.applyBackgroundSettings(bgBlob || undefined, this.state.bgSize, this.state.bgBlur);
+      }
+    } catch (e) {
+      console.error('Failed to save or apply background settings:', e);
+    }
+
     this.updateUI();
+  }
+  
+  // 現在適用されている背景画像のObject URL（解放用）
+  private currentBgObjectUrl: string | null = null;
+
+  /**
+   * 背景画像とスタイルをDOMに適用する
+   */
+  private applyBackgroundSettings(bgBlob: Blob | undefined, bgSize: 'cover' | 'contain' | undefined, bgBlur: boolean | undefined): void {
+    if (this.currentBgObjectUrl) {
+      URL.revokeObjectURL(this.currentBgObjectUrl);
+      this.currentBgObjectUrl = null;
+    }
+
+    if (bgBlob) {
+      this.currentBgObjectUrl = URL.createObjectURL(bgBlob);
+      document.body.classList.add('custom-bg');
+      document.body.style.setProperty('--user-bg', `url(${this.currentBgObjectUrl})`);
+      document.body.style.setProperty('--user-bg-size', bgSize || 'cover');
+    } else {
+      document.body.classList.remove('custom-bg');
+      document.body.style.removeProperty('--user-bg');
+      document.body.style.removeProperty('--user-bg-size');
+    }
+
+    if (bgBlur) {
+      document.body.classList.add('bg-blur');
+    } else {
+      document.body.classList.remove('bg-blur');
+    }
   }
   
   /**

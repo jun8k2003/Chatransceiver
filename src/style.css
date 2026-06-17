@@ -70,6 +70,36 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* ========================================================
+   カスタム背景 (画像 + 背景ぼかし)
+   ======================================================== */
+body.custom-bg .chat-pane {
+  position: relative;
+  z-index: 1;
+  overflow: hidden; /* scale(1.05)のはみ出しを防ぐ */
+}
+
+body.custom-bg .chat-pane::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: var(--user-bg);
+  background-size: var(--user-bg-size);
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: -1;
+  /* 親の背景色(bg-main)を透けさせないため、一番下に配置するがchat-pane自体の背景色が乗る場合はchat-paneをtransparentにする */
+}
+
+body.custom-bg .chat-pane {
+  background-color: transparent !important;
+}
+
+body.bg-blur .chat-pane::before {
+  filter: blur(8px);
+  transform: scale(1.05); /* ぼかしによる端の透けを防ぐ */
+}
+
 /* スクロールバーのカスタマイズ */
 ::-webkit-scrollbar {
   width: 6px;
@@ -654,7 +684,9 @@ body.select-mode .sidebar-footer {
 .splitter-h {
   width: 6px;
   cursor: col-resize;
-  background-color: var(--border-color);
+  background-color: var(--bg-main);
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
   transition: background-color 0.2s;
   z-index: 10;
   height: 100%;
