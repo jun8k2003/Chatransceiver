@@ -29,6 +29,8 @@ export interface UIState {
   loadingMessage?: string;
   isTTTMode: boolean;
   tttWakeWord: string;
+  bgSize?: 'cover' | 'contain';
+  bgBlur?: boolean;
 }
 
 /**
@@ -56,6 +58,13 @@ export class UIController {
   private settingsDiscordWebhookInput: HTMLInputElement;
   private settingsFcmToggle: HTMLInputElement;
   private fcmUpdating: boolean = false;
+  
+  // 背景設定関連
+  private settingsBgImageInput: HTMLInputElement;
+  private btnSettingsBgClear: HTMLButtonElement;
+  private settingsBgSizeSelect: HTMLSelectElement;
+  private settingsBgBlurCheck: HTMLInputElement;
+  private bgImageClearRequested: boolean = false;
 
   // 全画面ローディング
   private loadingOverlayEl: HTMLDivElement;
@@ -98,7 +107,7 @@ export class UIController {
     onSignInWithMagicLink: (email: string) => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string) => void,
+    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string, bgImageFile?: File | null, bgImageClear?: boolean, bgSize?: 'cover'|'contain', bgBlur?: boolean) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>,
     onToggleWakeLock: () => Promise<boolean>,
@@ -234,6 +243,28 @@ export class UIController {
     this.settingsDiscordWebhookInput = document.getElementById('settingsDiscordWebhook') as HTMLInputElement;
     this.settingsFcmToggle = document.getElementById('settingsFcmToggle') as HTMLInputElement;
 
+    this.settingsBgImageInput = document.getElementById('settingsBgImage') as HTMLInputElement;
+    this.btnSettingsBgClear = document.getElementById('btnSettingsBgClear') as HTMLButtonElement;
+    this.settingsBgSizeSelect = document.getElementById('settingsBgSize') as HTMLSelectElement;
+    this.settingsBgBlurCheck = document.getElementById('settingsBgBlur') as HTMLInputElement;
+
+    // 画像クリアボタン
+    if (this.btnSettingsBgClear) {
+      this.btnSettingsBgClear.addEventListener('click', () => {
+        this.settingsBgImageInput.value = '';
+        this.bgImageClearRequested = true;
+      });
+    }
+
+    // 画像アップロードが変更されたらクリア要求を取り消す
+    if (this.settingsBgImageInput) {
+      this.settingsBgImageInput.addEventListener('change', () => {
+        if (this.settingsBgImageInput.files && this.settingsBgImageInput.files.length > 0) {
+          this.bgImageClearRequested = false;
+        }
+      });
+    }
+
     // 設定ボタンクリック時にモーダルを表示
     const settingsBtn = document.querySelector('.btn-settings') as HTMLButtonElement;
     if (settingsBtn) {
@@ -289,7 +320,15 @@ export class UIController {
         }
       }
 
-      onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, wakeWord);
+      const bgImageFile = (this.settingsBgImageInput.files && this.settingsBgImageInput.files.length > 0) ? this.settingsBgImageInput.files[0] : null;
+      const bgSize = this.settingsBgSizeSelect.value as 'cover' | 'contain';
+      const bgBlur = this.settingsBgBlurCheck.checked;
+
+      onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, wakeWord, bgImageFile, this.bgImageClearRequested, bgSize, bgBlur);
+      
+      // 保存後に入力状態をリセット
+      this.settingsBgImageInput.value = '';
+      this.bgImageClearRequested = false;
       this.settingsModalEl.classList.remove('show');
     });
 
@@ -443,6 +482,14 @@ export class UIController {
       // TTT ウェイクワード設定の同期
       if (this.settingsWakeWordInput && document.activeElement !== this.settingsWakeWordInput) {
         this.settingsWakeWordInput.value = state.tttWakeWord || '';
+      }
+
+      // 背景設定の同期
+      if (state.bgSize) {
+        this.settingsBgSizeSelect.value = state.bgSize;
+      }
+      if (state.bgBlur !== undefined) {
+        this.settingsBgBlurCheck.checked = state.bgBlur;
       }
 
       // TTT トグルの状態同期（録音中はロック）

@@ -272,6 +272,26 @@
                 <option value="light">ライトモード</option>
               </select>
             </div>
+            
+            <!-- 背景画像設定 -->
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">背景画像<div class="setting-desc">任意の画像ファイルを設定します（IndexedDBに保存されます）</div></div>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <input type="file" id="settingsBgImage" accept="image/*" class="setting-input wide" style="flex: 1;" />
+                <button id="btnSettingsBgClear" class="btn-sm ghost" style="flex-shrink: 0;">削除</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <label for="settingsBgSize">画像の表示方法</label>
+              <select id="settingsBgSize" class="setting-input">
+                <option value="cover">画面全体を埋める（見切れあり）</option>
+                <option value="contain">画像全体を表示する（余白あり）</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label-area">背景ぼかし<div class="setting-desc">背景画像にぼかし効果を適用します</div></div>
+              <label class="toggle"><input type="checkbox" id="settingsBgBlur" /><span class="toggle-track"></span></label>
+            </div>
           </div>
 
           <div class="settings-section">
