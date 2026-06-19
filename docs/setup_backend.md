@@ -243,7 +243,9 @@ begin
     -- 注意: Supabase Storageの `storage.objects` に対するSQLからの直接DELETEは
     -- RLSやトリガーの権限エラーを引き起こしトランザクション全体がロールバックする
     -- 原因となりやすいため、ここではDBレコード（メタデータ）のCASCADE削除のみを行います。
-    -- 音声ファイルの実体はオーファン（孤児）として残りますが、動作上の問題はありません。
+    -- 音声ファイルの実体は、chat_rooms 削除に伴い CASCADE で削除される messages 各行の
+    -- DELETE が Database Webhook → Edge Function (delete-audio-on-message-delete) を発火させ、
+    -- そこで Storage から自動削除されます（§7 参照）。
     
     -- 2. 対象のルームをすべて削除 (CASCADEにより紐づくmessages, user_inboxes等も削除)
     delete from public.chat_rooms

@@ -49,3 +49,24 @@
 * **実装**: `SupabaseService.signInWithMagicLink(email, redirectTo)` が `supabase.auth.signInWithOtp()` を呼ぶのみ。リンククリック後のセッション確立は既存の `onAuthStateChange(SIGNED_IN)` リスナーを再利用（Google OAuthと同じ復帰経路）。`redirectTo` はGoogleと同様に接続先コミュニティ情報を維持する。UIは `index.html` のログインカードにメール入力フォーム＋送信完了メッセージを追加、配色は青（操作系アクセント、DEC-024）に統一。
 * **運用上の前提（コード外設定）**: Supabaseダッシュボードで (1) Email プロバイダ有効、(2) Redirect URLs に本番URL・`localhost` を登録、(3) 本格運用時はデフォルトSMTPの送信レート制限を避けるため独自SMTPを設定。
 * **不採用**: ID/PW 方式は上記コスト理由により見送り。将来必要になった場合の代替として記録に留める。
+
+## DEC-029: TTT (Trigger word To Talk) ハンズフリーモード (2026-06-13)
+* **決定**: ウェイクワード（合言葉）を音声検知して自動で録音・送信するハンズフリーモードを実装する。チャット画面下部のTTTスライダートグルでON/OFFする。
+* **操作モデル**: 環境設定でウェイクワードを**正規表現**として登録（未設定時はTTTを有効化できない）。ON中はSpeechRecognitionで常時待ち受けし、ヒット時にフラッシュ演出＋録音を自動開始する。**15秒タイムアウト時のみ自動送信**し、手動停止した場合は送信しない。
+* **UI**: 待機中はウェイクワード認識オーバーレイ（テキスト表示）を出す。
+* **環境対応**: Android Chrome 固有の SpeechRecognition 挙動（遅延再起動・エラー分類・`abort()` 使用）に対応。`visibilitychange` でバックグラウンド復帰時に待機を自動再開する。
+* **実装**: `src/audio/manager.ts`（認識ロジック）＋ `src/app.ts` / `src/ui/controller.ts`（状態・UI）。
+
+## DEC-030: 通知バイブレーション設定の追加と撤回 (2026-06-13)
+* **経緯**: 環境設定の通知セクションにバイブレーショントグルを追加し、設定値を localStorage に保存、Cache API 経由で Service Worker に共有して push ハンドラで `vibrate` オプションを付与する実装を一度行った（FCM非対応のiOS等では行を非表示）。
+* **撤回理由**: Chrome が通知の `vibrate` オプションを無効化済みで実効しないため、設定ごと削除した（コミット `d1e4658`）。
+* **現状**: バイブレーション設定UI・関連コードは存在しない。再導入はブラウザ側で `vibrate` が再び有効化された場合の検討事項とする。
+
+## DEC-031: ログアウトの非破壊化・FCM解除・音声自動削除バグ修正 (2026-06-20)
+* **背景**: ログアウト処理 (`handleSignOut`) が内部で退会処理 (`handleLeaveCommunity` → `leave_community_and_cleanup`) を呼んでおり、ログアウトしただけで接続中コミュニティの自分が関わる全ルーム・全メッセージが完全削除されていた（他端末で再ログインすると履歴が消えて見える原因）。
+* **決定1（ログアウトの非破壊化）**: ログアウトではデータを一切削除しない。退会処理は呼ばず、非破壊の `handleDisconnectCommunity`（購読解除・状態/現在コミュニティのクリアのみ）に切り替える。チャット・グループ・メッセージ・入室履歴（LocalStorage）は保持する。
+* **決定2（ログアウト時のFCM解除）**: FCM登録済みの場合、ログアウト時にFCMトークンを解除する。解除にはセッションが必要なため **`signOut()` より前に `await` で実行**し、ローディングを表示する。失敗してもログアウトは中断せず続行する（トークンが残るだけ）。alert を出す `handleUnregisterNotification` ではなく実体 `fcmService.unregisterNotification()` を直接呼び、メッセージボックスは出さない。
+* **決定3（退会時はFCM解除しない）**: `fcm_tokens` は端末×ユーザー単位でコミュニティに非依存のため、単一コミュニティの退会で解除すると他コミュニティの通知まで止まる。よって退会では解除しない。
+* **決定4（音声自動削除バグ修正）**: Edge Function `delete-audio-on-message-delete` が参照するバケット名が `audio-messages` となっており、実際のアップロード先 `voice-messages` と不一致でURLパース失敗→音声が一切削除されていなかった。`voice-messages` に修正（要再デプロイ）。メッセージ削除時の音声削除は **CASCADE DELETE 依存のまま**とし（`chat_rooms` 削除→`messages` CASCADE→各行 DELETE が Webhook を発火）、退会フロー側でのメッセージ先行削除は採用しない。
+* **運用**: バグ期間中に `voice-messages` に蓄積した孤児ファイルは本修正では消えないため、別途一括削除する。
+* **不採用**: 退会時のメッセージ先行削除（CASCADEに依存しない明示削除）は、CASCADEでもWebhookが発火するため不要と判断し見送り。

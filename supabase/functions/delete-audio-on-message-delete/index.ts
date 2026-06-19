@@ -18,8 +18,9 @@ serve(async (req) => {
     const audioUrl: string = oldRecord.audio_url
 
     // Extract path from public URL
-    // e.g. https://xxxx.supabase.co/storage/v1/object/public/audio-messages/123/456.webm -> 123/456.webm
-    const bucketName = 'audio-messages'
+    // e.g. https://xxxx.supabase.co/storage/v1/object/public/voice-messages/123/456.webm -> 123/456.webm
+    // NOTE: バケット名はアップロード側 (src/services/supabase.ts の `voice-messages`) と必ず一致させること。
+    const bucketName = 'voice-messages'
     const marker = `/public/${bucketName}/`
     const pathIndex = audioUrl.indexOf(marker)
     

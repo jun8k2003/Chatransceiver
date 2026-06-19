@@ -303,18 +303,36 @@ export class App {
    */
   private async handleSignOut(): Promise<void> {
     try {
-      await this.handleLeaveCommunity();
+      // プッシュ通知の解除（登録済みの場合のみ）。
+      // ※ 解除にはセッションが必要なため、必ず signOut() より前に await で実行する。
+      //   失敗してもトークンが残るだけなので、ログアウト自体は中断せず続行する。
+      if (this.state.fcmRegistered) {
+        this.state.isLoading = true;
+        this.state.loadingMessage = 'ログアウトしています...';
+        this.updateUI();
+        try {
+          await this.fcmService.unregisterNotification();
+          this.state.fcmRegistered = false;
+        } catch (e) {
+          console.error('Failed to unregister FCM token during sign out:', e);
+        }
+      }
+
+      // ログアウトではデータを削除しない。コミュニティからは「切断」のみ行う（非破壊）。
+      await this.handleDisconnectCommunity();
+
       await this.supabaseService.signOut();
       this.state.currentUser = null;
 
       // URLのハッシュ（アクセストークン等）を完全に消去して綺麗な状態にする
       const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
       window.history.replaceState({}, '', cleanUrl);
-
-      this.updateUI();
     } catch (e) {
       console.error('Failed to sign out:', e);
       alert('ログアウトに失敗しました。');
+    } finally {
+      this.state.isLoading = false;
+      this.updateUI();
     }
   }
 

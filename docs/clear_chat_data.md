@@ -23,5 +23,6 @@ TRUNCATE TABLE chat_rooms CASCADE;
 
 > [!WARNING]
 > **音声ファイルの削除について**
-> データベース上のレコード（URL）は上記のSQLで消去されますが、**Supabase Storage（ストレージ）に保存された実際の音声ファイル（.webm）はSQLでは消去されません**。
-> 音声ファイル自体も完全に空にしたい場合は、Supabaseダッシュボードの **Storage** メニューから `voice-messages` バケットを開き、中に入っているファイルを全選択して手動で削除してください。
+> 通常のアプリ操作（メッセージ削除・コミュニティ退出など）でメッセージ行が削除された場合は、Database Webhook → Edge Function (`delete-audio-on-message-delete`) により Storage 上の音声ファイル（.webm）も自動削除されます（setup_backend.md §7）。
+> ただし、上記の `TRUNCATE` による一括初期化は **Webhook（行トリガー）を発火させない**ため、**Supabase Storage に保存された実際の音声ファイルは消去されません**。
+> `TRUNCATE` でリセットした場合や、過去のバグ期間中に残った孤児ファイルを完全に空にしたい場合は、Supabaseダッシュボードの **Storage** メニューから `voice-messages` バケットを開き、中のファイルを全選択して手動で削除してください。

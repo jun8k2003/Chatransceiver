@@ -310,3 +310,24 @@ create trigger on_message_created
   for each row
   execute function public.handle_new_message_fanout();
 ```
+
+---
+
+## 4. Storage / Edge Functions（バックエンド定義）
+
+### 4.1. Storage バケット
+* **`voice-messages`**（Public）: 音声メッセージ（webm）を格納するバケット。ファイルパスは `<sender_id>/<timestamp>.webm` 形式（[supabase.ts](../src/services/supabase.ts) のアップロード処理）。
+* ※背景画像はサーバーに保存せず、クライアントの **IndexedDB**（`ChatransceiverDB` / `backgroundStore`）にローカル保存します（DDL対象外）。
+
+### 4.2. Edge Functions
+| 関数名 | 役割 |
+| --- | --- |
+| `send-push-notification` | 新着メッセージ受信時に FCM プッシュ通知／Discord Webhook 通知を送信。 |
+| `register-fcm-token` | クライアントの FCM デバイストークンの登録（`register`）／解除（`unregister`）。ログアウト時に解除を呼ぶ。 |
+| `delete-audio-on-message-delete` | `messages` の **DELETE** をトリガーに、`audio_url` に対応する `voice-messages` バケットの音声ファイルを削除。Database Webhook 経由で起動。 |
+
+> **メッセージ削除と音声ファイル**: メッセージ行が削除されると、`user_inboxes` はカスケード削除され（FK）、Storage の音声ファイルは `delete-audio-on-message-delete` Edge Function により削除されます。退出時の一括削除（`leave_community_and_cleanup`）では `chat_rooms` 削除に伴い `messages` が **FK CASCADE** で削除され、その各行の DELETE が同 Edge Function を発火させて音声も消去されます（specifications.md 3.5）。
+>
+> ※ Edge Function が参照するバケット名は**アップロード側（`voice-messages`）と必ず一致**させること（過去に `audio-messages` と誤指定され削除が機能しないバグがあった）。
+>
+> ※ `TRUNCATE`（clear_chat_data.md）は行トリガーを発火しないため、この自動削除の対象外（音声は手動削除が必要）。

@@ -132,3 +132,11 @@ classDiagram
 ### 2.5. `UIController` および各UIビュークラス
 * **責務**: HTML/CSS（DOM）の操作、アニメーション、ユーザーの入力イベント（クリックや打鍵）のハンドリングを担当します。
 * 項目ごとにビュー（`CommunitySelectorUI`, `UserListUI`, `GroupListUI`, `ChatWindowUI`）に分割し、`UIController` がこれらを統括します。
+* ※DEC-024 のリデザイン後、個別／グループは統合リスト＋フィルタチップに集約されています（実装は `src/ui/` 配下に分割）。
+
+### 2.6. 補助サービス・ユーティリティ（DEC-026/027/029 以降追加）
+* **`WakeLockService` (`src/services/wakelock.ts`)**: Screen Wake Lock API による「常時表示」機能 (DEC-026)。ユーザー意思のON/OFF (`enabled`) とセンチネル保持を分離し、`visibilitychange` で画面復帰時にロックを自動再取得します。
+* **`MediaButtonPttService` (`src/services/mediabutton.ts`)**: Media Session の play/pause ハンドラでイヤフォン等のメディアボタンPTTを実現 (DEC-027)。メディアキー配送のためのノイズWAV自前生成（ループ再生）と、操作フィードバック用のビープ合成（OscillatorNode）を持ちます。
+* **`FCMService` (`src/services/FCMService.ts`)**: Firebase Cloud Messaging のデバイストークン登録・プッシュ通知管理。
+* **TTT（ハンズフリー）**: `AudioManager` のウェイクワード待ち受けロジック (DEC-029) と、`App` / `UIController` の状態・UI連携で構成されます。
+* **背景画像ストア (`src/utils/db.ts`)**: 背景画像を IndexedDB (`ChatransceiverDB` / `backgroundStore`) に保存・読込・削除するユーティリティ。サーバーには保存しません。
