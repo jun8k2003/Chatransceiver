@@ -70,3 +70,12 @@
 * **決定4（音声自動削除バグ修正）**: Edge Function `delete-audio-on-message-delete` が参照するバケット名が `audio-messages` となっており、実際のアップロード先 `voice-messages` と不一致でURLパース失敗→音声が一切削除されていなかった。`voice-messages` に修正（要再デプロイ）。メッセージ削除時の音声削除は **CASCADE DELETE 依存のまま**とし（`chat_rooms` 削除→`messages` CASCADE→各行 DELETE が Webhook を発火）、退会フロー側でのメッセージ先行削除は採用しない。
 * **運用**: バグ期間中に `voice-messages` に蓄積した孤児ファイルは本修正では消えないため、別途一括削除する。
 * **不採用**: 退会時のメッセージ先行削除（CASCADEに依存しない明示削除）は、CASCADEでもWebhookが発火するため不要と判断し見送り。
+
+## DEC-032: 自動再生の停止パネル (2026-06-20)
+* **背景**: 着信メッセージの自動再生（`AudioPlaybackQueue` 経由）が始まると、途中で止める手段が無く不便だった。手動再再生（バブルの「▶」）はキューを通らないため対象外。
+* **決定（UI）**: 自動再生中のみ、全画面スクリム＋中央の大型カードからなる停止オーバーレイを表示する。PC・モバイル共通の単一オーバーレイで、カードサイズのみレスポンシブに調整する。**スクリム全域とカードのどこをクリック/タップしても停止**する（広いヒットエリア）。カードには再生中インジケータ（イコライザ風アニメ・オレンジ＝PTT/再生系アクセント、DEC-024準拠）、発話者名、「タップで停止」を表示。
+* **z-order**: 専用レイヤ `z-index: 2500` に配置。モーダル(1000)・コミュニティメニュー(1000)より上で設定モーダルを開いていても停止でき、全画面ローディング(3000)より下。既存のz-index値（header100 / ttt-overlay200 / modal1000 / login2000 / loading3000）と衝突しない隙間に明示配置した。
+* **決定（パイプライン安全な停止）**: `AudioPlaybackQueue.stopAll()` を新設。素朴に `stopAllPlayback()` を呼ぶだけでは、(1) 停止が再生中promiseを resolve するため `playNext` が次のキュー項目を再生してしまう、(2) 停止後に「再生後チャイム」が鳴る、という2つの事故が起きる。これを `stopRequested` フラグ＋各 await 後の再チェックで防ぎ、停止時は後続チャイムを鳴らさず・次アイテムへ進めないようにした。`clear()` も `stopAll()` に統一し、従来 `clear()` に潜在した停止後チャイム漏れも解消。
+* **TTSハング保険**: `speakText` の resolve を `AudioManager.activeSpeechResolve` で保持し、`stopAllPlayback()` から強制 resolve する。`speechSynthesis.cancel()` で `onend` が発火しない端末でも再生キュー・パネルがハングしないようにした。
+* **実装疎結合**: 停止パネルのクリックハンドラは `UIController` 初期化時に一度だけバインドし、再描画で増殖させない。表示/非表示は `state.isAutoplaying` を `onPlayStart`/`onPlayEnd` で切り替え、`render()` で反映する（再生パイプラインと疎結合）。
+* **不変条件**: ロゴ（public/chatora.png 茶トラ猫）は変更しない。`prefers-reduced-motion` ではアニメーションを無効化。

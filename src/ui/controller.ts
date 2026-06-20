@@ -31,6 +31,8 @@ export interface UIState {
   tttWakeWord: string;
   bgSize?: 'cover' | 'contain';
   bgBlur?: boolean;
+  isAutoplaying?: boolean;
+  autoplaySenderName?: string;
 }
 
 /**
@@ -84,6 +86,10 @@ export class UIController {
   private settingsWakeWordInput: HTMLInputElement | null = null;
   private settingsWakeWordErrorEl: HTMLDivElement | null = null;
 
+  // 自動再生 停止パネル (DEC-032)
+  private autoplayStopOverlayEl: HTMLDivElement | null = null;
+  private autoplaySenderNameEl: HTMLSpanElement | null = null;
+
   constructor(
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
@@ -112,7 +118,8 @@ export class UIController {
     onUnregisterNotification: () => Promise<void>,
     onToggleWakeLock: () => Promise<boolean>,
     onToggleMediaPtt: () => Promise<boolean>,
-    onToggleTTT: () => void
+    onToggleTTT: () => void,
+    onStopAutoplay: () => void
   ) {
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
@@ -420,6 +427,14 @@ export class UIController {
         onToggleTTT();
       });
     }
+
+    // 自動再生 停止パネル (DEC-032): パネル全域・背後スクリムのどこをクリック/タップしても停止。
+    // クリックハンドラはここで一度だけバインドし、再描画で増殖させない（再生パイプラインと疎結合）。
+    this.autoplayStopOverlayEl = document.getElementById('autoplayStopOverlay') as HTMLDivElement | null;
+    this.autoplaySenderNameEl = document.getElementById('autoplaySenderName') as HTMLSpanElement | null;
+    if (this.autoplayStopOverlayEl) {
+      this.autoplayStopOverlayEl.addEventListener('click', () => onStopAutoplay());
+    }
   }
 
   /**
@@ -455,6 +470,18 @@ export class UIController {
         this.loadingOverlayEl.classList.add('show');
       } else {
         this.loadingOverlayEl.classList.remove('show');
+      }
+    }
+
+    // 自動再生 停止パネルの表示制御 (DEC-032)
+    if (this.autoplayStopOverlayEl) {
+      if (state.isAutoplaying) {
+        if (this.autoplaySenderNameEl) {
+          this.autoplaySenderNameEl.textContent = state.autoplaySenderName || '';
+        }
+        this.autoplayStopOverlayEl.classList.add('show');
+      } else {
+        this.autoplayStopOverlayEl.classList.remove('show');
       }
     }
 

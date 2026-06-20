@@ -8,10 +8,10 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/chatora.png",
+      "src": "/chatora-192.png",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/chatora.png",

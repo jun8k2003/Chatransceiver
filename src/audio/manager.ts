@@ -239,19 +239,24 @@ export class AudioManager {
       utterance.lang = 'ja-JP';
       utterance.rate = 1.0; // 読み上げ速度
 
-      utterance.onend = () => {
-        resolve();
+      // stopAllPlayback() からも強制解決できるよう resolve を保持する (DEC-032)
+      this.activeSpeechResolve = resolve;
+      const done = () => {
+        if (this.activeSpeechResolve === resolve) {
+          this.activeSpeechResolve = null;
+        }
+        resolve(); // Promise の resolve は冪等なので二重呼び出しは無害
       };
 
-      utterance.onerror = () => {
-        resolve(); // エラー時もキューを停滞させないため解決する
-      };
+      utterance.onend = done;
+      utterance.onerror = done; // エラー時もキューを停滞させないため解決する
 
       window.speechSynthesis.speak(utterance);
     });
   }
 
   private activeAudioResolve: (() => void) | null = null;
+  private activeSpeechResolve: (() => void) | null = null;
 
   /**
    * 現在実行中のすべての再生・音声読み上げを即座に停止する
@@ -269,6 +274,11 @@ export class AudioManager {
     // 音声合成の読み上げ停止
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
+    }
+    // TTS 解決ハング保険: cancel() で onend が発火しない端末でも再生キューを止めない (DEC-032)
+    if (this.activeSpeechResolve) {
+      this.activeSpeechResolve();
+      this.activeSpeechResolve = null;
     }
   }
 

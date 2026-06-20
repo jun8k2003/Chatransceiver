@@ -364,6 +364,18 @@
       </div>
     </div>
 
+    <!-- 自動再生 停止オーバーレイ (DEC-032): 自動再生中のみ表示。どこをタップしても停止 -->
+    <div id="autoplayStopOverlay" class="autoplay-stop-overlay" role="button" tabindex="-1" aria-label="音声を再生中。クリックまたはタップで停止します">
+      <div class="autoplay-stop-card">
+        <div class="autoplay-eq" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p class="autoplay-stop-title"><span id="autoplaySenderName"></span> さんの音声を再生中…</p>
+        <div class="autoplay-stop-btn"><span class="autoplay-stop-icon" aria-hidden="true">⏹</span> タップで停止</div>
+        <p class="autoplay-stop-hint">画面のどこをタップしても止まります</p>
+      </div>
+    </div>
+
     <!-- 7. 全画面通信中ローディングオーバーレイ -->
     <div id="globalLoadingOverlay" class="loading-overlay">
       <div class="spinner"></div>
