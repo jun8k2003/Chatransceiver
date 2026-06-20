@@ -52,7 +52,9 @@ export class App {
     isLoading: true,
     loadingMessage: '初期化中...',
     isTTTMode: false,
-    tttWakeWord: ''
+    tttWakeWord: '',
+    isAutoplaying: false,
+    autoplaySenderName: undefined
   };
 
   private groupMembersMap: { [groupId: string]: string[] } = {}; // roomId -> userIds
@@ -112,7 +114,8 @@ export class App {
       async () => await this.handleUnregisterNotification(),
       async () => await this.handleToggleWakeLock(),
       async () => await this.handleToggleMediaPtt(),
-      () => this.handleToggleTTT()
+      () => this.handleToggleTTT(),
+      () => this.handleStopAutoplay()
     );
 
     // TTT: バックグラウンド復帰時にウェイクワード待機を再開する (DEC-028)
@@ -1222,11 +1225,17 @@ export class App {
           } else {
             this.state.playingUserId = senderId;
           }
+          // 自動再生中の停止パネルを表示する (DEC-032)
+          this.state.isAutoplaying = true;
+          this.state.autoplaySenderName = senderName;
           this.updateUI();
         },
         onPlayEnd: () => {
           this.state.playingGroupId = undefined;
           this.state.playingUserId = undefined;
+          // 自動再生の停止パネルを閉じる (DEC-032)
+          this.state.isAutoplaying = false;
+          this.state.autoplaySenderName = undefined;
           this.updateUI();
         }
       });
@@ -1237,6 +1246,21 @@ export class App {
     } else {
       this.loadCommunityData().then(() => this.updateUI());
     }
+  }
+
+  /**
+   * 自動再生中の停止パネルクリック時の処理 (DEC-032)
+   * 再生中の音声/TTS を即停止し、未再生のキューを破棄する。
+   * 停止パネルの非表示・再生インジケータの解除は stopAll → playNext の
+   * finally から onPlayEnd 経由でも行われるが、即時反映のためここでも閉じる。
+   */
+  private handleStopAutoplay(): void {
+    this.playbackQueue.stopAll();
+    this.state.isAutoplaying = false;
+    this.state.autoplaySenderName = undefined;
+    this.state.playingUserId = undefined;
+    this.state.playingGroupId = undefined;
+    this.updateUI();
   }
 
   /**

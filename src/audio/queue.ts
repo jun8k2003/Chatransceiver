@@ -20,6 +20,9 @@ export class AudioPlaybackQueue {
   private queue: QueueItem[] = [];
   private isPlaying = false;
   private isPaused = false;
+  // ハードストップ要求フラグ。再生中の playNext に「後続チャイム・次アイテム送りを
+  // 中断せよ」と伝えるための信号 (DEC-032)
+  private stopRequested = false;
   private audioManager: AudioManager;
 
   public callSignEnabled: boolean = true;
@@ -56,6 +59,10 @@ export class AudioPlaybackQueue {
       return;
     }
 
+    // 新しいアイテムの再生を始める時点で停止フラグをリセットする。
+    // アイドル中に stopAll() が呼ばれてフラグが残っていても、次の再生を取りこぼさない (DEC-032)
+    this.stopRequested = false;
+
     this.isPlaying = true;
     const currentItem = this.queue.shift()!;
 
@@ -65,8 +72,8 @@ export class AudioPlaybackQueue {
         currentItem.onPlayStart();
       }
 
-      // 再生前チャイム
-      if (this.callSignEnabled) {
+      // 再生前チャイム (停止要求中はスキップ)
+      if (this.callSignEnabled && !this.stopRequested) {
         try {
           await this.audioManager.playAudio(pttStartUrl, 0.3);
         } catch (error) {
@@ -74,17 +81,20 @@ export class AudioPlaybackQueue {
         }
       }
 
-      // データのタイプに応じて再生処理を分岐 (DEC-018)
-      if (currentItem.type === 'audio') {
-        // 音声ファイル再生
-        await this.audioManager.playAudio(currentItem.content);
-      } else {
-        // テキスト音声合成 (TTS) 再生
-        await this.audioManager.speakText(currentItem.content);
+      // データのタイプに応じて再生処理を分岐 (DEC-018)。
+      // 各 await 後に stopRequested を再チェックし、停止要求があれば本体・後続を鳴らさない (DEC-032)
+      if (!this.stopRequested) {
+        if (currentItem.type === 'audio') {
+          // 音声ファイル再生
+          await this.audioManager.playAudio(currentItem.content);
+        } else {
+          // テキスト音声合成 (TTS) 再生
+          await this.audioManager.speakText(currentItem.content);
+        }
       }
 
-      // 再生後チャイム
-      if (this.callSignEnabled) {
+      // 再生後チャイム (停止要求中は鳴らさない)
+      if (this.callSignEnabled && !this.stopRequested) {
         try {
           await this.audioManager.playAudio(pttStartUrl, 0.3);
         } catch (error) {
@@ -94,9 +104,16 @@ export class AudioPlaybackQueue {
     } catch (error) {
       console.error('AudioPlaybackQueue playback error:', error);
     } finally {
-      // 再生終了のUI通知コールバック
+      // 再生終了のUI通知コールバック (停止時もUI状態を戻すため必ず呼ぶ)
       if (currentItem.onPlayEnd) {
         currentItem.onPlayEnd();
+      }
+
+      // 停止要求があれば次へ進めずに終了する (後続アイテムを鳴らさない)
+      if (this.stopRequested) {
+        this.stopRequested = false;
+        this.isPlaying = false;
+        return;
       }
 
       // 次のアイテムを再生
@@ -122,12 +139,27 @@ export class AudioPlaybackQueue {
   }
 
   /**
-   * キューのクリアと再生中の音声の停止
+   * 自動再生のハードストップ (DEC-032)
+   * 未再生のキューを全消去し、再生中の音声・TTS を即座に止める。
+   * 再生中の場合は stopRequested で in-flight の playNext に中断を伝え、
+   * 後続チャイムや次アイテムの再生が走らないようにする（再生パイプラインの安全な停止）。
+   */
+  stopAll(): void {
+    this.queue = [];
+    if (this.isPlaying) {
+      this.stopRequested = true;
+    }
+    // 現在再生中の音声/TTS を停止する。これにより in-flight の await が解決し、
+    // playNext の finally で停止処理 (次アイテムへ進めない) が実行される。
+    this.audioManager.stopAllPlayback();
+  }
+
+  /**
+   * キューのクリアと再生中の音声の停止。
+   * ハードストップ (stopAll) に統一し、停止時に後続チャイムが鳴る不具合を防ぐ。
    */
   clear(): void {
-    this.queue = [];
-    this.isPlaying = false;
-    this.audioManager.stopAllPlayback();
+    this.stopAll();
   }
 
   /**
