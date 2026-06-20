@@ -2001,6 +2001,15 @@ select.setting-input {
     transform: translateX(0);
   }
 
+  /* カスタム背景時、body.custom-bg .chat-pane (specificity 0,2,1) が
+     モバイルの position/z-index を上書きし、左ペイン(sidebar z-index:10)が
+     チャット(chat-pane)の前面に重なる問題への対策。
+     スライド式の重なり順を維持しつつ、背景::beforeのスタッキングコンテキストも保つ。 */
+  body.custom-bg .chat-pane {
+    position: absolute;
+    z-index: 20;
+  }
+
   /* モバイルでは戻るボタンを表示 */
   .btn-back-to-sidebar {
     display: block;
