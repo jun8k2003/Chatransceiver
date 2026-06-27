@@ -3,6 +3,7 @@ import { AudioPlaybackQueue } from './audio/queue';
 import { UIController } from './ui/controller';
 import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
+import type { SupabaseMessage } from './services/supabase';
 import { FCMService } from './services/FCMService';
 import { WakeLockService } from './services/wakelock';
 import { MediaButtonPttService } from './services/mediabutton';
@@ -805,8 +806,39 @@ export class App {
           this.state.messages[index] = updatedMsg;
           this.updateUI();
         }
-      }
+      },
+      () => this.resyncRoomMessages(roomId)
     );
+  }
+
+  /**
+   * 購読の再確立時に、切断中の取りこぼしを補完する。
+   * モバイルでの WebSocket 切断・再接続中に届いたメッセージは Realtime が再送しないため、
+   * 再確立のタイミングで履歴を取り直してマージする。
+   * 楽観的更新で先行追加したメッセージ（まだサーバ反映が読めない直近分）は
+   * ローカル側を残してマージするため、消えたり重複したりしない。
+   */
+  private async resyncRoomMessages(roomId: string): Promise<void> {
+    // 再確立完了までに別ルームへ切り替わっていたら何もしない
+    if (this.state.activeChatHistoryId !== roomId) return;
+
+    try {
+      const fetched = await this.supabaseService.getRoomMessages(roomId);
+
+      // id でマージ（取得分を正とし、ローカルにしか無い直近分は保持）→ 時系列で整列
+      const byId = new Map<string, SupabaseMessage>();
+      for (const m of fetched) byId.set(m.id, m);
+      for (const m of this.state.messages) {
+        if (!byId.has(m.id)) byId.set(m.id, m);
+      }
+      const merged = Array.from(byId.values())
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+      this.state.messages = merged;
+      this.updateUI();
+    } catch (e) {
+      console.error('Failed to resync room messages:', e);
+    }
   }
 
   /**
@@ -820,6 +852,20 @@ export class App {
       console.error('Failed to revoke message:', e);
       alert('メッセージの取り消しに失敗しました。');
     }
+  }
+
+  /**
+   * 送信したメッセージを自分の画面へ即時反映する (楽観的更新)
+   * Realtime のエコー受信に依存せず、sendMessage の戻り値（INSERTと同一往復で取得済み）を
+   * そのまま使う。モバイルで WebSocket が切れていてもエコー取りこぼしで送信が消えるのを防ぐ。
+   * エコーが後から届いても、送信先ルームが一致し未登録の場合のみ反映するため二重表示にはならない。
+   */
+  private reflectSentMessage(roomId: string, msg: SupabaseMessage): void {
+    // 送信完了までに別ルームへ切り替わっている可能性があるため、現在表示中のルームのみ反映
+    if (this.state.activeChatHistoryId !== roomId) return;
+    if (this.state.messages.some(m => m.id === msg.id)) return;
+    this.state.messages.push(msg);
+    this.updateUI();
   }
 
   /**
@@ -850,7 +896,8 @@ export class App {
         await this.loadCommunityData();
       }
 
-      await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, text);
+      const sentMsg = await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, text);
+      this.reflectSentMessage(roomId, sentMsg);
     } catch (e) {
       console.error('Failed to send text message:', e);
     }
@@ -1161,7 +1208,8 @@ export class App {
         await this.loadCommunityData();
       }
 
-      await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob || undefined);
+      const sentMsg = await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob || undefined);
+      this.reflectSentMessage(roomId, sentMsg);
     } catch (e) {
       console.error('Failed to send audio message:', e);
     }
