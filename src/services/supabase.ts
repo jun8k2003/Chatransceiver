@@ -661,8 +661,18 @@ export class SupabaseService {
 
   /**
    * 特定のチャットルームの新着メッセージをリアルタイム購読
+   * @param onResync 購読が「再確立」された際に呼ばれる（切断中の取りこぼし補完用）。
+   *   初回の確立では呼ばれない（呼び出し側が直前に履歴を取得済みのため、二重取得を避ける）。
    */
-  subscribeRoomMessages(roomId: string, onNewMessage: (msg: SupabaseMessage) => void, onUpdateMessage?: (msg: SupabaseMessage) => void): any {
+  subscribeRoomMessages(
+    roomId: string,
+    onNewMessage: (msg: SupabaseMessage) => void,
+    onUpdateMessage?: (msg: SupabaseMessage) => void,
+    onResync?: () => void
+  ): any {
+    // 初回の SUBSCRIBED か、切断からの再確立かを区別するためのフラグ
+    let subscribedOnce = false;
+
     return supabase
       .channel(`room:${roomId}`)
       .on(
@@ -675,7 +685,7 @@ export class SupabaseService {
         },
         async (payload) => {
           const recordId = payload.eventType === 'DELETE' ? payload.old.id : payload.new.id;
-          
+
           // 送信者名を含むメッセージ詳細を取得
           const { data: msg, error } = await supabase
             .from('messages')
@@ -701,7 +711,17 @@ export class SupabaseService {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // SUBSCRIBED は初回確立時と、切断後の再確立時の両方で発火する。
+        // 2回目以降（=再接続）のみ、切断中に届いた可能性のあるメッセージを補完する。
+        if (status === 'SUBSCRIBED') {
+          if (subscribedOnce) {
+            onResync?.();
+          } else {
+            subscribedOnce = true;
+          }
+        }
+      });
   }
 
   /**
