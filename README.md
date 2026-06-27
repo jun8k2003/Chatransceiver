@@ -142,3 +142,4 @@ DiscordのWebhookに通知機能あり（上級者向け）<br>
 * `docs/specifications.md`: 確定した仕様の追記・整理
 * `docs/decisions.md`: 決定した事項とその理由のログ追加
 * `docs/discussion.md`: 議論中・未解決事項のアップデート
+.
