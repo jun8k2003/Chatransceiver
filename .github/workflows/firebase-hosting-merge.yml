@@ -28,3 +28,7 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CHATRANSCEIVER13162 }}
           channelId: live
           projectId: chatransceiver13162
+          # firebase-tools を固定する。`latest` は 15.22.x で live デプロイ後の
+          # 冗長なリリース呼び出しが 400 "is the current active version" を返し、
+          # 実際にはデプロイ成功しているのにジョブが失敗扱いになるため。
+          firebaseToolsVersion: "14.27.0"
