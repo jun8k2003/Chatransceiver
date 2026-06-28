@@ -24,7 +24,13 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      # プレビューデプロイはベストエフォート扱い。コードの正否は直前の build ステップが
+      # ゲートとして担保する。action-hosting-deploy は firebase-tools 内部の挙動
+      # （release POST 応答の keep-alive 早期切断 → 非冪等な再送 → 4xx で異常終了）で
+      # 実際には公開成功しているのに失敗を報告することがあるため、その偽失敗で PR を
+      # 赤にしない。本番(live)と違いプレビューは一時的・非権威なのでここは止めない。
+      - continue-on-error: true
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CHATRANSCEIVER13162 }}
