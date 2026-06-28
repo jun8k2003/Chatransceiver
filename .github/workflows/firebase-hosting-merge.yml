@@ -22,9 +22,43 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_VAPID_KEY: ${{ secrets.VITE_FIREBASE_VAPID_KEY }}
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      # action-hosting-deploy は firebase-tools 内部の挙動により、release POST の
+      # 応答が keep-alive 早期切断で失われた際に非冪等なリクエストを再送し、実際には
+      # 公開成功しているのに 400 "is the current active version" で異常終了することがある。
+      # そのため deploy 失敗ではジョブを止めず、後続で「実際に公開されたか」を確認して
+      # 最終的な成否を判定する。
+      - id: deploy
+        continue-on-error: true
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CHATRANSCEIVER13162 }}
           channelId: live
           projectId: chatransceiver13162
+      # deploy が「失敗」を報告した場合のみ実行する。ビルド成果物のハッシュ付き JS が
+      # 実際に live サイトで配信されていれば公開成功と判定（＝偽の失敗を緑に戻す）、
+      # 配信されていなければ本当の失敗として赤にする。
+      # firebase-tools 側が修正されれば deploy は success になり、このステップは丸ごと
+      # スキップされる（正常時の実行時間増加はゼロ）。
+      - name: Verify deploy actually reached the live channel
+        if: steps.deploy.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          expected=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -1)
+          if [ -z "${expected}" ]; then
+            echo "::error::Could not determine expected asset from dist/index.html"
+            exit 1
+          fi
+          echo "Expected live asset: ${expected}"
+          site="https://chatransceiver13162.web.app/index.html"
+          for i in $(seq 1 10); do
+            live=$(curl -fsS -H 'Cache-Control: no-cache' "${site}?cb=$(date +%s)" || true)
+            if printf '%s' "${live}" | grep -qF "${expected}"; then
+              echo "✅ Live channel is serving the freshly built asset — deploy effectively succeeded."
+              exit 0
+            fi
+            echo "Attempt ${i}/10: live not yet serving ${expected}; retrying in 6s..."
+            sleep 6
+          done
+          echo "::error::Live channel never served ${expected}; the deploy genuinely failed."
+          exit 1
