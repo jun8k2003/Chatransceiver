@@ -62,16 +62,18 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   )
 
-  // 対象ユーザーのトークンおよびDiscord Webhookを取得
-  const [tokensResult, userResult] = await Promise.all([
+  // 対象ユーザーのトークン、Discord Webhook、カスタムWebhook (DEC-033) を取得
+  const [tokensResult, userResult, webhooksResult] = await Promise.all([
     supabaseAdmin.from('fcm_tokens').select('device_uuid, fcm_token').eq('user_id', record.user_id),
-    supabaseAdmin.from('users').select('discord_webhook_url').eq('id', record.user_id).single()
+    supabaseAdmin.from('users').select('discord_webhook_url').eq('id', record.user_id).single(),
+    supabaseAdmin.from('user_webhooks').select('url, method, body_template').eq('user_id', record.user_id).eq('enabled', true)
   ])
 
   const tokens = tokensResult.data || []
   const discordWebhookUrl = userResult.data?.discord_webhook_url
+  const customWebhooks = webhooksResult.data || []
 
-  if (tokens.length === 0 && (!discordWebhookUrl || discordWebhookUrl.trim() === '')) {
+  if (tokens.length === 0 && (!discordWebhookUrl || discordWebhookUrl.trim() === '') && customWebhooks.length === 0) {
     return new Response('No notification targets')
   }
 
@@ -148,11 +150,11 @@ serve(async (req) => {
     sendPromises.push(...fcmPromises)
   }
 
+  const fullUrl = `https://chatransceiver13162.web.app/?c=${communitySlug}&m=${record.message_id || ''}`
+  const messageText = audioUrl ? '🎤 音声メッセージ' : textContent;
+
   // Discord Webhookの送信
   if (discordWebhookUrl && discordWebhookUrl.trim() !== '') {
-    const fullUrl = `https://chatransceiver13162.web.app/?c=${communitySlug}&m=${record.message_id || ''}`
-    const messageText = audioUrl ? '🎤 音声メッセージ' : textContent;
-    
     const discordPromise = fetch(discordWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -167,6 +169,52 @@ serve(async (req) => {
       console.error('Failed to send Discord webhook:', e)
     })
     sendPromises.push(discordPromise)
+  }
+
+  // カスタムWebhookの送信 (DEC-033): 投げっぱなし (リトライ・ユーザー通知なし)
+  if (customWebhooks.length > 0) {
+    // 置換変数 (docs/custom_webhook_spec.md §3)
+    const webhookVars: Record<string, string> = {
+      message: messageText || '新しいメッセージが届きました',
+      username: senderName,
+      community: communityName,
+      message_type: audioUrl ? 'audio' : 'text',
+      url: fullUrl
+    }
+
+    // テンプレート置換: 未知の変数はそのまま残す
+    const substituteVars = (template: string, escapeFn: (v: string) => string): string =>
+      template.replace(/\{(\w+)\}/g, (match, key) =>
+        key in webhookVars ? escapeFn(webhookVars[key]) : match)
+
+    // Body内はJSON文字列として安全なようにエスケープ、URL内はパーセントエンコード
+    const jsonEscape = (v: string): string => JSON.stringify(v).slice(1, -1)
+
+    for (const w of customWebhooks) {
+      try {
+        const targetUrl = substituteVars(w.url || '', encodeURIComponent)
+        if (!targetUrl.startsWith('https://')) continue
+
+        const method = (w.method || 'POST').toUpperCase()
+        const init: RequestInit = { method, signal: AbortSignal.timeout(5000) }
+        if ((method === 'POST' || method === 'PUT') && w.body_template) {
+          init.headers = { 'Content-Type': 'application/json' }
+          init.body = substituteVars(w.body_template, jsonEscape)
+        }
+
+        sendPromises.push(
+          fetch(targetUrl, init).then(res => {
+            if (!res.ok) {
+              console.error('Custom webhook error:', res.status, res.statusText)
+            }
+          }).catch(e => {
+            console.error('Failed to send custom webhook:', e)
+          })
+        )
+      } catch (e) {
+        console.error('Failed to build custom webhook request:', e)
+      }
+    }
   }
 
   await Promise.allSettled(sendPromises)

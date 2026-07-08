@@ -62,6 +62,17 @@ erDiagram
         timestamptz created_at
     }
 
+    user_webhooks {
+        uuid id PK
+        uuid user_id FK
+        text label
+        text url
+        varchar method
+        text body_template
+        boolean enabled
+        timestamptz created_at
+    }
+
     users ||--o{ community_members : "belongs to"
     communities ||--o{ community_members : "has"
     communities ||--o{ chat_rooms : "contains"
@@ -72,6 +83,7 @@ erDiagram
     users ||--o{ user_inboxes : "receives"
     chat_rooms ||--o{ user_inboxes : "related to"
     messages ||--o{ user_inboxes : "references"
+    users ||--o{ user_webhooks : "configures"
 ```
 
 ---
@@ -135,6 +147,17 @@ Table user_inboxes {
   is_read boolean [default: false]
   created_at timestamptz [default: `now()`]
 }
+
+Table user_webhooks {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > users.id, note: 'ユーザー削除時カスケード削除 (DEC-033)']
+  label text [note: '設定UI表示用の任意名']
+  url text [not null, note: '送信先。https:// のみ許可（フロント側バリデーション）。URL内でも置換変数を使用可']
+  method varchar [not null, default: 'POST', note: 'POST | PUT | GET | DELETE (CHECK制約)']
+  body_template text [note: '置換変数入りBodyテンプレート。POST/PUTでのみ送信']
+  enabled boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+}
 ```
 
 ---
@@ -155,6 +178,7 @@ alter table chat_rooms enable row level security;
 alter table chat_room_members enable row level security;
 alter table messages enable row level security;
 alter table user_inboxes enable row level security;
+alter table user_webhooks enable row level security;
 
 --------------------------------------------------
 -- 1. users テーブル
@@ -274,6 +298,15 @@ create policy "Users can manage their own inbox"
   on user_inboxes for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+--------------------------------------------------
+-- 8. user_webhooks テーブル (DEC-033)
+--------------------------------------------------
+-- 本人のみ全操作可能（Edge Function は service_role で RLS を越えて読む）
+create policy "Users can manage their own webhooks"
+  on user_webhooks for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 ```
 
 ### 3.2. Inbox自動配信（ファンアウト）のためのDBトリガー設計
@@ -322,7 +355,7 @@ create trigger on_message_created
 ### 4.2. Edge Functions
 | 関数名 | 役割 |
 | --- | --- |
-| `send-push-notification` | 新着メッセージ受信時に FCM プッシュ通知／Discord Webhook 通知を送信。 |
+| `send-push-notification` | 新着メッセージ受信時に FCM プッシュ通知／Discord Webhook／カスタムWebhook (DEC-033) を送信。 |
 | `register-fcm-token` | クライアントの FCM デバイストークンの登録（`register`）／解除（`unregister`）。ログアウト時に解除を呼ぶ。 |
 | `delete-audio-on-message-delete` | `messages` の **DELETE** をトリガーに、`audio_url` に対応する `voice-messages` バケットの音声ファイルを削除。Database Webhook 経由で起動。 |
 

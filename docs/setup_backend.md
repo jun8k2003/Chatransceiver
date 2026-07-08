@@ -108,6 +108,18 @@ create table public.user_inboxes (
   created_at timestamptz default now() not null
 );
 
+-- user_webhooks テーブル (カスタムWebhook通知 DEC-033)
+create table public.user_webhooks (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.users on delete cascade not null,
+  label text,
+  url text not null,
+  method varchar not null default 'POST' check (method in ('POST', 'PUT', 'GET', 'DELETE')),
+  body_template text,
+  enabled boolean default true not null,
+  created_at timestamptz default now() not null
+);
+
 -- ========================================================
 -- 2. パフォーマンス向上のためのインデックス設定
 -- ========================================================
@@ -115,6 +127,7 @@ create index idx_community_members_user on public.community_members(user_id);
 create index idx_chat_room_members_user on public.chat_room_members(user_id);
 create index idx_messages_room on public.messages(room_id);
 create index idx_user_inboxes_user_unread on public.user_inboxes(user_id) where is_read = false;
+create index idx_user_webhooks_user on public.user_webhooks(user_id);
 
 -- ========================================================
 -- 3. Row Level Security (RLS) の有効化とポリシー設定
@@ -127,6 +140,7 @@ alter table public.chat_rooms enable row level security;
 alter table public.chat_room_members enable row level security;
 alter table public.messages enable row level security;
 alter table public.user_inboxes enable row level security;
+alter table public.user_webhooks enable row level security;
 
 -- 3.1. users ポリシー
 create policy "Users can read all user profiles" on public.users for select using (true);
@@ -161,6 +175,9 @@ create policy "Authenticated users can delete messages" on public.messages for d
 
 -- 3.7. user_inboxes ポリシー
 create policy "Users can manage their own inbox" on public.user_inboxes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- 3.8. user_webhooks ポリシー (DEC-033: 本人のみ全操作可能。Edge Function は service_role で読む)
+create policy "Users can manage their own webhooks" on public.user_webhooks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ========================================================
 -- 4. 新着メッセージ自動配信用のデータベーストリガー (Fan-Out)
@@ -418,4 +435,41 @@ create policy "Authenticated users can update chat rooms"
   on public.chat_rooms for update
   using (auth.role() = 'authenticated')
   with check (auth.role() = 'authenticated');
+```
+
+### 8.2. カスタムWebhook通知対応 (2026-07-08, DEC-033)
+
+着信を任意URLへHTTP送信する「カスタムWebhook」機能のためのテーブル追加です。
+新テーブルの追加のみで既存テーブルへの変更はないため、**適用後も旧バージョンのフロントエンドはそのまま動作します**（後方互換あり）。
+
+SQL Editor で以下を実行します。
+
+```sql
+-- 1. user_webhooks テーブルの作成
+create table public.user_webhooks (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.users on delete cascade not null,
+  label text,
+  url text not null,
+  method varchar not null default 'POST' check (method in ('POST', 'PUT', 'GET', 'DELETE')),
+  body_template text,
+  enabled boolean default true not null,
+  created_at timestamptz default now() not null
+);
+
+-- 2. インデックス
+create index idx_user_webhooks_user on public.user_webhooks(user_id);
+
+-- 3. RLS: 本人のみ全操作可能 (Edge Function は service_role で RLS を越えて読む)
+alter table public.user_webhooks enable row level security;
+create policy "Users can manage their own webhooks"
+  on public.user_webhooks for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+```
+
+あわせて、拡張された Edge Function を再デプロイします。
+
+```bash
+npx supabase functions deploy send-push-notification
 ```
