@@ -3,7 +3,7 @@ import { AudioPlaybackQueue } from './audio/queue';
 import { UIController } from './ui/controller';
 import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
-import type { SupabaseMessage } from './services/supabase';
+import type { SupabaseMessage, UserWebhookInput } from './services/supabase';
 import { FCMService } from './services/FCMService';
 import { WakeLockService } from './services/wakelock';
 import { MediaButtonPttService } from './services/mediabutton';
@@ -34,6 +34,7 @@ export class App {
   // アプリケーション・グローバルステート
   private state: UIState = {
     currentUser: null,
+    webhooks: [],
     currentCommunity: null,
     activeChatHistoryId: null,
     selectedUserIds: [],
@@ -116,7 +117,9 @@ export class App {
       async () => await this.handleToggleWakeLock(),
       async () => await this.handleToggleMediaPtt(),
       () => this.handleToggleTTT(),
-      () => this.handleStopAutoplay()
+      () => this.handleStopAutoplay(),
+      async (webhook: UserWebhookInput) => await this.handleSaveWebhook(webhook),
+      async (webhookId: string) => await this.handleDeleteWebhook(webhookId)
     );
 
     // TTT: バックグラウンド復帰時にウェイクワード待機を再開する (DEC-028)
@@ -226,7 +229,8 @@ export class App {
       const user = await this.supabaseService.getCurrentUser();
       if (user) {
         this.state.currentUser = user;
-        
+        await this.loadUserWebhooks();
+
         if (communitySlug) {
           await this.handleConnectCommunity(communitySlug);
           
@@ -258,6 +262,7 @@ export class App {
           const user = await this.supabaseService.getCurrentUser();
           if (user) {
             this.state.currentUser = user;
+            await this.loadUserWebhooks();
             if (communitySlug && !this.state.currentCommunity) {
               await this.handleConnectCommunity(communitySlug);
             } else {
@@ -327,6 +332,7 @@ export class App {
 
       await this.supabaseService.signOut();
       this.state.currentUser = null;
+      this.state.webhooks = [];
 
       // URLのハッシュ（アクセストークン等）を完全に消去して綺麗な状態にする
       const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
@@ -1358,6 +1364,51 @@ export class App {
       this.roomSubscription = null;
     }
     this.updateUI();
+  }
+
+  /**
+   * カスタムWebhook一覧をDBから読み込む (DEC-033)
+   */
+  private async loadUserWebhooks(): Promise<void> {
+    if (!this.state.currentUser) return;
+    try {
+      this.state.webhooks = await this.supabaseService.getUserWebhooks(this.state.currentUser.id);
+    } catch (e) {
+      console.error('Failed to load user webhooks:', e);
+      this.state.webhooks = [];
+    }
+  }
+
+  /**
+   * カスタムWebhookの作成・更新 (DEC-033): 即時保存
+   */
+  private async handleSaveWebhook(webhook: UserWebhookInput): Promise<void> {
+    if (!this.state.currentUser) return;
+    try {
+      await this.supabaseService.saveUserWebhook(this.state.currentUser.id, webhook);
+      await this.loadUserWebhooks();
+    } catch (e) {
+      console.error('Failed to save webhook:', e);
+      throw e; // フォーム側でエラー表示するため再スロー
+    } finally {
+      this.updateUI();
+    }
+  }
+
+  /**
+   * カスタムWebhookの削除 (DEC-033): 即時反映
+   */
+  private async handleDeleteWebhook(webhookId: string): Promise<void> {
+    if (!this.state.currentUser) return;
+    try {
+      await this.supabaseService.deleteUserWebhook(webhookId);
+      await this.loadUserWebhooks();
+    } catch (e) {
+      console.error('Failed to delete webhook:', e);
+      alert('Webhookの削除に失敗しました。');
+    } finally {
+      this.updateUI();
+    }
   }
 
   /**

@@ -5,9 +5,11 @@ import { ChatListUI } from './list';
 import type { MemberItem, GroupItem } from './list';
 import { ChatWindowUI } from './chat';
 import type { MessageItem } from './chat';
+import type { UserWebhook, UserWebhookInput, WebhookMethod } from '../services/supabase';
 
 export interface UIState {
   currentUser: { id: string; name: string; discord_webhook_url?: string } | null;
+  webhooks: UserWebhook[];
   currentCommunity: { id: string; slug: string; name: string } | null;
   activeChatHistoryId: string | null;
   selectedUserIds: string[];
@@ -90,6 +92,22 @@ export class UIController {
   private autoplayStopOverlayEl: HTMLDivElement | null = null;
   private autoplaySenderNameEl: HTMLSpanElement | null = null;
 
+  // カスタムWebhook設定 (DEC-033)
+  private webhookListEl: HTMLDivElement | null = null;
+  private btnAddWebhook: HTMLButtonElement | null = null;
+  private webhookFormEl: HTMLDivElement | null = null;
+  private webhookLabelInput: HTMLInputElement | null = null;
+  private webhookMethodSelect: HTMLSelectElement | null = null;
+  private webhookUrlInput: HTMLInputElement | null = null;
+  private webhookBodyInput: HTMLTextAreaElement | null = null;
+  private webhookFormErrorEl: HTMLDivElement | null = null;
+  private editingWebhook: UserWebhook | null = null;  // 編集中の既存Webhook (新規はnull)
+  private currentWebhooks: UserWebhook[] = [];
+  private onSaveWebhook: (webhook: UserWebhookInput) => Promise<void>;
+  private onDeleteWebhook: (webhookId: string) => Promise<void>;
+
+  private static readonly MAX_WEBHOOKS = 5;
+
   constructor(
     onConnectCommunity: (slug: string) => void,
     onDisconnectCommunity: () => void,
@@ -119,8 +137,12 @@ export class UIController {
     onToggleWakeLock: () => Promise<boolean>,
     onToggleMediaPtt: () => Promise<boolean>,
     onToggleTTT: () => void,
-    onStopAutoplay: () => void
+    onStopAutoplay: () => void,
+    onSaveWebhook: (webhook: UserWebhookInput) => Promise<void>,
+    onDeleteWebhook: (webhookId: string) => Promise<void>
   ) {
+    this.onSaveWebhook = onSaveWebhook;
+    this.onDeleteWebhook = onDeleteWebhook;
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
     this.authErrorMessageEl = document.getElementById('authErrorMessage') as HTMLDivElement;
@@ -428,6 +450,52 @@ export class UIController {
       });
     }
 
+    // カスタムWebhook設定 (DEC-033)
+    this.webhookListEl = document.getElementById('customWebhookList') as HTMLDivElement | null;
+    this.btnAddWebhook = document.getElementById('btnAddWebhook') as HTMLButtonElement | null;
+    this.webhookFormEl = document.getElementById('webhookForm') as HTMLDivElement | null;
+    this.webhookLabelInput = document.getElementById('webhookLabel') as HTMLInputElement | null;
+    this.webhookMethodSelect = document.getElementById('webhookMethod') as HTMLSelectElement | null;
+    this.webhookUrlInput = document.getElementById('webhookUrl') as HTMLInputElement | null;
+    this.webhookBodyInput = document.getElementById('webhookBodyTemplate') as HTMLTextAreaElement | null;
+    this.webhookFormErrorEl = document.getElementById('webhookFormError') as HTMLDivElement | null;
+
+    if (this.btnAddWebhook) {
+      this.btnAddWebhook.addEventListener('click', () => this.openWebhookForm(null));
+    }
+    const btnWebhookFormCancel = document.getElementById('btnWebhookFormCancel');
+    if (btnWebhookFormCancel) {
+      btnWebhookFormCancel.addEventListener('click', () => this.closeWebhookForm());
+    }
+    const btnWebhookFormSave = document.getElementById('btnWebhookFormSave') as HTMLButtonElement | null;
+    if (btnWebhookFormSave) {
+      btnWebhookFormSave.addEventListener('click', async () => {
+        const url = this.webhookUrlInput?.value.trim() || '';
+        if (!url.startsWith('https://')) {
+          if (this.webhookFormErrorEl) this.webhookFormErrorEl.textContent = 'URLは https:// で始まる必要があります。';
+          return;
+        }
+        if (this.webhookFormErrorEl) this.webhookFormErrorEl.textContent = '';
+
+        btnWebhookFormSave.disabled = true;
+        try {
+          await this.onSaveWebhook({
+            id: this.editingWebhook?.id,
+            label: this.webhookLabelInput?.value.trim() || '',
+            url: url,
+            method: (this.webhookMethodSelect?.value || 'POST') as WebhookMethod,
+            bodyTemplate: this.webhookBodyInput?.value || '',
+            enabled: this.editingWebhook ? this.editingWebhook.enabled : true
+          });
+          this.closeWebhookForm();
+        } catch (e) {
+          if (this.webhookFormErrorEl) this.webhookFormErrorEl.textContent = '保存に失敗しました。';
+        } finally {
+          btnWebhookFormSave.disabled = false;
+        }
+      });
+    }
+
     // 自動再生 停止パネル (DEC-032): パネル全域・背後スクリムのどこをクリック/タップしても停止。
     // クリックハンドラはここで一度だけバインドし、再描画で増殖させない（再生パイプラインと疎結合）。
     this.autoplayStopOverlayEl = document.getElementById('autoplayStopOverlay') as HTMLDivElement | null;
@@ -457,6 +525,118 @@ export class UIController {
     this.btnKeepAwake.title = isActive
       ? '常時表示中: 画面は自動ロックされません (タップで解除)'
       : '常時表示: 画面の自動ロックを防ぎます';
+  }
+
+  /**
+   * カスタムWebhook編集フォームを開く (DEC-033)
+   * @param webhook 編集対象。null なら新規作成
+   */
+  private openWebhookForm(webhook: UserWebhook | null): void {
+    if (!this.webhookFormEl) return;
+    this.editingWebhook = webhook;
+    if (this.webhookLabelInput) this.webhookLabelInput.value = webhook?.label || '';
+    if (this.webhookUrlInput) this.webhookUrlInput.value = webhook?.url || '';
+    if (this.webhookMethodSelect) this.webhookMethodSelect.value = webhook?.method || 'POST';
+    if (this.webhookBodyInput) this.webhookBodyInput.value = webhook?.bodyTemplate || '';
+    if (this.webhookFormErrorEl) this.webhookFormErrorEl.textContent = '';
+    this.webhookFormEl.style.display = 'flex';
+    if (this.btnAddWebhook) this.btnAddWebhook.style.display = 'none';
+  }
+
+  /** カスタムWebhook編集フォームを閉じる (DEC-033) */
+  private closeWebhookForm(): void {
+    if (!this.webhookFormEl) return;
+    this.editingWebhook = null;
+    this.webhookFormEl.style.display = 'none';
+    this.updateWebhookAddButton();
+  }
+
+  /** Webhook追加ボタンの表示制御（フォーム表示中・上限到達時は隠す/無効化） */
+  private updateWebhookAddButton(): void {
+    if (!this.btnAddWebhook) return;
+    const formOpen = this.webhookFormEl?.style.display === 'flex';
+    this.btnAddWebhook.style.display = formOpen ? 'none' : '';
+    this.btnAddWebhook.disabled = this.currentWebhooks.length >= UIController.MAX_WEBHOOKS;
+    this.btnAddWebhook.textContent = this.btnAddWebhook.disabled
+      ? `Webhookの上限 (${UIController.MAX_WEBHOOKS}件) に達しています`
+      : '＋ Webhookを追加';
+  }
+
+  /**
+   * カスタムWebhook一覧の描画 (DEC-033)
+   */
+  private renderWebhookList(webhooks: UserWebhook[]): void {
+    if (!this.webhookListEl) return;
+    this.currentWebhooks = webhooks;
+    this.webhookListEl.innerHTML = '';
+
+    for (const w of webhooks) {
+      const item = document.createElement('div');
+      item.className = 'webhook-item' + (w.enabled ? '' : ' disabled');
+
+      // 有効/無効トグル
+      const toggle = document.createElement('label');
+      toggle.className = 'toggle';
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.checked = w.enabled;
+      check.addEventListener('change', async () => {
+        check.disabled = true;
+        try {
+          await this.onSaveWebhook({ ...w, enabled: check.checked });
+        } finally {
+          check.disabled = false;
+        }
+      });
+      const track = document.createElement('span');
+      track.className = 'toggle-track';
+      toggle.appendChild(check);
+      toggle.appendChild(track);
+
+      // ラベルとURL
+      const labelArea = document.createElement('span');
+      labelArea.className = 'webhook-item-label';
+      labelArea.textContent = w.label || '(ラベルなし)';
+      const urlEl = document.createElement('span');
+      urlEl.className = 'webhook-item-url';
+      urlEl.textContent = w.url;
+      labelArea.appendChild(urlEl);
+
+      // メソッドチップ
+      const chip = document.createElement('span');
+      chip.className = 'webhook-method-chip';
+      chip.textContent = w.method;
+
+      // 編集・削除ボタン
+      const btnEdit = document.createElement('button');
+      btnEdit.className = 'btn-copy';
+      btnEdit.title = '編集';
+      btnEdit.textContent = '✏️';
+      btnEdit.addEventListener('click', () => this.openWebhookForm(w));
+
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn-copy';
+      btnDelete.title = '削除';
+      btnDelete.textContent = '🗑️';
+      btnDelete.addEventListener('click', async () => {
+        if (!confirm(`このWebhook (${w.label || w.url}) を削除しますか？`)) return;
+        btnDelete.disabled = true;
+        try {
+          await this.onDeleteWebhook(w.id);
+        } finally {
+          btnDelete.disabled = false;
+        }
+      });
+
+      item.appendChild(toggle);
+      item.appendChild(labelArea);
+      item.appendChild(chip);
+      item.appendChild(btnEdit);
+      item.appendChild(btnDelete);
+      this.webhookListEl.appendChild(item);
+    }
+
+    this.updateWebhookAddButton();
   }
 
   /**
@@ -505,6 +685,9 @@ export class UIController {
       if (document.activeElement !== this.settingsDiscordWebhookInput) {
         this.settingsDiscordWebhookInput.value = state.currentUser?.discord_webhook_url || '';
       }
+
+      // カスタムWebhook一覧の同期 (DEC-033)
+      this.renderWebhookList(state.webhooks || []);
 
       // TTT ウェイクワード設定の同期
       if (this.settingsWakeWordInput && document.activeElement !== this.settingsWakeWordInput) {

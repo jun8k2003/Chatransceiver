@@ -307,6 +307,31 @@
               <div class="setting-label-area">Discord Webhook URL（オプション）<div class="setting-desc">iOS等のプッシュ通知代替。個人用Webhookを使用し、他人と共有しないでください</div></div>
               <input type="text" id="settingsDiscordWebhook" class="setting-input wide" placeholder="https://discord.com/api/webhooks/..." />
             </div>
+
+            <!-- カスタムWebhook (DEC-033) -->
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">カスタムWebhook（オプション・上級者向け）<div class="setting-desc">新着メッセージを任意のURLへHTTP送信します（最大5件・即時保存）。URLとBodyテンプレート内の {message} {username} {community} {message_type} {url} は実値に置換されます。GET/DELETEはBodyを送信しません。送信は投げっぱなしで、失敗しても通知されません。</div></div>
+              <div id="customWebhookList" class="webhook-list"></div>
+              <button id="btnAddWebhook" class="btn-sm ghost webhook-add-btn">＋ Webhookを追加</button>
+              <div id="webhookForm" class="webhook-form" style="display: none;">
+                <input type="text" id="webhookLabel" class="setting-input" placeholder="ラベル（任意・例: メール転送）" />
+                <div class="webhook-form-row">
+                  <select id="webhookMethod" class="setting-input">
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="GET">GET</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
+                  <input type="text" id="webhookUrl" class="setting-input" placeholder="https://..." />
+                </div>
+                <textarea id="webhookBodyTemplate" class="setting-input webhook-body-input" rows="3" placeholder='{"message": "{message}", "from": "{username}"}'></textarea>
+                <div id="webhookFormError" class="setting-error-msg"></div>
+                <div class="webhook-form-actions">
+                  <button id="btnWebhookFormCancel" class="btn-sm ghost">キャンセル</button>
+                  <button id="btnWebhookFormSave" class="btn-sm primary">保存</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="settings-section">
@@ -330,6 +355,8 @@
             <div class="logout-row">
               <button id="btnSignOut" class="link-danger">アカウントからログアウトする</button>
             </div>
+            <!-- アプリアイコン表示（装飾・DEC-033ついで変更） -->
+            <img src="/chatora.png" alt="" class="settings-app-icon" aria-hidden="true" />
           </div>
         </div>
 

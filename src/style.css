@@ -1491,6 +1491,100 @@ select.setting-input {
   font-family: var(--font-family);
 }
 
+/* 設定画面最下部のアプリアイコン (DEC-033 ついで変更) */
+.settings-app-icon {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 16px auto 4px;
+  border-radius: 14px;
+}
+
+/* ========================================================
+   カスタムWebhook設定 (DEC-033)
+   ======================================================== */
+.webhook-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.webhook-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.webhook-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+.webhook-item-url {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.webhook-method-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--color-accent);
+  color: #fff;
+}
+.webhook-item.disabled .webhook-item-label,
+.webhook-item.disabled .webhook-method-chip {
+  opacity: 0.45;
+}
+.webhook-item .btn-copy {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.webhook-add-btn {
+  margin-top: 8px;
+}
+.webhook-form {
+  margin-top: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.webhook-form-row {
+  display: flex;
+  gap: 8px;
+}
+.webhook-form-row select.setting-input {
+  flex-shrink: 0;
+  min-width: 90px;
+  width: 100px;
+}
+.webhook-form-row input {
+  flex: 1;
+}
+textarea.webhook-body-input {
+  resize: vertical;
+  font-family: monospace;
+}
+.webhook-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* ========================================================
    常時表示 (Wake Lock) トグルボタン (DEC-026)
    対応環境でのみ .supported が付与され表示される

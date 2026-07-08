@@ -12,6 +12,28 @@ export interface SupabaseUser {
   discord_webhook_url?: string;
 }
 
+export type WebhookMethod = 'POST' | 'PUT' | 'GET' | 'DELETE';
+
+/** カスタムWebhook (DEC-033): 着信を任意URLへHTTP送信する設定 */
+export interface UserWebhook {
+  id: string;
+  label: string;
+  url: string;
+  method: WebhookMethod;
+  bodyTemplate: string;
+  enabled: boolean;
+}
+
+/** カスタムWebhookの保存入力 (id 無しは新規作成) */
+export interface UserWebhookInput {
+  id?: string;
+  label: string;
+  url: string;
+  method: WebhookMethod;
+  bodyTemplate: string;
+  enabled: boolean;
+}
+
 export interface SupabaseCommunity {
   id: string;
   name: string;
@@ -165,6 +187,66 @@ export class SupabaseService {
       .update({ discord_webhook_url: webhookUrl })
       .eq('id', userId);
 
+    if (error) throw error;
+  }
+
+  /**
+   * カスタムWebhook一覧の取得 (DEC-033)
+   */
+  async getUserWebhooks(userId: string): Promise<UserWebhook[]> {
+    const { data, error } = await supabase
+      .from('user_webhooks')
+      .select('id, label, url, method, body_template, enabled')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map((w: any) => ({
+      id: w.id,
+      label: w.label || '',
+      url: w.url,
+      method: (w.method || 'POST') as WebhookMethod,
+      bodyTemplate: w.body_template || '',
+      enabled: !!w.enabled
+    }));
+  }
+
+  /**
+   * カスタムWebhookの作成・更新 (DEC-033)
+   */
+  async saveUserWebhook(userId: string, webhook: UserWebhookInput): Promise<void> {
+    const row = {
+      user_id: userId,
+      label: webhook.label.trim() || null,
+      url: webhook.url.trim(),
+      method: webhook.method,
+      body_template: webhook.bodyTemplate || null,
+      enabled: webhook.enabled
+    };
+
+    if (webhook.id) {
+      const { error } = await supabase
+        .from('user_webhooks')
+        .update(row)
+        .eq('id', webhook.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('user_webhooks')
+        .insert(row);
+      if (error) throw error;
+    }
+  }
+
+  /**
+   * カスタムWebhookの削除 (DEC-033)
+   */
+  async deleteUserWebhook(webhookId: string): Promise<void> {
+    const { error } = await supabase
+      .from('user_webhooks')
+      .delete()
+      .eq('id', webhookId);
     if (error) throw error;
   }
 

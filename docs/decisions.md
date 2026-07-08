@@ -79,3 +79,13 @@
 * **TTSハング保険**: `speakText` の resolve を `AudioManager.activeSpeechResolve` で保持し、`stopAllPlayback()` から強制 resolve する。`speechSynthesis.cancel()` で `onend` が発火しない端末でも再生キュー・パネルがハングしないようにした。
 * **実装疎結合**: 停止パネルのクリックハンドラは `UIController` 初期化時に一度だけバインドし、再描画で増殖させない。表示/非表示は `state.isAutoplaying` を `onPlayStart`/`onPlayEnd` で切り替え、`render()` で反映する（再生パイプラインと疎結合）。
 * **不変条件**: ロゴ（public/chatora.png 茶トラ猫）は変更しない。`prefers-reduced-motion` ではアニメーションを無効化。
+
+## DEC-033: カスタムWebhook通知 (2026-07-08)
+* **背景**: メール等の任意チャネルへの通知要望。`bot_function_spec.md` のボット振る舞い（`is_bot`・自動返信・ループ防止）は**見送り**とし、同仕様の「汎用Webhook連携」のみを独立機能として実装した（仕様書: [custom_webhook_spec.md](./custom_webhook_spec.md)）。
+* **決定（機能）**: ユーザーが **URL・メソッド (POST/PUT/GET/DELETE)・Bodyテンプレート** の組を最大5件登録でき、着信ごとに置換変数（`{message}` `{username}` `{community}` `{message_type}` `{url}`）を実値へ置換してHTTP送信する。第一の利用例はGAS Webアプリ経由のメール転送だが、アプリ側は「メール」という概念を持たない汎用Webhookとする。
+* **決定（送信仕様）**: Content-Type は `application/json` 固定。Body内の変数値はJSON文字列としてエスケープ、URL内は `encodeURIComponent`。GET/DELETEはBodyを送らない（URL内置換が実質のデータ渡し手段）。送信は投げっぱなし（`Promise.allSettled`＋タイムアウト5秒、リトライ・失敗通知なし）。
+* **決定（データモデル）**: 複数登録のため専用テーブル `user_webhooks` を新設（明示カラム構造）。bot_function_spec の `user_integrations`（タイプ＋JSONB）案は、用途がWebhook単一のため不採用。RLSは本人のみ全操作可、Edge Function は service_role で読む。
+* **決定（パイプライン）**: 新規Edge Functionは作らず、既存 `send-push-notification` を拡張してFCM・Discordと同列に合流させる。既存の Discord Webhook（`users.discord_webhook_url`）とは統合せず併存（動いているものを触らない）。
+* **決定（UI）**: 環境設定「通知」セクション内にリスト＋インライン編集フォームを追加。設定モーダルの保存ボタンとは独立した**即時保存**（追加・編集・削除・有効トグルの各操作で直接DBへ反映）。URLは `https://` のみ許可。
+* **ついで変更**: 設定モーダル最下部にアプリアイコン（chatora.png、64px・中央寄せ・角丸）を装飾表示。
+* **セキュリティ**: URL自体をシークレットとする信頼モデル（既存Discord Webhookと同等）。堅牢化したいユーザーはテンプレートに自前トークンを記載すればよい（アプリ側の追加機能なし）。
