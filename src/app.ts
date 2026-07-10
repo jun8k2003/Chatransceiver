@@ -436,7 +436,7 @@ export class App {
       const members = await this.supabaseService.getCommunityMembers(commId, myId);
       
       // 個別チャットの未読件数の取得と反映
-      const unreadIndividual = await this.supabaseService.getUnreadIndividualCounts(myId);
+      const unreadIndividual = await this.supabaseService.getUnreadIndividualCounts(myId, commId);
       members.forEach(m => {
         const info = unreadIndividual[m.id];
         m.unreadCount = info?.count || 0;

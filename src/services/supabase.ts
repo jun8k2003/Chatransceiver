@@ -446,14 +446,18 @@ export class SupabaseService {
 
   /**
    * ユーザーの個別チャットごとの未読メッセージ数を取得します。
+   * 既読化 (markAsRead) は「接続中コミュニティのルーム」単位でしか行えないため、
+   * 集計も同じコミュニティに絞り込む（絞らないと他コミュニティの未読が
+   * 現コミュニティのバッジに合算され、そこでチャットを開いても永久に消せなくなる）。
    */
-  async getUnreadIndividualCounts(userId: string): Promise<Record<string, { count: number; latestTime: number }>> {
+  async getUnreadIndividualCounts(userId: string, communityId: string): Promise<Record<string, { count: number; latestTime: number }>> {
     const { data, error } = await supabase
       .from('user_inboxes')
-      .select('messages!inner(sender_id, created_at), chat_rooms!inner(type)')
+      .select('messages!inner(sender_id, created_at), chat_rooms!inner(type, community_id)')
       .eq('user_id', userId)
       .eq('is_read', false)
-      .eq('chat_rooms.type', 'individual');
+      .eq('chat_rooms.type', 'individual')
+      .eq('chat_rooms.community_id', communityId);
 
     if (error) {
       console.error('Failed to get unread individual counts:', error);
