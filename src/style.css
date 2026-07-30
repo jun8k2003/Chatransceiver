@@ -173,14 +173,16 @@ body.theme-light ::-webkit-scrollbar-thumb:hover {
 /* ========================================================
    ヘッダー (ブランド + コミュニティ名ピル + ユーザー)
    ======================================================== */
+/* 3カラムグリッド: 左右トラックを均等にすることで、右のアイコン数に関係なく
+   中央のコミュニティピルを画面中央に固定する (DEC-035) */
 .app-header {
   height: 56px;
   flex-shrink: 0;
   background-color: var(--bg-panel);
   border-bottom: 1px solid var(--border-color);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 0 16px;
   gap: 12px;
   z-index: 100;
@@ -194,6 +196,7 @@ body.theme-light ::-webkit-scrollbar-thumb:hover {
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  justify-self: start;
 }
 .brand-logo {
   width: 26px;
@@ -205,6 +208,7 @@ body.theme-light ::-webkit-scrollbar-thumb:hover {
 /* コミュニティ名ピル + ドロップダウンメニュー (DEC-024) */
 .community-connector {
   position: relative;
+  min-width: 0;
 }
 
 .community-pill {
@@ -370,6 +374,7 @@ body.theme-light ::-webkit-scrollbar-thumb:hover {
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  justify-self: end;
 }
 .user-nickname {
   font-size: 13px;
@@ -2083,21 +2088,28 @@ textarea.webhook-body-input {
   .user-profile-icon {
     display: none;
   }
+  /* モバイルではピルを中央固定せず、余白いっぱいに伸ばす（従来の見た目を維持） */
   .app-header {
     padding: 0 12px;
-  }
-  .community-connector {
-    flex: 1;
-    min-width: 0;
+    grid-template-columns: auto 1fr auto;
   }
   .community-pill {
     max-width: none;
     width: 100%;
     justify-content: center;
   }
+  /* ピル中央を基準にした絶対配置では画面端で見切れるため、
+     画面幅いっぱい（左右12px）の固定配置に切り替える (DEC-035) */
   .community-menu {
-    width: calc(100vw - 32px);
-    max-width: 340px;
+    position: fixed;
+    top: 64px; /* ヘッダー56px + 8px */
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 76px);
+    overflow-y: auto;
+    transform: none;
   }
 
   /* 左右スプリッターを無効化 */
