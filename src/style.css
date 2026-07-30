@@ -1586,6 +1586,32 @@ textarea.webhook-body-input {
 }
 
 /* ========================================================
+   プッシュ通知トグルボタン (DEC-034)
+   常に表示し、非対応環境では .unsupported でグレーアウト
+   ======================================================== */
+.btn-push-notify {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 16px;
+  padding: 4px 8px;
+  cursor: pointer;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.btn-push-notify.active {
+  filter: none;
+  opacity: 1;
+  border-color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.15);
+}
+.btn-push-notify.unsupported {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* ========================================================
    常時表示 (Wake Lock) トグルボタン (DEC-026)
    対応環境でのみ .supported が付与され表示される
    ======================================================== */

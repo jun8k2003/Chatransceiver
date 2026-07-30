@@ -24,7 +24,7 @@ export interface UIState {
   mobileChatForceOpen: boolean;
   theme: 'light' | 'dark';
   targetMessageIdToFocus?: string;
-  fcmIsIOS?: boolean;
+  fcmSupported?: boolean;
   fcmRegistered?: boolean;
   callSignEnabled: boolean;
   isLoading: boolean;
@@ -60,8 +60,11 @@ export class UIController {
   private settingsCallSignCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
   private settingsDiscordWebhookInput: HTMLInputElement;
-  private settingsFcmToggle: HTMLInputElement;
+
+  // プッシュ通知トグルボタン (ヘッダー) (DEC-034)
+  private btnPushNotify: HTMLButtonElement | null = null;
   private fcmUpdating: boolean = false;
+  private fcmRegistered: boolean = false;
   
   // 背景設定関連
   private settingsBgImageInput: HTMLInputElement;
@@ -270,7 +273,6 @@ export class UIController {
     this.settingsCallSignCheck = document.getElementById('settingsCallSign') as HTMLInputElement;
     this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
     this.settingsDiscordWebhookInput = document.getElementById('settingsDiscordWebhook') as HTMLInputElement;
-    this.settingsFcmToggle = document.getElementById('settingsFcmToggle') as HTMLInputElement;
 
     this.settingsBgImageInput = document.getElementById('settingsBgImage') as HTMLInputElement;
     this.btnSettingsBgClear = document.getElementById('btnSettingsBgClear') as HTMLButtonElement;
@@ -381,20 +383,26 @@ export class UIController {
     bindCopyButton('btnCopyMicUrl', 'settingsMicUrl');
     bindCopyButton('btnCopySoundUrl', 'settingsSoundUrl');
 
-    // FCM通知トグル: ONで登録、OFFで解除 (DEC-024)
-    if (this.settingsFcmToggle) {
-      this.settingsFcmToggle.addEventListener('change', async () => {
+    // プッシュ通知トグルボタン (ヘッダー): ONで登録、OFFで解除 (DEC-034)
+    // 非対応環境ではグレーアウト表示のまま、タップで理由を案内する
+    this.btnPushNotify = document.getElementById('btnPushNotify') as HTMLButtonElement | null;
+    if (this.btnPushNotify) {
+      this.btnPushNotify.addEventListener('click', async () => {
         if (this.fcmUpdating) return;
+        if (this.btnPushNotify!.classList.contains('unsupported')) {
+          alert('お使いの端末またはブラウザは、プッシュ通知に対応していません。');
+          return;
+        }
         this.fcmUpdating = true;
-        this.settingsFcmToggle.disabled = true;
+        this.btnPushNotify!.disabled = true;
         try {
-          if (this.settingsFcmToggle.checked) {
-            await onRegisterNotification();
-          } else {
+          if (this.fcmRegistered) {
             await onUnregisterNotification();
+          } else {
+            await onRegisterNotification();
           }
         } finally {
-          this.settingsFcmToggle.disabled = false;
+          this.btnPushNotify!.disabled = false;
           this.fcmUpdating = false;
         }
       });
@@ -711,19 +719,20 @@ export class UIController {
         this.tttToggleLabel.classList.toggle('listening', state.isTTTMode);
       }
 
-      // FCM UIの制御
-      const fcmNotSupportedMsg = document.getElementById('fcmNotSupportedMsg') as HTMLDivElement;
-      const fcmToggleRow = document.getElementById('fcmToggleRow') as HTMLDivElement;
-      if (state.fcmIsIOS) {
-        if (fcmNotSupportedMsg) fcmNotSupportedMsg.style.display = 'block';
-        if (fcmToggleRow) fcmToggleRow.style.display = 'none';
-      } else {
-        if (fcmNotSupportedMsg) fcmNotSupportedMsg.style.display = 'none';
-        if (fcmToggleRow) fcmToggleRow.style.display = 'flex';
-        if (!this.fcmUpdating) {
-          this.settingsFcmToggle.checked = !!state.fcmRegistered;
+      // プッシュ通知トグルボタン (ヘッダー) の制御 (DEC-034)
+      if (this.btnPushNotify) {
+        this.fcmRegistered = !!state.fcmRegistered;
+        if (state.fcmSupported) {
+          this.btnPushNotify.classList.remove('unsupported');
+          this.btnPushNotify.classList.toggle('active', this.fcmRegistered);
+          this.btnPushNotify.title = this.fcmRegistered
+            ? 'プッシュ通知 登録済み: バックグラウンドでも新着を受け取ります (タップで解除)'
+            : 'プッシュ通知: バックグラウンドでも新着を受け取ります';
+        } else {
+          this.btnPushNotify.classList.add('unsupported');
+          this.btnPushNotify.classList.remove('active');
+          this.btnPushNotify.title = 'お使いの端末またはブラウザは、プッシュ通知に対応していません';
         }
-
       }
     }
 

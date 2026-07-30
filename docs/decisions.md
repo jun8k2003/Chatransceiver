@@ -98,3 +98,8 @@
 * **決定（UI）**: 環境設定「通知」セクション内にリスト＋インライン編集フォームを追加。設定モーダルの保存ボタンとは独立した**即時保存**（追加・編集・削除・有効トグルの各操作で直接DBへ反映）。URLは `https://` のみ許可。
 * **ついで変更**: 設定モーダル最下部にアプリアイコン（chatora.png、64px・中央寄せ・角丸）を装飾表示。
 * **セキュリティ**: URL自体をシークレットとする信頼モデル（既存Discord Webhookと同等）。堅牢化したいユーザーはテンプレートに自前トークンを記載すればよい（アプリ側の追加機能なし）。
+## DEC-034: プッシュ通知トグルのヘッダー移設と機能検出化 (2026-07-30)
+* **背景**: プッシュ通知のON/OFFが環境設定モーダルの奥にあり、切り替えの導線が長かった。また対応可否判定が UserAgent の iOS 判定（`/iphone|ipad|ipod/`）で、iPadOS 13+ が「Macintosh」を名乗るため iPad を取りこぼし、Mac Chrome など実際は対応している環境と区別できていなかった。
+* **決定（UI移設）**: プッシュ通知トグルを環境設定から**削除**し、ヘッダー（☀️🎧の並び）に🔔ボタンとして移設。登録済みは `.active`（アクセント色）、非対応環境は**非表示にせずグレーアウト**（`.unsupported`）とし、タップで理由をalert表示する。環境設定の「通知」セクションには🔔への案内文のみ残す。
+* **決定（判定方法）**: UA判定を廃止し、Firebase SDK の `isSupported()`（Push API / Service Worker / IndexedDB 等の機能検出）に置き換え。`FCMService.isIOSTerminal()` → `isPushSupported()`（Promiseキャッシュ）、state は `fcmIsIOS` → `fcmSupported`。これにより iOS 16.4+ のホーム画面PWAは自動的に対応扱いとなる（アプリ内での案内は出さない）。
+* **実装**: `src/services/FCMService.ts` / `src/app.ts` / `src/ui/controller.ts` / `index.html` / `src/style.css`。登録・解除ハンドラ（`handleRegisterNotification` / `handleUnregisterNotification`）は変更なし。

@@ -48,7 +48,7 @@ export class App {
     isRecording: false,
     mobileChatForceOpen: false,
     theme: 'dark',
-    fcmIsIOS: false,
+    fcmSupported: false,
     fcmRegistered: false,
     callSignEnabled: true,
     isLoading: true,
@@ -188,7 +188,7 @@ export class App {
     }
 
     // FCM初期状態のセットアップ
-    this.state.fcmIsIOS = this.fcmService.isIOSTerminal();
+    this.state.fcmSupported = await this.fcmService.isPushSupported();
     this.state.fcmRegistered = localStorage.getItem('chatransceiver_fcm_registered') === 'true';
     this.fcmService.setupIfRegistered();
 

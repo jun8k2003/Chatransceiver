@@ -1,19 +1,15 @@
 import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage, deleteToken } from 'firebase/messaging';
+import { getMessaging, getToken, onMessage, deleteToken, isSupported } from 'firebase/messaging';
 import { SupabaseService } from './supabase'; // 依存性注入などでSupabaseインスタンスを取得
 
 export class FCMService {
   private messaging: any = null;
   private app: any = null;
   private supabaseService: SupabaseService;
-  private isIOS: boolean;
+  private supportedPromise: Promise<boolean> | null = null;
 
   constructor(supabaseService: SupabaseService) {
     this.supabaseService = supabaseService;
-    
-    // iOS判定 (UserAgentに iPhone, iPad, iPod が含まれるかどうか)
-    const ua = window.navigator.userAgent.toLowerCase();
-    this.isIOS = /iphone|ipad|ipod/.test(ua);
 
     // .env 等から設定を読み込む
     const firebaseConfig = {
@@ -26,8 +22,6 @@ export class FCMService {
     // Firebaseが初期化されていなければ初期化する
     if (firebaseConfig.apiKey && firebaseConfig.projectId) {
       this.app = initializeApp(firebaseConfig);
-      // iOSの場合は FCM が未対応・制約が多いため messaging 初期化をスキップするなどの対応も可能ですが、
-      // 念のため初期化だけは行い、登録ボタンを出さない方針とします。
       try {
         this.messaging = getMessaging(this.app);
       } catch (e) {
@@ -40,10 +34,22 @@ export class FCMService {
   }
 
   /**
-   * 現在の端末がiOSかどうかを返す
+   * この環境でプッシュ通知 (FCM) が利用できるかを返す。
+   * Firebase SDK の isSupported() による機能検出（Push API / Service Worker / IndexedDB 等）。
+   * iOS Safari のブラウザタブでは false、ホーム画面PWA (iOS 16.4+) では true になる。
    */
-  public isIOSTerminal(): boolean {
-    return this.isIOS;
+  public isPushSupported(): Promise<boolean> {
+    if (!this.supportedPromise) {
+      this.supportedPromise = (async () => {
+        if (!this.messaging) return false;
+        try {
+          return await isSupported();
+        } catch {
+          return false;
+        }
+      })();
+    }
+    return this.supportedPromise;
   }
 
   /**
@@ -79,12 +85,8 @@ export class FCMService {
    * 3. バックエンド (Supabase Edge Function) に送信・登録する
    */
   public async registerNotification(): Promise<boolean> {
-    if (this.isIOS) {
-      alert('申し訳ありませんが、お使いの端末（iOS）はプッシュ通知登録に非対応です。');
-      return false;
-    }
-    if (!this.messaging) {
-      alert('プッシュ通知がサポートされていないブラウザか、設定が不足しています。');
+    if (!(await this.isPushSupported())) {
+      alert('お使いの端末またはブラウザは、プッシュ通知に対応していません。');
       return false;
     }
 
@@ -155,7 +157,7 @@ export class FCMService {
    * すでに登録済みの場合は、アプリ起動時にリスナーのみセットアップする
    */
   public async setupIfRegistered(): Promise<void> {
-    if (this.isIOS || !this.messaging) return;
+    if (!(await this.isPushSupported())) return;
     const isRegistered = localStorage.getItem('chatransceiver_fcm_registered');
     if (isRegistered === 'true') {
       await this.registerServiceWorker();
