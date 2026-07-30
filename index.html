@@ -98,6 +98,8 @@
       <div class="user-profile">
         <span class="user-profile-icon">👤</span>
         <span id="userNickname" class="user-nickname">-</span>
+        <!-- プッシュ通知トグル: 非対応環境（iOSブラウザ等）ではグレーアウト (DEC-034) -->
+        <button id="btnPushNotify" class="btn-push-notify" title="プッシュ通知: バックグラウンドでも新着を受け取ります">🔔</button>
         <!-- 常時表示トグル: Wake Lock対応環境のみ表示 (DEC-026) -->
         <button id="btnKeepAwake" class="btn-keep-awake" title="常時表示: 画面の自動ロックを防ぎます">☀️</button>
         <!-- メディアボタンPTTトグル: Media Session対応環境のみ表示 (DEC-027) -->
@@ -296,13 +298,7 @@
 
           <div class="settings-section">
             <div class="section-label">通知</div>
-            <div id="fcmNotSupportedMsg" class="setting-desc danger-text">
-              お使いの端末（iOS等）またはブラウザは、プッシュ通知の登録に非対応です。
-            </div>
-            <div id="fcmToggleRow" class="setting-row">
-              <div class="setting-label-area">プッシュ通知<div class="setting-desc">バックグラウンドでも新着を受け取ります</div></div>
-              <label class="toggle"><input type="checkbox" id="settingsFcmToggle" /><span class="toggle-track"></span></label>
-            </div>
+            <div class="setting-desc">プッシュ通知のON/OFFは、画面上部の🔔ボタンから行えます。</div>
             <div class="setting-row setting-row-block">
               <div class="setting-label-area">Discord Webhook URL（オプション）<div class="setting-desc">iOS等のプッシュ通知代替。個人用Webhookを使用し、他人と共有しないでください</div></div>
               <input type="text" id="settingsDiscordWebhook" class="setting-input wide" placeholder="https://discord.com/api/webhooks/..." />
