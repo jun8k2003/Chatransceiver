@@ -1590,6 +1590,7 @@ textarea.webhook-body-input {
    常に表示し、非対応環境では .unsupported でグレーアウト
    ======================================================== */
 .btn-push-notify {
+  position: relative;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -1597,16 +1598,30 @@ textarea.webhook-body-input {
   padding: 4px 8px;
   cursor: pointer;
   line-height: 1;
-  filter: grayscale(1);
-  opacity: 0.6;
+}
+/* OFF状態: ベルは色付きのまま、赤いスラッシュで「通知が無効」を明示する */
+.btn-push-notify::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  right: 5px;
+  height: 2px;
+  margin-top: -1px;
+  background: #ef4444;
+  border-radius: 2px;
+  transform: rotate(-45deg);
+  pointer-events: none;
 }
 .btn-push-notify.active {
-  filter: none;
-  opacity: 1;
   border-color: var(--color-accent);
   background: rgba(59, 130, 246, 0.15);
 }
+.btn-push-notify.active::after {
+  display: none;
+}
 .btn-push-notify.unsupported {
+  filter: grayscale(1);
   opacity: 0.25;
   cursor: not-allowed;
 }
