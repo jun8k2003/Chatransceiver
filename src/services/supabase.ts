@@ -618,7 +618,7 @@ export class SupabaseService {
   /**
    * メッセージ送信（音声アップロード対応）
    */
-  async sendMessage(roomId: string, senderId: string, text: string, audioBlob?: Blob): Promise<SupabaseMessage> {
+  async sendMessage(roomId: string, senderId: string, text: string, audioBlob?: Blob, needsTranscription: boolean = false): Promise<SupabaseMessage> {
     let audioUrl: string | undefined = undefined;
 
     if (audioBlob) {
@@ -648,7 +648,8 @@ export class SupabaseService {
         room_id: roomId,
         sender_id: senderId,
         audio_url: audioUrl || null,
-        text_content: text
+        text_content: text,
+        needs_transcription: needsTranscription
       })
       .select('id, sender_id, audio_url, text_content, is_revoked, created_at, users(name)')
       .single();

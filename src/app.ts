@@ -66,6 +66,8 @@ export class App {
   private recordingCountdownId: number | null = null;
   private recordedAudioBlob: Blob | null = null;
   private recordedDictationText: string = '';
+  // 実発話内容が未文字起こし（音声のみ・認識失敗）で事後STTの対象になるか
+  private recordedNeedsTranscription: boolean = false;
 
   // メディアボタンPTT経由で録音を開始したか (15秒タイムアウト時に自動送信するため) (DEC-027)
   private mediaPttTalkActive: boolean = false;
@@ -1084,6 +1086,7 @@ export class App {
     this.playbackQueue.pause();
     this.recordedAudioBlob = null;
     this.recordedDictationText = '';
+    this.recordedNeedsTranscription = false;
 
     this.uiController.showRecordingModal(this.state.recordMode);
     
@@ -1146,8 +1149,12 @@ export class App {
 
       if (this.state.recordMode === 'audio_only') {
         this.recordedDictationText = '🎤 音声メッセージ';
+        // audio_only は音声認識自体を行わないため、常に事後文字起こしの対象
+        this.recordedNeedsTranscription = true;
       } else {
         this.recordedDictationText = recognizedText || (this.state.recordMode === 'text_only' ? '（テキスト化できませんでした）' : '（音声メッセージ）');
+        // both で音声認識に失敗した場合（モバイル等）のみ事後文字起こしの対象
+        this.recordedNeedsTranscription = this.state.recordMode === 'both' && !recognizedText;
       }
       
       this.uiController.updateDictationPreview(this.recordedDictationText);
@@ -1214,7 +1221,7 @@ export class App {
         await this.loadCommunityData();
       }
 
-      const sentMsg = await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob || undefined);
+      const sentMsg = await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob || undefined, this.recordedNeedsTranscription);
       this.reflectSentMessage(roomId, sentMsg);
     } catch (e) {
       console.error('Failed to send audio message:', e);

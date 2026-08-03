@@ -112,3 +112,14 @@
 * **検証（実測値）**: 1280px→トラック 566.5/91/566.5・ピルのズレ0px・メニュー490〜790で見切れなし。769px→ズレ0px（長いコミュニティ名時のみ-20px、見切れなし）。375px→メニュー12〜363（幅351px）で見切れゼロ、アイコン4個フル幅維持。320px→メニュー12〜308で見切れゼロ、アイコン4個フル幅維持。いずれも横スクロール発生なし。
 * **不採用**: ☀️🎧をチャットフッターのTTT横へ移す案（アイコン削減）は、案A＋Bで解決したため見送り。モバイルでもピルを中央固定したい場合の唯一の実効策として記録に残す（アイコン群179px→118pxでズレ0pxになることを実測済み）。
 * **実装**: `src/style.css` のみ（HTML構造・JSは無変更。メニュー開閉は `classList` の付け外しのみで座標計算を持たないため、CSSだけで完結する）。
+
+## DEC-036: 音声メッセージの事後文字起こし (2026-08-03)
+* **背景**: Web Speech APIでの文字起こしは現状PCのみ対応のため、スマホや録音モード「録音のみ」での送信では実発話内容が固定プレースホルダー文字列（`🎤 音声メッセージ` 等）のまま残る。これをGoogle Speech-to-Textで事後的に文字起こしする（仕様: [stt_transcription_spec.md](./stt_transcription_spec.md)）。
+* **決定（対象マーキング）**: 固定文字列との一致ではなく、`messages.needs_transcription` カラムで対象を明示的にマーキングする。`audio_only` モード送信時は常にtrue、`both` モードで音声認識結果が空だった場合のみtrueとし、クライアント側（`app.ts`）で判定して送信する。
+* **決定（トリガー）**: `user_inboxes` 経由（人数分ファンアウトし重複起動する）ではなく、`messages` テーブルのINSERTを直接起点とする新規Database Webhookで新規Edge Function `transcribe-audio-message` を起動する。WHEN句によるDB側の絞り込みは行わず、Edge Function側の先頭で `audio_url` / `needs_transcription` をチェックして対象外なら即終了する実装とした（サービスロールキー等をSQLトリガーに埋め込む必要がなく、既存の `delete-audio-on-message-delete` と同じGUI手順で完結するため）。
+* **決定（月間上限）**: 月200リクエストの上限は、行の競合更新ではなく `stt_usage_log` への追記＋`COUNT(*)`集計方式で判定する。厳密なアトミック制御は行わず、同時実行による多少の超過（201・202件等）は許容する。ログの記録はGoogle STTへのリクエスト送信直前（成否問わず）に行う。
+* **決定（GCP呼び出し）**: 音声は最長15秒のため、同期 `speech:recognize` API で完結させる（`LongRunningRecognize`のような非同期ジョブ構成は不要）。認証はサービスアカウントJWTではなく、Speech-to-Text APIのみに制限したAPIキー方式（`GOOGLE_STT_API_KEY`）を採用。
+* **決定（APIキー未設定時の扱い）**: `GOOGLE_STT_API_KEY` が未設定の場合はエラーにせず、「機能が未有効化」の通常状態として何もせず正常終了する（`console.error`を出さない、`needs_transcription`は変更しない、`200 OK`を返す）。これによりEdge Functionのデプロイ・DBマイグレーションと、GCP側のAPIキー発行（ユーザーの手作業）の順序を気にしなくてよい。
+* **決定（結果書き戻し・失敗時）**: `UPDATE messages SET text_content = ..., needs_transcription = false WHERE id = ... AND is_revoked = false` とし、取り消し（revoke）とのレースで取り消し済みメッセージにテキストが復活しないようガードする。認識結果が空文字（無音等）の場合はプレースホルダー文言を維持して対象からのみ外す。GCPリクエスト失敗時はリトライを行わず、`needs_transcription`をfalseにして以後の対象から外す。
+* **不採用**: 月間上限のアトミックな厳密制御（行ロック等）。文字起こし中であることのUI表示。事後書き換え結果を自動再生・TTS読み上げのトリガーにすること。
+* **実装状況**: フロント（`app.ts` / `services/supabase.ts`）とEdge Function（`supabase/functions/transcribe-audio-message`）はコード実装済み。DBマイグレーション適用・Database Webhook設定・GCP APIキー発行・Edge Functionデプロイはユーザーの手作業が必要（[setup_backend.md §8.3](./setup_backend.md#83-音声メッセージの事後文字起こし対応-2026-08-03-仕様-stt_transcription_specmd)）。
