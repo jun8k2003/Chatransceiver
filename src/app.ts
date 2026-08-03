@@ -147,6 +147,10 @@ export class App {
     const savedRecordMode = localStorage.getItem('chatransceiver_record_mode');
     if (savedRecordMode === 'both' || savedRecordMode === 'audio_only' || savedRecordMode === 'text_only') {
       this.state.recordMode = savedRecordMode;
+    } else if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // 未設定（初回アクセス）かつスマホの場合、文字起こしが機能しない both より
+      // 事後文字起こし (stt_transcription_spec.md) の対象になる audio_only を初期値にする
+      this.state.recordMode = 'audio_only';
     }
 
     // TTT ウェイクワード設定の読み込み
