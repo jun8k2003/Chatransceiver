@@ -50,6 +50,12 @@ erDiagram
         text audio_url
         text text_content
         boolean is_revoked
+        boolean needs_transcription
+        timestamptz created_at
+    }
+
+    stt_usage_log {
+        bigint id PK
         timestamptz created_at
     }
 
@@ -136,7 +142,13 @@ Table messages {
   audio_url text [note: '音声ファイルパス。テキストメッセージ時はNULL']
   text_content text [note: 'ディクテーションまたは直接入力のテキスト']
   is_revoked boolean [default: false]
+  needs_transcription boolean [not null, default: false, note: '音声はあるが実発話内容が未文字起こし。事後STT(stt_transcription_spec.md)の対象フラグ']
   created_at timestamptz [default: `now()`]
+}
+
+Table stt_usage_log {
+  id bigint [pk, increment, note: '事後文字起こし(Google Speech-to-Text)の月間リクエスト数を数えるための追記ログ']
+  created_at timestamptz [not null, default: `now()`]
 }
 
 Table user_inboxes {
@@ -307,6 +319,13 @@ create policy "Users can manage their own webhooks"
   on user_webhooks for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+--------------------------------------------------
+-- 9. stt_usage_log テーブル (音声メッセージの事後文字起こし)
+--------------------------------------------------
+-- ポリシーを一切作らず有効化のみ行うことで、anon/authenticated からは完全に不可視にする
+-- (Edge Function は service_role で RLS を越えてアクセスする)
+alter table stt_usage_log enable row level security;
 ```
 
 ### 3.2. Inbox自動配信（ファンアウト）のためのDBトリガー設計
@@ -358,6 +377,7 @@ create trigger on_message_created
 | `send-push-notification` | 新着メッセージ受信時に FCM プッシュ通知／Discord Webhook／カスタムWebhook (DEC-033) を送信。 |
 | `register-fcm-token` | クライアントの FCM デバイストークンの登録（`register`）／解除（`unregister`）。ログアウト時に解除を呼ぶ。 |
 | `delete-audio-on-message-delete` | `messages` の **DELETE** をトリガーに、`audio_url` に対応する `voice-messages` バケットの音声ファイルを削除。Database Webhook 経由で起動。 |
+| `transcribe-audio-message` | `messages` の **INSERT** をトリガーに、`needs_transcription = true` のメッセージをGoogle Speech-to-Textで事後文字起こしし、`text_content` を書き換える（[stt_transcription_spec.md](./stt_transcription_spec.md)）。Database Webhook 経由で起動。対象外メッセージ・APIキー未設定・月間上限到達時は何もせず正常終了する。 |
 
 > **メッセージ削除と音声ファイル**: メッセージ行が削除されると、`user_inboxes` はカスケード削除され（FK）、Storage の音声ファイルは `delete-audio-on-message-delete` Edge Function により削除されます。退出時の一括削除（`leave_community_and_cleanup`）では `chat_rooms` 削除に伴い `messages` が **FK CASCADE** で削除され、その各行の DELETE が同 Edge Function を発火させて音声も消去されます（specifications.md 3.5）。
 >
