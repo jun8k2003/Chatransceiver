@@ -1325,6 +1325,8 @@ body.resizing-h * {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 8px;
   flex-shrink: 0;
 }
 .settings-title {
@@ -1334,7 +1336,26 @@ body.resizing-h * {
 .settings-header-actions {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+.btn-about-header {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-family);
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  transition: var(--transition-normal);
+}
+.btn-about-header:hover {
+  color: var(--color-text-primary);
+  background: var(--bg-input);
 }
 .settings-body {
   flex: 1;
