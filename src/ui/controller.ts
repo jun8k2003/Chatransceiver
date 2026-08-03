@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { CommunityMenuUI } from './community';
 import { WakeLockService } from '../services/wakelock';
 import { MediaButtonPttService } from '../services/mediabutton';
@@ -60,6 +61,14 @@ export class UIController {
   private settingsCallSignCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
   private settingsDiscordWebhookInput: HTMLInputElement;
+
+  // 「Chatransceiverについて」モーダル
+  private aboutModalEl: HTMLDivElement;
+
+  // 環境設定最下部のコミュニティ招待QRコード
+  private communityQrCanvasEl: HTMLCanvasElement | null = null;
+  private communityQrUrlEl: HTMLDivElement | null = null;
+  private currentCommunitySlug: string | null = null;
 
   // プッシュ通知トグルボタン (ヘッダー) (DEC-034)
   private btnPushNotify: HTMLButtonElement | null = null;
@@ -301,6 +310,37 @@ export class UIController {
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
         this.settingsModalEl.classList.add('show');
+        this.renderCommunityQrCode();
+      });
+    }
+
+    // コミュニティ招待QRコード表示欄
+    this.communityQrCanvasEl = document.getElementById('settingsCommunityQrCanvas') as HTMLCanvasElement | null;
+    this.communityQrUrlEl = document.getElementById('settingsCommunityQrUrl') as HTMLDivElement | null;
+
+    // 「Chatransceiverについて」モーダル: 環境設定画面・ログイン画面の両方から開ける
+    this.aboutModalEl = document.getElementById('aboutModal') as HTMLDivElement;
+    const btnAboutClose = document.getElementById('btnAboutClose') as HTMLButtonElement;
+    if (btnAboutClose) {
+      btnAboutClose.addEventListener('click', () => {
+        this.aboutModalEl.classList.remove('show');
+      });
+    }
+    this.aboutModalEl.addEventListener('click', (e) => {
+      if (e.target === this.aboutModalEl) {
+        this.aboutModalEl.classList.remove('show');
+      }
+    });
+    const btnAboutSettings = document.getElementById('btnAboutSettings') as HTMLButtonElement | null;
+    if (btnAboutSettings) {
+      btnAboutSettings.addEventListener('click', () => {
+        this.aboutModalEl.classList.add('show');
+      });
+    }
+    const btnAboutLogin = document.getElementById('btnAboutLogin') as HTMLButtonElement | null;
+    if (btnAboutLogin) {
+      btnAboutLogin.addEventListener('click', () => {
+        this.aboutModalEl.classList.add('show');
       });
     }
 
@@ -748,6 +788,7 @@ export class UIController {
 
     // 2. コミュニティ接続状態の更新
     const isConnected = !!state.currentCommunity;
+    this.currentCommunitySlug = state.currentCommunity?.slug || null;
     this.communityMenu.updateConnectionState(
       isConnected,
       state.currentCommunity?.slug
@@ -871,5 +912,19 @@ export class UIController {
    */
   handleCommunityLeave(slug: string): void {
     this.communityMenu.removeFromHistory(slug);
+  }
+
+  /**
+   * 環境設定モーダル最下部のコミュニティ招待QRコードを再描画する。
+   * 未接続時は community パラメータなしのURLをQRコード化する。
+   */
+  private renderCommunityQrCode(): void {
+    if (!this.communityQrCanvasEl) return;
+    const baseUrl = window.location.origin + window.location.pathname;
+    const url = this.currentCommunitySlug ? `${baseUrl}?c=${this.currentCommunitySlug}` : baseUrl;
+    if (this.communityQrUrlEl) this.communityQrUrlEl.textContent = url;
+    QRCode.toCanvas(this.communityQrCanvasEl, url, { width: 160, margin: 1 }, (err: Error | null | undefined) => {
+      if (err) console.error('Failed to render community QR code:', err);
+    });
   }
 }

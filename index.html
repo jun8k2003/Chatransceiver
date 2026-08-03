@@ -57,6 +57,8 @@
           <strong>【注意事項】</strong><br>
           このアプリはPoCです。通信内容は暗号化されますが、保存データは暗号化されませんので機密情報は発信しないでください。
         </div>
+
+        <button id="btnAboutLogin" class="btn-about-link" type="button">ℹ️ Chatransceiverについて</button>
       </div>
     </div>
 
@@ -227,7 +229,10 @@
       <div class="settings-modal">
         <div class="settings-header">
           <span class="settings-title">⚙️ 環境設定</span>
-          <button id="btnSettingsCloseTop" class="btn-icon" aria-label="閉じる">✕</button>
+          <div class="settings-header-actions">
+            <button id="btnAboutSettings" class="btn-icon" title="Chatransceiverについて" aria-label="Chatransceiverについて">ℹ️</button>
+            <button id="btnSettingsCloseTop" class="btn-icon" aria-label="閉じる">✕</button>
+          </div>
         </div>
 
         <div class="settings-body">
@@ -354,12 +359,45 @@
             <!-- アプリアイコン表示（装飾・DEC-033ついで変更） -->
             <img src="/chatora.png" alt="" class="settings-app-icon" aria-hidden="true" />
           </div>
+
+          <!-- コミュニティ招待QRコード（未接続時はコミュニティパラメタなしのURL） -->
+          <div class="settings-community-qr">
+            <div class="setting-desc">コミュニティ招待QRコード</div>
+            <div class="community-qr-wrap">
+              <canvas id="settingsCommunityQrCanvas"></canvas>
+            </div>
+            <div id="settingsCommunityQrUrl" class="community-qr-url"></div>
+          </div>
         </div>
 
         <div class="settings-footer">
           <button class="btn-sm ghost btn-settings-cancel">閉じる</button>
           <button class="btn-sm primary btn-settings-save">保存</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 5b. 「Chatransceiverについて」モーダルダイアログ -->
+    <div id="aboutModal" class="modal-overlay">
+      <div class="modal-content about-modal-content">
+        <button id="btnAboutClose" class="btn-modal-close" title="閉じる">×</button>
+        <h3 class="modal-title">ℹ️ Chatransceiverについて</h3>
+        <ul class="about-list">
+          <li>トランシーバー（音声）とチャット（テキスト）の融合であること</li>
+          <li>声は文字起こしされ、文字は音声再生されること</li>
+          <li>PoCであること（アプリを使用したこと、または使用できなかったことによる損害は補償できないこと）</li>
+          <li>通信はhttpsによって暗号化されていること</li>
+          <li>DBはクラウド上にあり、RLSという仕組みで自分に関係のないデータは見られないようになっていること（ただしDBの管理者はすべてのデータを見られること）</li>
+          <li>利用にはGoogleアカウントによるログインか、メールアドレス登録によるマジックリンク方式が必要であること</li>
+          <li>セキュリティに関する機構はGoogleまたはSupabaseを使用しているので安全であること（管理者でも知ることはできない）</li>
+          <li>いろいろなサービスの無料枠で運用することを目指していること</li>
+          <li>iPhoneの場合、PWAとして「ホームに追加」すれば通知機能が使えること</li>
+          <li>スマートフォンの場合は本来文字おこしと音声録音を同時にはできないため、環境設定が「録音のみ」で使うことになること</li>
+          <li>「録音のみ」で登録されたデータも、月200回という制限付きで後追いで文字おこしされること</li>
+          <li>誰でも自分が関わるチャット履歴を完全に削除できること（旧版・ログは保存していない）</li>
+          <li>思想上、グループメンバーを編集することはできないため、メンバー追加は常に新しいグループを作成する必要があること</li>
+          <li>重要な情報の永続化を目的として使ってはいけないこと（誰に見られてもよい、いつ消えてもよい情報だけにすることを心掛けること）</li>
+        </ul>
       </div>
     </div>
 

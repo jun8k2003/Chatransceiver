@@ -1107,6 +1107,26 @@ body.resizing-h * {
   padding-bottom: 12px;
 }
 
+/* 「Chatransceiverについて」モーダル */
+.about-modal-content {
+  width: 440px;
+  align-items: stretch;
+}
+.about-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  text-align: left;
+}
+.about-list li {
+  padding-left: 2px;
+}
+
 .btn-modal-close {
   position: absolute;
   top: 15px;
@@ -1311,6 +1331,11 @@ body.resizing-h * {
   font-size: 16px;
   font-weight: 600;
 }
+.settings-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .settings-body {
   flex: 1;
   overflow-y: auto;
@@ -1503,6 +1528,29 @@ select.setting-input {
   height: 64px;
   margin: 16px auto 4px;
   border-radius: 14px;
+}
+
+/* 設定画面最下部のコミュニティ招待QRコード */
+.settings-community-qr {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+}
+.community-qr-wrap {
+  display: inline-flex;
+  margin: 8px auto 6px;
+  padding: 10px;
+  background: #fff;
+  border-radius: 10px;
+}
+.community-qr-wrap canvas {
+  display: block;
+}
+.community-qr-url {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  word-break: break-all;
 }
 
 /* ========================================================
@@ -2020,6 +2068,21 @@ textarea.webhook-body-input {
   background: var(--bg-input);
   padding: 12px;
   border-radius: 8px;
+}
+
+.btn-about-link {
+  display: block;
+  margin: 12px auto 0;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: var(--font-family);
+}
+.btn-about-link:hover {
+  color: var(--color-text-primary);
 }
 
 /* ========================================================
