@@ -18,6 +18,24 @@ if (apiKey && projectId) {
   const messaging = firebase.messaging();
 }
 
+async function updateAppBadge(unreadCount) {
+  if (typeof navigator.setAppBadge !== 'function') return;
+  try {
+    const count = typeof unreadCount === 'string' && /^\d+$/.test(unreadCount)
+      ? Number(unreadCount) : NaN;
+    if (!Number.isSafeInteger(count)) {
+      // 旧サーバーからの通知や件数取得失敗時は新着ありの印だけを付ける。
+      await navigator.setAppBadge();
+    } else if (count === 0) {
+      await navigator.clearAppBadge();
+    } else {
+      await navigator.setAppBadge(count);
+    }
+  } catch (error) {
+    console.warn('Failed to update app badge:', error);
+  }
+}
+
 // ネイティブの push イベントリスナーで通知を処理します（Chromeの不正通知警告を完全に防ぐため）
 self.addEventListener('push', function(event) {
   let payload = {};
@@ -45,26 +63,29 @@ self.addEventListener('push', function(event) {
   };
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // 画面が開いていて、アクティブで、同じコミュニティを見ている場合は通知を出さない
-      let isVisibleAndSameCommunity = false;
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i];
-        if (client.visibilityState === 'visible') {
-          const url = new URL(client.url);
-          if (url.searchParams.get('c') === communitySlug) {
-            isVisibleAndSameCommunity = true;
-            break;
+    Promise.all([
+      updateAppBadge(data.unreadCount),
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        // 画面が開いていて、アクティブで、同じコミュニティを見ている場合は通知を出さない
+        let isVisibleAndSameCommunity = false;
+        for (let i = 0; i < windowClients.length; i++) {
+          const client = windowClients[i];
+          if (client.visibilityState === 'visible') {
+            const url = new URL(client.url);
+            if (url.searchParams.get('c') === communitySlug) {
+              isVisibleAndSameCommunity = true;
+              break;
+            }
           }
         }
-      }
 
-      if (isVisibleAndSameCommunity) {
-        return Promise.resolve(); // 通知不要
-      } else {
-        return self.registration.showNotification(notificationTitle, notificationOptions);
-      }
-    })
+        if (isVisibleAndSameCommunity) {
+          return Promise.resolve(); // 通知不要
+        } else {
+          return self.registration.showNotification(notificationTitle, notificationOptions);
+        }
+      })
+    ])
   );
 });
 

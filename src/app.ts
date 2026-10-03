@@ -5,6 +5,7 @@ import type { UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
 import type { SupabaseMessage, UserWebhookInput } from './services/supabase';
 import { FCMService } from './services/FCMService';
+import { AppBadgeService } from './services/appbadge';
 import { WakeLockService } from './services/wakelock';
 import { MediaButtonPttService } from './services/mediabutton';
 import { saveBackgroundImage, loadBackgroundImage, deleteBackgroundImage } from './utils/db';
@@ -21,6 +22,7 @@ export class App {
   private uiController: UIController;
   private supabaseService: SupabaseService;
   private fcmService: FCMService;
+  private appBadgeService: AppBadgeService;
   private wakeLockService: WakeLockService;
   private mediaButtonPtt: MediaButtonPttService;
 
@@ -82,7 +84,8 @@ export class App {
     this.audioManager = new AudioManager();
     this.playbackQueue = new AudioPlaybackQueue(this.audioManager);
     this.supabaseService = new SupabaseService();
-    this.fcmService = new FCMService(this.supabaseService);
+    this.appBadgeService = new AppBadgeService(this.supabaseService);
+    this.fcmService = new FCMService(this.supabaseService, () => this.refreshAppBadge());
     this.wakeLockService = new WakeLockService();
     this.mediaButtonPtt = new MediaButtonPttService();
 
@@ -127,6 +130,7 @@ export class App {
     // TTT: バックグラウンド復帰時にウェイクワード待機を再開する (DEC-028)
     // (Android はバックグラウンド移行時に SpeechRecognition を強制終了するため)
     document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.refreshAppBadge();
       if (document.visibilityState === 'visible' && this.isTTTMode && !this.state.isRecording) {
         this.startTTTListening();
       }
@@ -235,6 +239,7 @@ export class App {
       const user = await this.supabaseService.getCurrentUser();
       if (user) {
         this.state.currentUser = user;
+        this.refreshAppBadge();
         await this.loadUserWebhooks();
 
         if (communitySlug) {
@@ -248,6 +253,7 @@ export class App {
           this.updateUI();
         }
       } else {
+        this.refreshAppBadge();
         this.updateUI();
       }
     } catch (e) {
@@ -260,6 +266,7 @@ export class App {
 
     // OAuthリダイレクト後の遅延セッション確立をキャッチするためのリスナー
     supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') void this.appBadgeService.refresh(null);
       if (event === 'SIGNED_IN' && session) {
         // すでにログイン処理済みの場合はスキップ
         if (this.state.currentUser && this.state.currentUser.id === session.user.id) return;
@@ -268,6 +275,7 @@ export class App {
           const user = await this.supabaseService.getCurrentUser();
           if (user) {
             this.state.currentUser = user;
+            this.refreshAppBadge();
             await this.loadUserWebhooks();
             if (communitySlug && !this.state.currentCommunity) {
               await this.handleConnectCommunity(communitySlug);
@@ -287,6 +295,15 @@ export class App {
    */
   private updateUI(): void {
     this.uiController.render(this.state);
+  }
+
+  private refreshAppBadge(): void {
+    void this.appBadgeService.refresh(this.state.currentUser?.id ?? null);
+  }
+
+  private async markAsRead(roomId: string, userId: string): Promise<void> {
+    await this.supabaseService.markAsRead(roomId, userId);
+    this.refreshAppBadge();
   }
 
   /**
@@ -338,6 +355,7 @@ export class App {
 
       await this.supabaseService.signOut();
       this.state.currentUser = null;
+      this.refreshAppBadge();
       this.state.webhooks = [];
 
       // URLのハッシュ（アクセストークン等）を完全に消去して綺麗な状態にする
@@ -476,6 +494,7 @@ export class App {
         return bUnread - aUnread;
       });
       this.state.groups = groups;
+      this.refreshAppBadge();
 
       // 各グループの構成メンバーIDをキャッシュ
       for (const group of groups) {
@@ -567,6 +586,8 @@ export class App {
 
     await this.handleDisconnectCommunity();
 
+    this.refreshAppBadge();
+
     // UIに退出した履歴削除を通知
     if (slug) {
       this.uiController.handleCommunityLeave(slug);
@@ -646,7 +667,7 @@ export class App {
         const messages = await this.supabaseService.getRoomMessages(roomId);
         this.state.messages = messages;
 
-        await this.supabaseService.markAsRead(roomId, myId);
+        await this.markAsRead(roomId, myId);
         this.subscribeRoomMessages(roomId);
 
         // 未読バッジクリア用のローカル状態反映
@@ -676,7 +697,7 @@ export class App {
           this.state.activeChatHistoryId = matchedGroup.id;
           const messages = await this.supabaseService.getRoomMessages(matchedGroup.id);
           this.state.messages = messages;
-          await this.supabaseService.markAsRead(matchedGroup.id, this.state.currentUser!.id);
+          await this.markAsRead(matchedGroup.id, this.state.currentUser!.id);
           this.subscribeRoomMessages(matchedGroup.id);
         } finally {
           this.state.isLoading = false;
@@ -710,7 +731,7 @@ export class App {
         const messages = await this.supabaseService.getRoomMessages(groupId);
         this.state.messages = messages;
         
-        await this.supabaseService.markAsRead(groupId, this.state.currentUser!.id);
+        await this.markAsRead(groupId, this.state.currentUser!.id);
         this.subscribeRoomMessages(groupId);
         
         // 未読バッジクリア用のローカル状態反映
@@ -1307,7 +1328,7 @@ export class App {
     }
 
     if (this.state.activeChatHistoryId === roomId) {
-      this.supabaseService.markAsRead(roomId, this.state.currentUser!.id);
+      void this.markAsRead(roomId, this.state.currentUser!.id);
     } else {
       this.loadCommunityData().then(() => this.updateUI());
     }
@@ -1607,6 +1628,7 @@ export class App {
     const success = await this.fcmService.registerNotification();
     if (success) {
       this.state.fcmRegistered = true;
+      this.refreshAppBadge();
       this.updateUI();
       alert('プッシュ通知の登録が完了しました。');
     }

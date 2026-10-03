@@ -7,9 +7,11 @@ export class FCMService {
   private app: any = null;
   private supabaseService: SupabaseService;
   private supportedPromise: Promise<boolean> | null = null;
+  private readonly onForegroundMessage?: () => void;
 
-  constructor(supabaseService: SupabaseService) {
+  constructor(supabaseService: SupabaseService, onForegroundMessage?: () => void) {
     this.supabaseService = supabaseService;
+    this.onForegroundMessage = onForegroundMessage;
 
     // .env 等から設定を読み込む
     const firebaseConfig = {
@@ -174,12 +176,13 @@ export class FCMService {
     // フォアグラウンドでメッセージを受け取った際の処理
     // ※アプリが開いている状態では Service Worker 側のバックグラウンド処理は呼ばれずこちらが呼ばれる。
     // ※アプリがアクティブな場合はUI側（Supabase Realtime）ですでにチャットが更新・再生されるため、
-    //   基本的には何もしない（あるいは別コミュニティの通知の場合は自前で Notification を出す）
+    //   チャットの更新・再生は重複させず、ホーム画面のバッジだけ再取得する。
     onMessage(this.messaging, (payload) => {
       console.log('Message received in foreground: ', payload);
+      this.onForegroundMessage?.();
       // フォアグラウンド時のシステム通知は、firebase-messaging-sw.js の
       // ネイティブ push リスナー側で画面のアクティブ状態を判定して処理するため、
-      // ここでは何もしません。
+      // ここではバッジの再取得のみを行います。
     });
   }
 

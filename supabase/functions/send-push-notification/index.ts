@@ -114,6 +114,20 @@ serve(async (req) => {
   const sendPromises: Promise<any>[] = []
 
   if (accessToken && tokens.length > 0) {
+    // 全コミュニティの未読合計。取得失敗時も通常の通知は送信する。
+    let badgeData: { unreadCount?: string } = {}
+    try {
+      const { count: unreadCount, error: unreadError } = await supabaseAdmin
+        .from('user_inboxes')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', record.user_id)
+        .eq('is_read', false)
+      if (unreadError) console.warn('Failed to count unread messages:', unreadError)
+      else if (unreadCount !== null) badgeData = { unreadCount: String(unreadCount) }
+    } catch (error) {
+      console.warn('Failed to count unread messages:', error)
+    }
+
     const fcmPromises = tokens.map(async (t) => {
       const res = await fetch(`https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`, {
         method: 'POST',
@@ -126,6 +140,7 @@ serve(async (req) => {
             token: t.fcm_token,
             // カスタムのクリックハンドラで利用するデータ
             data: {
+              ...badgeData,
               url: `/?c=${communitySlug}&m=${record.message_id || ''}`,
               communitySlug: communitySlug,
               messageId: record.message_id || '',

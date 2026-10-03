@@ -812,8 +812,20 @@ export class SupabaseService {
   }
 
   /**
-   * インボックスアイテム（未読メッセージ）を既読にする
+   * 全コミュニティの未読合計を取得する（ホーム画面バッジ用）。
    */
+  async getUnreadCount(userId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('user_inboxes')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (error) throw error;
+    return count ?? 0;
+  }
+
+  /** インボックスアイテムを既読にする */
   async markAsRead(roomId: string, userId: string): Promise<void> {
     const { error } = await supabase
       .from('user_inboxes')
