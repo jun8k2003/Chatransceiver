@@ -43,7 +43,7 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
                 if (pm != null)
                 {
                     _wakeLock = pm.NewWakeLock(WakeLockFlags.Partial, "Chatransceiver::AudioWakeLock");
-                    _wakeLock.SetReferenceCounted(false);
+                    _wakeLock?.SetReferenceCounted(false);
                 }
             }
             if (_wakeLock != null && !_wakeLock.IsHeld)

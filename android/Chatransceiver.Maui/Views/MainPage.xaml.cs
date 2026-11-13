@@ -17,6 +17,7 @@ public partial class MainPage : ContentPage
 
     private UnifiedListItem? _activeItem;
     private string? _activeRoomId;
+    private RecordingResult? _stoppedRecordingResult;
 
     public ObservableCollection<UnifiedListItem> VisibleItems { get; } = new();
     public ObservableCollection<SupabaseMessage> RoomMessages { get; } = new();
@@ -518,7 +519,7 @@ public partial class MainPage : ContentPage
         }
     }
 
-    // ==================== 音声PTT録音 & テキスト送信 ====================
+    // ==================== 音声PTT録音 (Web版 recordingModal 準拠) & テキスト送信 ====================
 
     private async void OnPttMainButtonClicked(object? sender, EventArgs e)
     {
@@ -529,31 +530,46 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        if (!NativeRecordingService.Instance.IsRecording)
-        {
-            // 録音開始
-            AudioPlaybackQueue.Instance.Pause();
-            NativeAudioService.Instance.BeepStart();
+        if (NativeRecordingService.Instance.IsRecording) return;
 
-            TranscriptPreviewLabel.Text = "（発話中...）";
-            RecordingTimerLabel.Text = "🔴 録音中... 残り 15 秒";
-            RecordingStatusBanner.IsVisible = true;
-            PttMainButton.Text = "⏹️ タップして停止・送信";
-            PttMainButton.BackgroundColor = Color.FromArgb("#EF4444");
+        _stoppedRecordingResult = null;
+        AudioPlaybackQueue.Instance.Pause();
+        NativeAudioService.Instance.BeepStart();
 
-            bool ok = await NativeRecordingService.Instance.StartRecordingAsync();
-            if (!ok)
-            {
-                ResetRecordingUi();
-                AudioPlaybackQueue.Instance.Resume();
-                await DisplayAlert("マイクエラー", "マイクの初期化に失敗しました。マイク権限が許可されているか確認してください。", "OK");
-            }
-        }
-        else
+        RecordingStatusTitleLabel.Text = "🔴 音声録音中...";
+        RecordingTimerLabel.Text = "00:15";
+        RecordingProgressBar.Progress = 1.0;
+        TranscriptPreviewLabel.Text = "（発話するとここに文字起こしが表示されます）";
+        ModalStopBtn.IsEnabled = true;
+        ModalStopBtn.Text = "⏹️ 停止して確認";
+        ModalSendBtn.IsEnabled = true;
+        RecordingModalOverlay.IsVisible = true;
+
+        bool ok = await NativeRecordingService.Instance.StartRecordingAsync();
+        if (!ok)
         {
-            // 録音停止 + 送信
-            await FinishForegroundRecordingAndSendAsync();
+            ResetRecordingUi();
+            AudioPlaybackQueue.Instance.Resume();
+            await DisplayAlert("マイクエラー", "マイクの初期化に失敗しました。マイク権限が許可されているか確認してください。", "OK");
         }
+    }
+
+    private async void OnModalStopRecordingClicked(object? sender, EventArgs e)
+    {
+        if (!NativeRecordingService.Instance.IsRecording) return;
+
+        ModalStopBtn.IsEnabled = false;
+        _stoppedRecordingResult = await NativeRecordingService.Instance.StopRecordingAsync();
+        NativeAudioService.Instance.BeepEnd();
+
+        RecordingStatusTitleLabel.Text = "⏸️ 録音完了（送信待ち）";
+        TranscriptPreviewLabel.Text = _stoppedRecordingResult.Transcript;
+        ModalStopBtn.Text = "停止済み";
+    }
+
+    private async void OnModalSendRecordingClicked(object? sender, EventArgs e)
+    {
+        await FinishForegroundRecordingAndSendAsync();
     }
 
     private async void OnForegroundRecordingTimeout()
@@ -561,7 +577,15 @@ public partial class MainPage : ContentPage
         if (TransceiverForegroundService.IsRunning) return; // サービス側で処理される場合はスキップ
         if (NativeRecordingService.Instance.IsRecording)
         {
-            await FinishForegroundRecordingAndSendAsync();
+            // 15秒経過時は録音を止めて確認状態にする（または送信ボタンを押せるようにする）
+            ModalStopBtn.IsEnabled = false;
+            _stoppedRecordingResult = await NativeRecordingService.Instance.StopRecordingAsync();
+            NativeAudioService.Instance.BeepEnd();
+            RecordingStatusTitleLabel.Text = "⏹️ 15秒録音完了（送信ボタンを押してください）";
+            RecordingTimerLabel.Text = "00:00";
+            RecordingProgressBar.Progress = 0.0;
+            TranscriptPreviewLabel.Text = _stoppedRecordingResult.Transcript;
+            ModalStopBtn.Text = "停止済み";
         }
     }
 
@@ -571,9 +595,23 @@ public partial class MainPage : ContentPage
 
         try
         {
-            PttMainButton.IsEnabled = false;
-            var result = await NativeRecordingService.Instance.StopRecordingAsync();
-            NativeAudioService.Instance.BeepEnd();
+            ModalSendBtn.IsEnabled = false;
+            ModalStopBtn.IsEnabled = false;
+
+            RecordingResult result;
+            if (NativeRecordingService.Instance.IsRecording)
+            {
+                result = await NativeRecordingService.Instance.StopRecordingAsync();
+                NativeAudioService.Instance.BeepEnd();
+            }
+            else if (_stoppedRecordingResult != null)
+            {
+                result = _stoppedRecordingResult;
+            }
+            else
+            {
+                return;
+            }
 
             if (result.WavBytes != null || !string.IsNullOrWhiteSpace(result.Transcript))
             {
@@ -593,8 +631,8 @@ public partial class MainPage : ContentPage
         }
         finally
         {
+            _stoppedRecordingResult = null;
             ResetRecordingUi();
-            PttMainButton.IsEnabled = true;
             AudioPlaybackQueue.Instance.Resume();
         }
     }
@@ -605,20 +643,22 @@ public partial class MainPage : ContentPage
         {
             _ = await NativeRecordingService.Instance.StopRecordingAsync();
         }
+        _stoppedRecordingResult = null;
         ResetRecordingUi();
         AudioPlaybackQueue.Instance.Resume();
     }
 
     private void ResetRecordingUi()
     {
-        RecordingStatusBanner.IsVisible = false;
-        PttMainButton.Text = "🎤 タップして発話 (PTT)";
-        PttMainButton.BackgroundColor = Color.FromArgb("#F97316");
+        RecordingModalOverlay.IsVisible = false;
+        ModalSendBtn.IsEnabled = true;
+        ModalStopBtn.IsEnabled = true;
     }
 
     private void OnRecordingCountdownTick(int remainingSeconds)
     {
-        RecordingTimerLabel.Text = $"🔴 録音中... 残り {remainingSeconds} 秒";
+        RecordingTimerLabel.Text = $"00:{remainingSeconds:D2}";
+        RecordingProgressBar.Progress = Math.Clamp(remainingSeconds / 15.0, 0.0, 1.0);
     }
 
     private void OnRecordingPartialTranscript(string partial)

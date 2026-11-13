@@ -66,7 +66,7 @@ public class TransceiverForegroundService : Service
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         var notification = BuildNotification("🎧 イヤフォンボタンPTT待機中 (ボタンで録音開始)");
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.UpsideDownCake)
+        if (OperatingSystem.IsAndroidVersionAtLeast(34))
         {
             StartForeground(
                 NotificationId,
@@ -114,8 +114,8 @@ public class TransceiverForegroundService : Service
                 PlaybackState.ActionPlay |
                 PlaybackState.ActionPause |
                 PlaybackState.ActionPlayPause |
-                PlaybackState.ActionStop)
-            .SetState(PlaybackStateCode.Playing, 0, 1.0f);
+                PlaybackState.ActionStop)!
+            .SetState(PlaybackStateCode.Playing, 0, 1.0f)!;
         _mediaSession.SetPlaybackState(stateBuilder.Build());
         _mediaSession.Active = true;
 
@@ -263,7 +263,9 @@ public class TransceiverForegroundService : Service
 
         public override bool OnMediaButtonEvent(Intent mediaButtonIntent)
         {
-            var keyEvent = (KeyEvent?)mediaButtonIntent.GetParcelableExtra(Intent.ExtraKeyEvent);
+            KeyEvent? keyEvent = OperatingSystem.IsAndroidVersionAtLeast(33)
+                ? (KeyEvent?)mediaButtonIntent.GetParcelableExtra(Intent.ExtraKeyEvent, Java.Lang.Class.FromType(typeof(KeyEvent)))
+                : (KeyEvent?)mediaButtonIntent.GetParcelableExtra(Intent.ExtraKeyEvent);
             if (keyEvent != null && keyEvent.Action == KeyEventActions.Down)
             {
                 if (keyEvent.KeyCode == Keycode.MediaPlayPause ||

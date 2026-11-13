@@ -53,7 +53,7 @@ public class MainActivity : MauiAppCompatActivity
             needed.Add(Manifest.Permission.RecordAudio);
         }
 
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+        if (OperatingSystem.IsAndroidVersionAtLeast(33))
         {
             if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.PostNotifications) != Permission.Granted)
             {
@@ -61,7 +61,7 @@ public class MainActivity : MauiAppCompatActivity
             }
         }
 
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.S)
+        if (OperatingSystem.IsAndroidVersionAtLeast(31))
         {
             if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.BluetoothConnect) != Permission.Granted)
             {
