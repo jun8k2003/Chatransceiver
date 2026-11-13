@@ -449,6 +449,26 @@ public partial class MainPage : ContentPage
         ChatPaneGrid.IsVisible = showChat;
         TabListButton.BackgroundColor = !showChat ? Color.FromArgb("#3B82F6") : Color.FromArgb("#334155");
         TabChatButton.BackgroundColor = showChat ? Color.FromArgb("#3B82F6") : Color.FromArgb("#334155");
+
+        if (showChat)
+        {
+            ScrollMessagesToBottom(animate: false);
+        }
+    }
+
+    private void ScrollMessagesToBottom(bool animate = false)
+    {
+        if (RoomMessages.Count == 0) return;
+
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            // CollectionView の表示切替・レイアウト確定を待ってから最下部へスクロール
+            await Task.Delay(60);
+            if (RoomMessages.Count > 0 && ChatPaneGrid.IsVisible)
+            {
+                MessagesCollectionView.ScrollTo(RoomMessages.Count - 1, position: ScrollToPosition.End, animate: animate);
+            }
+        });
     }
 
     // ==================== グループ名編集 & ルーム履歴削除 ====================
@@ -622,6 +642,7 @@ public partial class MainPage : ContentPage
                     result.WavBytes,
                     result.NeedsTranscription);
                 RoomMessages.Add(sent);
+                ScrollMessagesToBottom(animate: true);
             }
         }
         catch (Exception ex)
@@ -685,6 +706,7 @@ public partial class MainPage : ContentPage
             TextMessageEntry.Text = string.Empty;
             var sent = await SupabaseClientService.Instance.SendMessageAsync(_activeRoomId, _currentUser.Id, text);
             RoomMessages.Add(sent);
+            ScrollMessagesToBottom(animate: true);
         }
         catch (Exception ex)
         {
@@ -842,6 +864,7 @@ public partial class MainPage : ContentPage
                 var msgs = await SupabaseClientService.Instance.GetRoomMessagesAsync(_activeRoomId, _currentUser.Id);
                 RoomMessages.Clear();
                 foreach (var m in msgs) RoomMessages.Add(m);
+                ScrollMessagesToBottom(animate: false);
             }
         });
     }
@@ -909,6 +932,7 @@ public partial class MainPage : ContentPage
     {
         if (RoomMessages.Any(m => m.Id == msg.Id)) return;
         RoomMessages.Add(msg);
+        ScrollMessagesToBottom(animate: true);
 
         if (!msg.IsMine && AppConfig.AutoPlayEnabled)
         {

@@ -338,6 +338,7 @@
                     <CollectionView x:Name="MessagesCollectionView"
                                     Grid.Row="1"
                                     Margin="10,6"
+                                    ItemsUpdatingScrollMode="KeepLastItemInView"
                                     SelectionMode="None">
                         <CollectionView.EmptyView>
                             <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Padding="24">
