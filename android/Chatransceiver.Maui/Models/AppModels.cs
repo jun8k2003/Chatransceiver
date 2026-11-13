@@ -105,6 +105,10 @@ public class SupabaseMessage : INotifyPropertyChanged
     public string TimeText => CreatedAt.ToLocalTime().ToString("HH:mm");
     public string PlayButtonLabel => HasAudio ? "▶ 音声再生" : "🔊 読み上げ";
 
+    // 自分の発言は右寄せ、相手の発言は左寄せ
+    public LayoutOptions BubbleHorizontalOptions => IsMine ? LayoutOptions.End : LayoutOptions.Start;
+    public Thickness BubbleMargin => IsMine ? new Thickness(56, 4, 0, 4) : new Thickness(0, 4, 56, 4);
+
     public event PropertyChangedEventHandler? PropertyChanged;
     public void NotifyChanged()
     {

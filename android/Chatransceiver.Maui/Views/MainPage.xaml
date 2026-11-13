@@ -349,57 +349,66 @@
                         </CollectionView.EmptyView>
                         <CollectionView.ItemTemplate>
                             <DataTemplate x:DataType="models:SupabaseMessage">
-                                <Border Margin="0,4"
-                                        Padding="12,8"
-                                        StrokeThickness="1"
-                                        StrokeShape="RoundRectangle 12"
-                                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
-                                        Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}">
-                                    <VerticalStackLayout Spacing="6">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <Label Text="{Binding SenderName}"
-                                                   FontSize="12"
-                                                   FontAttributes="Bold"
-                                                   TextColor="{StaticResource PrimaryBlue}" />
-                                            <Label Grid.Column="1"
-                                                   Text="{Binding TimeText}"
-                                                   FontSize="11"
-                                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
-                                        </Grid>
+                                <Grid>
+                                    <Border HorizontalOptions="{Binding BubbleHorizontalOptions}"
+                                            Margin="{Binding BubbleMargin}"
+                                            Padding="12,8"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 12"
+                                            BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                                            Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding IsMine}" Value="True">
+                                                <Setter Property="BackgroundColor" Value="{AppThemeBinding Dark=#1E3A5F, Light=#DBEAFE}" />
+                                                <Setter Property="Stroke" Value="{AppThemeBinding Dark=#2563EB, Light=#93C5FD}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <VerticalStackLayout Spacing="6" MinimumWidthRequest="150">
+                                            <HorizontalStackLayout Spacing="10">
+                                                <Label Text="{Binding SenderName}"
+                                                       FontSize="12"
+                                                       FontAttributes="Bold"
+                                                       TextColor="{StaticResource PrimaryBlue}" />
+                                                <Label Text="{Binding TimeText}"
+                                                       FontSize="11"
+                                                       VerticalOptions="Center"
+                                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                                            </HorizontalStackLayout>
 
-                                        <Label Text="{Binding DisplayText}"
-                                               FontSize="14"
-                                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                            <Label Text="{Binding DisplayText}"
+                                                   FontSize="14"
+                                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
 
-                                        <HorizontalStackLayout Spacing="8">
-                                            <Button Text="{Binding PlayButtonLabel}"
-                                                    IsVisible="{Binding CanPlay}"
-                                                    FontSize="12"
-                                                    HeightRequest="32"
-                                                    MinimumWidthRequest="0"
-                                                    MinimumHeightRequest="0"
-                                                    Padding="12,0"
-                                                    CornerRadius="6"
-                                                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
-                                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
-                                                    CommandParameter="{Binding .}"
-                                                    Clicked="OnPlayMessageBubbleClicked" />
+                                            <HorizontalStackLayout Spacing="8">
+                                                <Button Text="{Binding PlayButtonLabel}"
+                                                        IsVisible="{Binding CanPlay}"
+                                                        FontSize="12"
+                                                        HeightRequest="32"
+                                                        MinimumWidthRequest="0"
+                                                        MinimumHeightRequest="0"
+                                                        Padding="12,0"
+                                                        CornerRadius="6"
+                                                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                                        TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                                        CommandParameter="{Binding .}"
+                                                        Clicked="OnPlayMessageBubbleClicked" />
 
-                                            <Button Text="🗑️ 取り消し"
-                                                    IsVisible="{Binding CanRevoke}"
-                                                    FontSize="12"
-                                                    HeightRequest="32"
-                                                    MinimumWidthRequest="0"
-                                                    MinimumHeightRequest="0"
-                                                    Padding="10,0"
-                                                    CornerRadius="6"
-                                                    BackgroundColor="Transparent"
-                                                    TextColor="{StaticResource DangerRed}"
-                                                    CommandParameter="{Binding .}"
-                                                    Clicked="OnRevokeMessageClicked" />
-                                        </HorizontalStackLayout>
-                                    </VerticalStackLayout>
-                                </Border>
+                                                <Button Text="🗑️ 取り消し"
+                                                        IsVisible="{Binding CanRevoke}"
+                                                        FontSize="12"
+                                                        HeightRequest="32"
+                                                        MinimumWidthRequest="0"
+                                                        MinimumHeightRequest="0"
+                                                        Padding="10,0"
+                                                        CornerRadius="6"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="{StaticResource DangerRed}"
+                                                        CommandParameter="{Binding .}"
+                                                        Clicked="OnRevokeMessageClicked" />
+                                            </HorizontalStackLayout>
+                                        </VerticalStackLayout>
+                                    </Border>
+                                </Grid>
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
                     </CollectionView>

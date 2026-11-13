@@ -20,7 +20,8 @@ namespace Chatransceiver.Maui.Platforms.Android.Services;
 [IntentFilter(new[] { "com.google.firebase.MESSAGING_EVENT" })]
 public class ChatFcmService : FirebaseMessagingService
 {
-    private const string MsgChannelId = "chatransceiver_messages_channel";
+    private const string SilentMsgChannelId = "chatransceiver_messages_silent";
+    private const string SoundMsgChannelId = "chatransceiver_messages_sound";
 
     public override void OnNewToken(string token)
     {
@@ -51,13 +52,16 @@ public class ChatFcmService : FirebaseMessagingService
         communityName = string.IsNullOrEmpty(communityName) ? "Chatransceiver" : communityName;
         messageType = string.IsNullOrEmpty(messageType) ? "text" : messageType;
 
-        // 1. システム通知を表示
+        bool autoPlay = AppConfig.AutoPlayEnabled;
+
+        // 1. システム通知を表示 (自動再生ON時は通知音を消してコールサイン音との被り・音量低下を防止、OFF時は通知音を鳴らす)
         ShowSystemNotification(
             $"[新着] {senderName} ({communityName})",
-            messageType == "audio" ? "🎤 音声メッセージ" : (textContent ?? "新しいメッセージ"));
+            messageType == "audio" ? "🎤 音声メッセージ" : (textContent ?? "新しいメッセージ"),
+            silent: autoPlay);
 
         // 2. ロック画面・DeepSleep中の自動再生 (AutoPlayEnabled が ON の場合)
-        if (AppConfig.AutoPlayEnabled)
+        if (autoPlay)
         {
             NativeAudioService.Instance.AcquireWakeLock(45000);
 
@@ -78,18 +82,36 @@ public class ChatFcmService : FirebaseMessagingService
         }
     }
 
-    private void ShowSystemNotification(string title, string body)
+    private void ShowSystemNotification(string title, string body, bool silent)
     {
         try
         {
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+            string channelId = silent ? SilentMsgChannelId : SoundMsgChannelId;
+
+            if (OperatingSystem.IsAndroidVersionAtLeast(26))
             {
-                var channel = new NotificationChannel(
-                    MsgChannelId,
-                    "新着メッセージ通知",
-                    NotificationImportance.High);
                 var nm = (NotificationManager?)GetSystemService(NotificationService);
-                nm?.CreateNotificationChannel(channel);
+                if (nm != null)
+                {
+                    if (silent)
+                    {
+                        var silentChannel = new NotificationChannel(
+                            SilentMsgChannelId,
+                            "新着メッセージ通知（自動再生時・無音）",
+                            NotificationImportance.Default);
+                        silentChannel.SetSound(null, null);
+                        silentChannel.EnableVibration(false);
+                        nm.CreateNotificationChannel(silentChannel);
+                    }
+                    else
+                    {
+                        var soundChannel = new NotificationChannel(
+                            SoundMsgChannelId,
+                            "新着メッセージ通知（自動再生OFF時・通知音あり）",
+                            NotificationImportance.High);
+                        nm.CreateNotificationChannel(soundChannel);
+                    }
+                }
             }
 
             var openIntent = new Intent(this, typeof(MainActivity));
@@ -100,12 +122,13 @@ public class ChatFcmService : FirebaseMessagingService
                 openIntent,
                 PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
-            var notification = new NotificationCompat.Builder(this, MsgChannelId)
+            var notification = new NotificationCompat.Builder(this, channelId)
                 .SetContentTitle(title)
                 .SetContentText(body)
                 .SetSmallIcon(global::Android.Resource.Drawable.SymActionChat)
                 .SetAutoCancel(true)
-                .SetPriority(NotificationCompat.PriorityHigh)
+                .SetSilent(silent)
+                .SetPriority(silent ? NotificationCompat.PriorityDefault : NotificationCompat.PriorityHigh)
                 .SetContentIntent(pendingIntent)
                 .Build();
 
