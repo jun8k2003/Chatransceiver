@@ -1,0 +1,163 @@
+name: Build Android Package (.NET MAUI)
+
+on:
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Build Configuration (Release or Debug)'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - Release
+          - Debug
+  push:
+    branches:
+      - main
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+
+jobs:
+  build_android:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'microsoft'
+          java-version: '17'
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Install .NET MAUI Android Workload
+        run: dotnet workload install maui-android
+
+      - name: Generate google-services.json (from Secret or Fallback Placeholder)
+        working-directory: android/Chatransceiver.Maui
+        env:
+          ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$ANDROID_GOOGLE_SERVICES_JSON" ]; then
+            echo "$ANDROID_GOOGLE_SERVICES_JSON" > google-services.json
+          else
+            cat << 'EOF' > google-services.json
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "chatransceiver13162",
+              "storage_bucket": "chatransceiver13162.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "com.chatransceiver.app"
+                  }
+                },
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyPlaceholderKeyForBuildVerificationOnly"
+                  }
+                ]
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
+      - name: Inject Supabase Config into AppConfig.Defaults.cs
+        working-directory: android/Chatransceiver.Maui
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+            cat << EOF > Services/AppConfig.Defaults.cs
+          namespace Chatransceiver.Maui.Services;
+          public static partial class AppConfig
+          {
+              static partial void LoadBuildDefaults(ref string url, ref string anonKey)
+              {
+                  url = "${VITE_SUPABASE_URL}";
+                  anonKey = "${VITE_SUPABASE_ANON_KEY}";
+              }
+          }
+          EOF
+          fi
+
+      - name: Restore Keystore (or Generate Debug Keystore for CI)
+        working-directory: android/Chatransceiver.Maui
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > chatransceiver.keystore
+          else
+            keytool -genkeypair -v \
+              -keystore chatransceiver.keystore \
+              -alias chatransceiver \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android123 -keypass android123 \
+              -dname "CN=Chatransceiver, OU=Dev, O=Chatransceiver, L=Tokyo, S=Tokyo, C=JP"
+          fi
+
+      - name: Publish Android APK (Auto-Increment Version)
+        env:
+          BUILD_CONFIG: ${{ inputs.configuration || 'Release' }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'android123' }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'chatransceiver' }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD || 'android123' }}
+          VERSION_CODE: ${{ github.run_number }}
+          DISPLAY_VERSION: "1.${{ github.run_number }}.0"
+        run: |
+          dotnet publish android/Chatransceiver.Maui/Chatransceiver.Maui.csproj \
+            -f net9.0-android \
+            -c "$BUILD_CONFIG" \
+            -p:ApplicationVersion="$VERSION_CODE" \
+            -p:ApplicationDisplayVersion="$DISPLAY_VERSION" \
+            -p:AndroidPackageFormats=apk \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore=chatransceiver.keystore \
+            -p:AndroidSigningKeyAlias="$KEY_ALIAS" \
+            -p:AndroidSigningKeyPass="$KEY_PASS" \
+            -p:AndroidSigningStorePass="$KEYSTORE_PASS"
+          mkdir -p release_out
+          cp android/Chatransceiver.Maui/bin/*/*/*-Signed.apk "release_out/Chatransceiver-v${DISPLAY_VERSION}.apk"
+
+      - name: Upload Signed APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatransceiver-android-v1.${{ github.run_number }}.0
+          path: release_out/*.apk
+          if-no-files-found: error
+
+      - name: Create GitHub Release (on main merge or manual dispatch)
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v1.${{ github.run_number }}.0
+          name: "Chatransceiver Android v1.${{ github.run_number }}.0"
+          body: |
+            Automated Android APK build (`v1.${{ github.run_number }}.0`, versionCode: `${{ github.run_number }}`).
+            Commit: ${{ github.sha }}
+          files: release_out/*.apk
+          generate_release_notes: true

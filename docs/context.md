@@ -22,8 +22,9 @@
 * **PWA未読バッジ**: 対応環境のホーム画面アイコンに全コミュニティの未読合計を表示し、起動・復帰・着信・既読時に更新する (DEC-037)。
 
 ## 5. 技術スタック (暫定)
-* **フロントエンド**: HTML / Vanilla CSS / **TypeScript (Vite ビルド環境)**
-* **バックエンド / データベース**: **Supabase (PostgreSQL, Storage, Supabase Auth, Realtime)**
+* **フロントエンド (Web / PWA版)**: HTML / Vanilla CSS / **TypeScript (Vite ビルド環境)**
+* **モバイルクライアント (Androidネイティブ版)**: **C# / .NET MAUI (XAML, Android API)** (`android/` ディレクトリ配下にモノレポ同居, DEC-038)
+* **バックエンド / データベース**: **Supabase (PostgreSQL, Storage, Supabase Auth, Realtime, Edge Functions)**
 
-  * 自前でのサーバー構築は行わず、Supabaseの無料枠を活用したサーバーレス構成。
+  * 自前でのサーバー構築は行わず、Supabaseの無料枠を活用したサーバーレス構成。Web版とAndroidネイティブ版で同一のSupabaseプロジェクトおよびFirebase (FCM) プロジェクトを共有する。
 

@@ -131,6 +131,7 @@ DiscordのWebhookに通知機能あり（上級者向け）<br>
 * [機能仕様書 (specifications.md)](./docs/specifications.md)
 * [データベース設計 (database_design.md)](./docs/database_design.md)
 * [意思決定ログ (decisions.md)](./docs/decisions.md)
+* [Androidネイティブ版 (.NET MAUI) 実装ブループリント (android_implementation_plan.md)](./docs/android_implementation_plan.md)
 
 ---
 

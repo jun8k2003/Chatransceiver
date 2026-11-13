@@ -1,0 +1,31 @@
+<?xml version = "1.0" encoding = "UTF-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Chatransceiver.Maui.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- DEC-024 準拠 カラーパレット (青=操作系アクセント / オレンジ=PTT・録音・再生系アクセント) -->
+            <Color x:Key="PrimaryBlue">#3B82F6</Color>
+            <Color x:Key="PrimaryBlueHover">#2563EB</Color>
+            <Color x:Key="AccentOrange">#F97316</Color>
+            <Color x:Key="DangerRed">#EF4444</Color>
+            <Color x:Key="OnlineGreen">#22C55E</Color>
+
+            <!-- ダークテーマ (標準) -->
+            <Color x:Key="DarkBgPrimary">#0F172A</Color>
+            <Color x:Key="DarkBgSecondary">#1E293B</Color>
+            <Color x:Key="DarkBgCard">#334155</Color>
+            <Color x:Key="DarkTextPrimary">#F8FAFC</Color>
+            <Color x:Key="DarkTextSecondary">#94A3B8</Color>
+            <Color x:Key="DarkBorder">#475569</Color>
+
+            <!-- ライトテーマ -->
+            <Color x:Key="LightBgPrimary">#F8FAFC</Color>
+            <Color x:Key="LightBgSecondary">#FFFFFF</Color>
+            <Color x:Key="LightBgCard">#E2E8F0</Color>
+            <Color x:Key="LightTextPrimary">#0F172A</Color>
+            <Color x:Key="LightTextSecondary">#64748B</Color>
+            <Color x:Key="LightBorder">#CBD5E1</Color>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -2,6 +2,24 @@
 
 このファイルは、現在議論中のトピックや未解決のアジェンダを管理します。
 
+## 🚀 進行中: Androidネイティブアプリ版 (.NET MAUI) の構築 (2026-11-13〜)
+
+* **決定ログ**: `DEC-038`（[decisions.md](./decisions.md)）
+* **確定仕様**: [specifications.md §8](./specifications.md#8-androidネイティブアプリ版-net-maui-仕様-dec-038)
+* **実装ブループリント**: [android_implementation_plan.md](./android_implementation_plan.md)
+* **現在のステータス**:
+  * **Phase 0（構想・仕様定義・Blueprint作成）**: 完了
+  * **Phase 1（リポジトリ環境整備・Edge Function拡張・MAUIプロジェクト骨格）**: 完了
+  * **Phase 2（データモデル・Supabase通信・認証・再生キュー）**: 完了
+  * **Phase 3（Androidネイティブ特化機能：DeepSleep再生・録音＋文字起こし・イヤフォンPTT・FCM）**: 完了
+  * **Phase 4（ネイティブUI XAML実装と結合ビルド検証）**: 完了（`npm run build` および `npm run build:android` ともにエラー0でRelease APK生成まで確認済み）
+* **実機・本番運用に向けた設定手順（ユーザー作業）**:
+  1. **Supabase ダッシュボード**: `Authentication > URL Configuration > Redirect URLs` に `chatransceiver://auth-callback` を追加。
+  2. **Edge Functions 再デプロイ**:
+     * `supabase functions deploy send-push-notification`
+     * `supabase functions deploy transcribe-audio-message`
+  3. **Firebase コンソール (`chatransceiver13162`)**: Androidアプリ（パッケージ名 `com.chatransceiver.app`）を追加し、`google-services.json` を `android/Chatransceiver.Maui/google-services.json`（または GitHub Secrets `ANDROID_GOOGLE_SERVICES_JSON`）に配置。
+
 ## 合意・実装済み: PWA未読バッジ (2026-10-03)
 
 * 起動・画面復帰・着信・既読時に更新する簡易同期を採用 (DEC-037)。別端末での既読や通知の到着順による一時的なずれは許容する。

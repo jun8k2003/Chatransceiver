@@ -2,6 +2,22 @@
 
 このファイルは、議論の末に決定した事項とその理由を記録します。
 
+## DEC-038: Androidネイティブアプリ (.NET MAUI) の併存開発とアーキテクチャ方針 (2026-11-13)
+* **背景**: 現行のWeb (PWA) 版では、モバイルブラウザのサンドボックス・OS制約により、(1) 画面ロック（DeepSleep）中のテキストTTS自動読み上げが不可能 (`DEC-025`)、(2) メディアボタンPTTの捕捉に可聴レベル（-60dBFS）の微小ノイズ連続再生と画面常時表示 (`DEC-026`, `DEC-027`) が必要でバッテリー消費が激しい、(3) スマホでの音声録音とクライアント側文字起こしの同時実行がマイク競合により不可能 (`DEC-036`) という3つの壁があった。
+* **決定1（モノレポ併存と技術選定）**: 同一リポジトリの `android/` フォルダ配下に **C# / .NET MAUI (XAML)** でAndroidネイティブアプリを構築し、Web版と同一のSupabase・Firebaseバックエンドを共有する。仕様書は [specifications.md §8](./specifications.md#8-androidネイティブアプリ版-net-maui-仕様-dec-038) に章を分けて一元管理し、今後の仕様拡張の取りこぼしを防ぐ。
+* **決定2（省電力ハイブリッド待機とDeepSleep着信再生）**: 常時WebSocket維持＋常時WakeLock保持は電池消費が激しいため不採用とし、「非同期チャット型で1〜2秒の遅延・TTSウォームアップを許容する」という本アプリの思想を活かした**FCMイベント駆動方式**を採用する。
+  * 待機中はCPU・ネットワークを完全にスリープ（DeepSleep/Doze）させる。
+  * 着信時は `send-push-notification` Edge Function から **`android: { priority: "high" }`** と `data.audioUrl` を付加したFCMデータメッセージを送信して端末を起床させ、再生中のみ一時的に `PARTIAL_WAKE_LOCK` を保持する。
+  * 音声データは `MediaPlayer`、テキストはAndroidネイティブ `Android.Speech.Tts.TextToSpeech` で再生し、完了後に即座に `WakeLock` を解放して再びスリープへ戻す。なお `message.android` ブロックはWeb Pushトークン側では無視されるため、既存のWeb版への後方互換性は100%保たれる。
+* **決定3（イヤフォンPlay/Pauseボタンによるロック中PTT）**: Androidネイティブの `ForegroundService` ＋ `MediaSession` により、微小ノイズ再生なしで画面消灯中もイヤフォンのPlay/Pauseボタン押下を捕捉し、録音開始・停止＋送信を行う。
+* **決定4（端末側での録音＋文字起こし両立）**: サーバー側STT (`DEC-036`) の月200回枠を温存するため、Androidネイティブ版では `AudioRecord` で1回だけマイク録音（16kHz/16bit/mono PCM）し、WAVファイル保存と同時に `ParcelFileDescriptor.CreatePipe()` ＋ `RecognizerIntent.ExtraAudioSource`（Android 13 / API 33+）でOS標準の `SpeechRecognizer` へPCMを流し込むことで、マイク競合なし・無料で端末側文字起こしを実現する（API 33未満や認識空文字時のみ `needs_transcription = true` にフォールバック）。
+* **決定5（機能スリム化によるコード量削減）**: 実装・保守コストおよびAIモデルのレートリミット消費を抑えるため、Android版では「常時表示 (☀️)」「TTT（ウェイクワード待機）」「背景画像・ぼかし」「Discord / カスタムWebhook設定UI」を非搭載とする。
+* **決定6（認証復帰・招待・CI/CD分離）**:
+  * Google OAuth / Magic Link の復帰用にカスタムURLスキーム `chatransceiver://auth-callback` を採用し、Web版URLと並存させる。
+  * 招待URLはアプリ内のコミュニティ入力欄へのコピペ貼り付け（クエリ自動解析）で参加する方式とする。
+  * ルートの `.gitignore` から `*.sln` 除外を外し、`android/.gitignore` でカスケード除外する。ビルドは `npm run build:android`、GitHub ActionsはWeb用（`paths-ignore: ['android/**']` 追加）とAndroid用（手動 `workflow_dispatch` 対応）に分離する。
+* **実装計画**: 詳細な設計・実装手順は [android_implementation_plan.md](./android_implementation_plan.md) に定義し、4フェーズに分割して段階的に実装する。
+
 ## DEC-037: PWAホーム画面の未読バッジ (2026-10-03)
 * **背景**: スマホにインストールしたPWAのアイコンで未読を知らせたい。厳密な端末間同期より、小さな変更と低いデグレードリスクを優先することに合意した。
 * **件数**: アプリアイコンは全コミュニティの本人宛未読合計を示す。チャット一覧の既存のコミュニティ別未読集計・既読条件は維持する。

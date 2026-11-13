@@ -1,0 +1,627 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:Chatransceiver.Maui.Models"
+             x:Class="Chatransceiver.Maui.Views.MainPage"
+             NavigationPage.HasNavigationBar="False"
+             BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgPrimary}, Light={StaticResource LightBgPrimary}}">
+
+    <Grid>
+        <!-- ==================== メイン画面レイアウト ==================== -->
+        <Grid RowDefinitions="Auto,Auto,*">
+
+            <!-- 1. 最上部ヘッダー (DEC-024 / DEC-034 / DEC-035) -->
+            <Border Grid.Row="0"
+                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                    Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                    StrokeThickness="0,0,0,1"
+                    Padding="10,8">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <!-- ロゴ -->
+                    <Image Grid.Column="0"
+                           Source="chatora.png"
+                           WidthRequest="30"
+                           HeightRequest="30"
+                           VerticalOptions="Center" />
+
+                    <!-- コミュニティ名ピル (タップでドロップダウン開閉) -->
+                    <Button x:Name="CommunityPillButton"
+                            Grid.Column="1"
+                            Text="🌐 未接続 (タップで接続)"
+                            FontSize="13"
+                            FontAttributes="Bold"
+                            HeightRequest="36"
+                            CornerRadius="18"
+                            Padding="12,0"
+                            BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                            TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                            Clicked="OnCommunityPillClicked" />
+
+                    <!-- 右側操作アイコン群 (🔔 FCM / 🎧 イヤフォンPTT / ⚙️ 設定) -->
+                    <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                        <Button x:Name="FcmToggleButton"
+                                Text="🔔"
+                                FontSize="15"
+                                WidthRequest="40"
+                                HeightRequest="36"
+                                Padding="0"
+                                CornerRadius="8"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                Clicked="OnFcmToggleClicked" />
+
+                        <Button x:Name="HeadsetPttButton"
+                                Text="🎧"
+                                FontSize="15"
+                                WidthRequest="40"
+                                HeightRequest="36"
+                                Padding="0"
+                                CornerRadius="8"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                Clicked="OnHeadsetPttToggleClicked" />
+
+                        <Button Text="⚙️"
+                                FontSize="15"
+                                WidthRequest="40"
+                                HeightRequest="36"
+                                Padding="0"
+                                CornerRadius="8"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                Clicked="OnSettingsClicked" />
+                    </HorizontalStackLayout>
+                </Grid>
+            </Border>
+
+            <!-- 2. モバイル画面切替タブ (リスト ⇄ チャット) -->
+            <Grid Grid.Row="1"
+                  ColumnDefinitions="*,*"
+                  Padding="10,6"
+                  ColumnSpacing="8"
+                  BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}">
+                <Button x:Name="TabListButton"
+                        Grid.Column="0"
+                        Text="👥 メンバー・グループ一覧"
+                        FontSize="13"
+                        FontAttributes="Bold"
+                        HeightRequest="36"
+                        CornerRadius="8"
+                        BackgroundColor="{StaticResource PrimaryBlue}"
+                        TextColor="White"
+                        Clicked="OnShowListPaneClicked" />
+                <Button x:Name="TabChatButton"
+                        Grid.Column="1"
+                        Text="💬 チャット・PTT発話"
+                        FontSize="13"
+                        FontAttributes="Bold"
+                        HeightRequest="36"
+                        CornerRadius="8"
+                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                        TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                        Clicked="OnShowChatPaneClicked" />
+            </Grid>
+
+            <!-- 3. コンテンツ領域 (統合リストペイン & チャットペイン) -->
+            <Grid Grid.Row="2">
+
+                <!-- ========== A. 統合リストペイン (DEC-024) ========== -->
+                <Grid x:Name="ListPaneGrid"
+                      RowDefinitions="Auto,Auto,*"
+                      Padding="10"
+                      RowSpacing="8">
+
+                    <!-- フィルタチップ (すべて / 個別 / グループ) + 新規グループボタン -->
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto" ColumnSpacing="6">
+                        <Button x:Name="FilterAllBtn"
+                                Grid.Column="0"
+                                Text="すべて"
+                                FontSize="12"
+                                HeightRequest="32"
+                                Padding="10,0"
+                                CornerRadius="16"
+                                BackgroundColor="{StaticResource PrimaryBlue}"
+                                TextColor="White"
+                                Clicked="OnFilterAllClicked" />
+                        <Button x:Name="FilterIndividualBtn"
+                                Grid.Column="1"
+                                Text="個別"
+                                FontSize="12"
+                                HeightRequest="32"
+                                Padding="10,0"
+                                CornerRadius="16"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                Clicked="OnFilterIndividualClicked" />
+                        <Button x:Name="FilterGroupBtn"
+                                Grid.Column="2"
+                                Text="グループ"
+                                FontSize="12"
+                                HeightRequest="32"
+                                Padding="10,0"
+                                CornerRadius="16"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                Clicked="OnFilterGroupClicked" />
+
+                        <Button x:Name="NewGroupModeBtn"
+                                Grid.Column="4"
+                                Text="＋新規グループ"
+                                FontSize="12"
+                                HeightRequest="32"
+                                Padding="10,0"
+                                CornerRadius="16"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                Clicked="OnToggleGroupSelectModeClicked" />
+                    </Grid>
+
+                    <!-- 新規グループ複数選択モード時の確定バー -->
+                    <Border x:Name="GroupCreateConfirmBar"
+                            Grid.Row="1"
+                            IsVisible="False"
+                            BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                            Stroke="{StaticResource PrimaryBlue}"
+                            StrokeShape="RoundRectangle 10"
+                            Padding="10">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <Label Text="グループに入れるメンバー(2人以上)をタップして選択"
+                                   FontSize="12"
+                                   VerticalOptions="Center"
+                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                            <Button Grid.Column="1"
+                                    Text="作成"
+                                    HeightRequest="34"
+                                    BackgroundColor="{StaticResource PrimaryBlue}"
+                                    TextColor="White"
+                                    Clicked="OnConfirmCreateGroupClicked" />
+                            <Button Grid.Column="2"
+                                    Text="キャンセル"
+                                    HeightRequest="34"
+                                    BackgroundColor="Transparent"
+                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}"
+                                    Clicked="OnToggleGroupSelectModeClicked" />
+                        </Grid>
+                    </Border>
+
+                    <!-- 統合リスト本体 -->
+                    <CollectionView x:Name="UnifiedCollectionView"
+                                    Grid.Row="2"
+                                    SelectionMode="None">
+                        <CollectionView.EmptyView>
+                            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Spacing="8" Padding="24">
+                                <Label Text="メンバーまたはグループがありません"
+                                       HorizontalOptions="Center"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                                <Label Text="上部のコミュニティピルからコミュニティに接続してください"
+                                       FontSize="12"
+                                       HorizontalOptions="Center"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                        </CollectionView.EmptyView>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:UnifiedListItem">
+                                <Border Margin="0,3"
+                                        Padding="12,10"
+                                        StrokeShape="RoundRectangle 10"
+                                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                                        Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnUnifiedItemTapped" CommandParameter="{Binding .}" />
+                                    </Border.GestureRecognizers>
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                                        <!-- オンライン状態またはグループアイコン -->
+                                        <BoxView Grid.Column="0"
+                                                 WidthRequest="10"
+                                                 HeightRequest="10"
+                                                 CornerRadius="5"
+                                                 VerticalOptions="Center"
+                                                 Color="{Binding IsOnline, Converter={x:Null}}"
+                                                 BackgroundColor="{StaticResource OnlineGreen}"
+                                                 IsVisible="{Binding IsOnline}" />
+
+                                        <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                            <Label Text="{Binding DisplayTitle}"
+                                                   FontSize="15"
+                                                   FontAttributes="Bold"
+                                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                            <Label Text="{Binding Subtitle}"
+                                                   FontSize="11"
+                                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                                        </VerticalStackLayout>
+
+                                        <!-- グループ選択中マーク -->
+                                        <Label Grid.Column="2"
+                                               Text="☑️"
+                                               FontSize="18"
+                                               VerticalOptions="Center"
+                                               IsVisible="{Binding IsSelectedForGroup}" />
+
+                                        <!-- 未読バッジ -->
+                                        <Border Grid.Column="3"
+                                                IsVisible="{Binding HasUnread}"
+                                                BackgroundColor="{StaticResource AccentOrange}"
+                                                StrokeShape="RoundRectangle 12"
+                                                Padding="8,2"
+                                                VerticalOptions="Center">
+                                            <Label Text="{Binding UnreadBadgeText}"
+                                                   FontSize="12"
+                                                   FontAttributes="Bold"
+                                                   TextColor="White" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </Grid>
+
+                <!-- ========== B. チャット＆PTTペイン ========== -->
+                <Grid x:Name="ChatPaneGrid"
+                      IsVisible="False"
+                      RowDefinitions="Auto,*,Auto">
+
+                    <!-- チャットルームヘッダー (グループ名編集✏️ & 履歴削除🗑️) -->
+                    <Border Grid.Row="0"
+                            BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                            Padding="12,8">
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                            <VerticalStackLayout Grid.Column="0" VerticalOptions="Center">
+                                <Label x:Name="ChatHeaderTitleLabel"
+                                       Text="チャット未選択"
+                                       FontSize="15"
+                                       FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                <Label x:Name="ChatHeaderSubtitleLabel"
+                                       Text="一覧から送信先を選択してください"
+                                       FontSize="11"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+
+                            <Button x:Name="EditGroupNameButton"
+                                    Grid.Column="1"
+                                    IsVisible="False"
+                                    Text="✏️"
+                                    WidthRequest="38"
+                                    HeightRequest="34"
+                                    Padding="0"
+                                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                    Clicked="OnEditGroupNameClicked" />
+
+                            <Button x:Name="ClearRoomButton"
+                                    Grid.Column="2"
+                                    IsVisible="False"
+                                    Text="🗑️"
+                                    WidthRequest="38"
+                                    HeightRequest="34"
+                                    Padding="0"
+                                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                    Clicked="OnClearRoomClicked" />
+                        </Grid>
+                    </Border>
+
+                    <!-- メッセージ履歴タイムライン -->
+                    <CollectionView x:Name="MessagesCollectionView"
+                                    Grid.Row="1"
+                                    Margin="10,6"
+                                    SelectionMode="None">
+                        <CollectionView.EmptyView>
+                            <VerticalStackLayout VerticalOptions="Center" HorizontalOptions="Center" Padding="24">
+                                <Label Text="まだメッセージはありません。下のマイクボタンまたはテキストから発信できます。"
+                                       FontSize="13"
+                                       HorizontalTextAlignment="Center"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                        </CollectionView.EmptyView>
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:SupabaseMessage">
+                                <Border Margin="0,4"
+                                        Padding="12,8"
+                                        StrokeShape="RoundRectangle 12"
+                                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                                        Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Label Text="{Binding SenderName}"
+                                                   FontSize="12"
+                                                   FontAttributes="Bold"
+                                                   TextColor="{StaticResource PrimaryBlue}" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding TimeText}"
+                                                   FontSize="11"
+                                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                                        </Grid>
+
+                                        <Label Text="{Binding DisplayText}"
+                                               FontSize="14"
+                                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Button Text="{Binding PlayButtonLabel}"
+                                                    IsVisible="{Binding CanPlay}"
+                                                    FontSize="12"
+                                                    HeightRequest="30"
+                                                    Padding="10,0"
+                                                    CornerRadius="6"
+                                                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                                    CommandParameter="{Binding .}"
+                                                    Clicked="OnPlayMessageBubbleClicked" />
+
+                                            <Button Text="🗑️ 取り消し"
+                                                    IsVisible="{Binding CanRevoke}"
+                                                    FontSize="12"
+                                                    HeightRequest="30"
+                                                    Padding="10,0"
+                                                    CornerRadius="6"
+                                                    BackgroundColor="Transparent"
+                                                    TextColor="{StaticResource DangerRed}"
+                                                    CommandParameter="{Binding .}"
+                                                    Clicked="OnRevokeMessageClicked" />
+                                        </HorizontalStackLayout>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+
+                    <!-- 下部 PTT & テキスト送信フッター (DEC-024: スマホ下段中央の大型円形PTTボタン) -->
+                    <Border Grid.Row="2"
+                            BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                            Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                            StrokeThickness="0,1,0,0"
+                            Padding="12,10">
+                        <VerticalStackLayout Spacing="8">
+
+                            <!-- 録音中ステータスバー (15秒カウントダウン & リアルタイム文字起こしプレビュー) -->
+                            <Border x:Name="RecordingStatusBanner"
+                                    IsVisible="False"
+                                    BackgroundColor="#431407"
+                                    Stroke="{StaticResource AccentOrange}"
+                                    StrokeShape="RoundRectangle 8"
+                                    Padding="10,6">
+                                <VerticalStackLayout Spacing="4">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Label x:Name="RecordingTimerLabel"
+                                               Text="🔴 録音中... 残り 15 秒"
+                                               FontAttributes="Bold"
+                                               TextColor="{StaticResource AccentOrange}" />
+                                        <Button Grid.Column="1"
+                                                Text="キャンセル"
+                                                FontSize="11"
+                                                HeightRequest="26"
+                                                Padding="8,0"
+                                                BackgroundColor="Transparent"
+                                                TextColor="White"
+                                                Clicked="OnCancelRecordingClicked" />
+                                    </Grid>
+                                    <Label x:Name="TranscriptPreviewLabel"
+                                           Text="（話すとここに文字起こしが表示されます）"
+                                           FontSize="12"
+                                           TextColor="White" />
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <!-- 大型円形PTTボタン (主役) -->
+                            <Button x:Name="PttMainButton"
+                                    Text="🎤 タップして発話 (PTT)"
+                                    FontSize="16"
+                                    FontAttributes="Bold"
+                                    HeightRequest="56"
+                                    CornerRadius="28"
+                                    BackgroundColor="{StaticResource AccentOrange}"
+                                    TextColor="White"
+                                    Clicked="OnPttMainButtonClicked" />
+
+                            <!-- テキスト入力 & 送信バー -->
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <Entry x:Name="TextMessageEntry"
+                                       Grid.Column="0"
+                                       Placeholder="テキストメッセージを入力 (受信側はTTS読み上げ)"
+                                       FontSize="13"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                       PlaceholderColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}"
+                                       Completed="OnSendTextClicked" />
+                                <Button Grid.Column="1"
+                                        Text="送信"
+                                        BackgroundColor="{StaticResource PrimaryBlue}"
+                                        TextColor="White"
+                                        FontAttributes="Bold"
+                                        HeightRequest="42"
+                                        Padding="16,0"
+                                        CornerRadius="8"
+                                        Clicked="OnSendTextClicked" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- ==================== コミュニティ接続メニュー オーバーレイ (DEC-024 / DEC-035) ==================== -->
+        <Grid x:Name="CommunityMenuOverlay"
+              IsVisible="False"
+              BackgroundColor="#AA000000"
+              Padding="16">
+            <Border VerticalOptions="Start"
+                    Margin="0,50,0,0"
+                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                    Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                    StrokeShape="RoundRectangle 14"
+                    Padding="16">
+                <VerticalStackLayout Spacing="12">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Text="🌐 コミュニティ接続・管理"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                               VerticalOptions="Center" />
+                        <Button Grid.Column="1"
+                                Text="✕"
+                                WidthRequest="36"
+                                HeightRequest="36"
+                                BackgroundColor="Transparent"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}"
+                                Clicked="OnCloseCommunityMenuClicked" />
+                    </Grid>
+
+                    <Label Text="コミュニティID または 招待URL を貼り付けて接続:"
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <Entry x:Name="CommunityInputEntry"
+                               Placeholder="例: demo または https://.../?c=demo"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                        <Button Grid.Column="1"
+                                Text="接続"
+                                BackgroundColor="{StaticResource PrimaryBlue}"
+                                TextColor="White"
+                                FontAttributes="Bold"
+                                Clicked="OnConnectCommunityClicked" />
+                    </Grid>
+
+                    <Label Text="接続履歴:"
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                    <CollectionView x:Name="CommunityHistoryView"
+                                    MaximumHeightRequest="140"
+                                    SelectionMode="None">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Button Text="{Binding .}"
+                                        Margin="0,2"
+                                        HeightRequest="36"
+                                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                        TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                        CommandParameter="{Binding .}"
+                                        Clicked="OnHistoryCommunitySelected" />
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+
+                    <BoxView HeightRequest="1" Color="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}" />
+
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                        <Button Grid.Column="0"
+                                Text="🔗 招待コピー"
+                                FontSize="12"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                Clicked="OnCopyInviteLinkClicked" />
+                        <Button Grid.Column="1"
+                                Text="🔌 切断"
+                                FontSize="12"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                Clicked="OnDisconnectCommunityClicked" />
+                        <Button Grid.Column="2"
+                                Text="🚪 退会"
+                                FontSize="12"
+                                BackgroundColor="{StaticResource DangerRed}"
+                                TextColor="White"
+                                Clicked="OnLeaveCommunityClicked" />
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+        <!-- ==================== 自動再生停止パネル オーバーレイ (DEC-032) ==================== -->
+        <Grid x:Name="AutoPlayStopOverlay"
+              IsVisible="False"
+              BackgroundColor="#BB000000">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnAutoPlayStopOverlayTapped" />
+            </Grid.GestureRecognizers>
+            <Border VerticalOptions="Center"
+                    HorizontalOptions="Center"
+                    WidthRequest="300"
+                    Padding="24"
+                    Stroke="{StaticResource AccentOrange}"
+                    StrokeThickness="2"
+                    StrokeShape="RoundRectangle 18"
+                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnAutoPlayStopOverlayTapped" />
+                </Border.GestureRecognizers>
+                <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
+                    <Label Text="🔊 自動再生中..."
+                           FontSize="20"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center"
+                           TextColor="{StaticResource AccentOrange}" />
+                    <Label x:Name="AutoPlaySenderLabel"
+                           Text=""
+                           FontSize="16"
+                           HorizontalOptions="Center"
+                           TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                    <Label Text="画面のどこをタップしても停止します"
+                           FontSize="13"
+                           HorizontalOptions="Center"
+                           TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+        <!-- ==================== 未ログイン時 ログインオーバーレイ (DEC-028) ==================== -->
+        <Grid x:Name="LoginOverlay"
+              IsVisible="True"
+              BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgPrimary}, Light={StaticResource LightBgPrimary}}"
+              Padding="24">
+            <ScrollView VerticalOptions="Center">
+                <Border BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                        Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                        StrokeShape="RoundRectangle 16"
+                        Padding="24">
+                    <VerticalStackLayout Spacing="16">
+                        <Image Source="chatora.png"
+                               WidthRequest="80"
+                               HeightRequest="80"
+                               HorizontalOptions="Center" />
+
+                        <Label Text="Chatransceiver"
+                               FontSize="24"
+                               FontAttributes="Bold"
+                               HorizontalOptions="Center"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+
+                        <Label Text="15秒トランシーバー！文字起こし付きボイスチャット (Android Native)"
+                               FontSize="13"
+                               HorizontalTextAlignment="Center"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+
+                        <Button Text="🔐 Google でログイン"
+                                BackgroundColor="{StaticResource PrimaryBlue}"
+                                TextColor="White"
+                                FontAttributes="Bold"
+                                HeightRequest="48"
+                                CornerRadius="10"
+                                Clicked="OnGoogleLoginClicked" />
+
+                        <BoxView HeightRequest="1" Color="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}" />
+
+                        <Label Text="または Magic Link (メールリンク) でログイン:"
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+
+                        <Entry x:Name="MagicLinkEmailEntry"
+                               Placeholder="メールアドレスを入力"
+                               Keyboard="Email"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+
+                        <Button Text="✉️ ログインリンクを送信"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                HeightRequest="44"
+                                CornerRadius="10"
+                                Clicked="OnMagicLinkLoginClicked" />
+
+                        <!-- 初回接続先未設定時用の折りたたみ設定 -->
+                        <Button Text="⚙️ Supabase接続先設定を確認・変更"
+                                FontSize="12"
+                                BackgroundColor="Transparent"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}"
+                                Clicked="OnSettingsClicked" />
+                    </VerticalStackLayout>
+                </Border>
+            </ScrollView>
+        </Grid>
+    </Grid>
+</ContentPage>

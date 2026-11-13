@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:android": "dotnet build android/Chatransceiver.Maui/Chatransceiver.Maui.csproj -c Release",
+    "publish:android": "dotnet publish android/Chatransceiver.Maui/Chatransceiver.Maui.csproj -c Release",
     "test:badge": "node --test tests/app-badge.test.mjs",
     "preview": "vite preview",
     "deploy": "firebase deploy --only hosting"

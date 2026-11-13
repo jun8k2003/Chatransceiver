@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Chatransceiver.Maui.Views.SettingsModalPage"
+             Title="環境設定"
+             BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgPrimary}, Light={StaticResource LightBgPrimary}}">
+
+    <Grid RowDefinitions="*,Auto" Padding="16">
+        <ScrollView Grid.Row="0">
+            <VerticalStackLayout Spacing="18">
+
+                <!-- ヘッダー -->
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label Text="⚙️ 環境設定"
+                           FontSize="20"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                           VerticalOptions="Center" />
+                    <Button Grid.Column="1"
+                            Text="✕ 閉じる"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}"
+                            Clicked="OnCloseClicked" />
+                </Grid>
+
+                <!-- プロフィール設定 -->
+                <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="14">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="👤 プロフィール"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                        <Entry x:Name="NicknameEntry"
+                               Placeholder="ニックネームを入力"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                               PlaceholderColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- 音声・トランシーバー設定 -->
+                <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="14">
+                    <VerticalStackLayout Spacing="14">
+                        <Label Text="🔊 音声・トランシーバー動作"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout>
+                                <Label Text="着信メッセージの自動再生"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                <Label Text="画面ロック中もFCM着信時に音声/TTSを自動再生します"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                            <Switch x:Name="AutoPlaySwitch"
+                                    Grid.Column="1"
+                                    OnColor="{StaticResource PrimaryBlue}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout>
+                                <Label Text="疑似コールサイン音 (前後チャイム)"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                <Label Text="再生の前後にトランシーバー風効果音を鳴らします"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                            <Switch x:Name="CallSignSwitch"
+                                    Grid.Column="1"
+                                    OnColor="{StaticResource PrimaryBlue}" />
+                        </Grid>
+
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="録音・文字起こしモード"
+                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                            <Picker x:Name="RecordingModePicker"
+                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}">
+                                <Picker.ItemsSource>
+                                    <x:Array Type="{x:Type x:String}">
+                                        <x:String>両方（音声＋文字おこし）</x:String>
+                                        <x:String>録音のみ</x:String>
+                                        <x:String>文字おこしのみ</x:String>
+                                    </x:Array>
+                                </Picker.ItemsSource>
+                            </Picker>
+                        </VerticalStackLayout>
+
+                        <Button Text="🔋 DeepSleep自動再生のためバッテリー制限解除を許可"
+                                BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                FontSize="13"
+                                Clicked="OnBatteryOptimizationClicked" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- 外観テーマ & 接続設定 -->
+                <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="14">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="🎨 外観・接続先設定"
+                               FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="ライトテーマを使用"
+                                   VerticalOptions="Center"
+                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                            <Switch x:Name="LightThemeSwitch"
+                                    Grid.Column="1"
+                                    OnColor="{StaticResource PrimaryBlue}" />
+                        </Grid>
+
+                        <Label Text="Supabase URL (上級者向け)"
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                        <Entry x:Name="SupabaseUrlEntry"
+                               FontSize="12"
+                               Placeholder="https://xxxx.supabase.co"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+
+                        <Label Text="Supabase Anon Key (上級者向け)"
+                               FontSize="12"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                        <Entry x:Name="SupabaseKeyEntry"
+                               FontSize="12"
+                               Placeholder="eyJhbGciOi..."
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- アカウント操作 -->
+                <Button Text="🚪 アカウントからログアウトする"
+                        BackgroundColor="{StaticResource DangerRed}"
+                        TextColor="White"
+                        FontAttributes="Bold"
+                        CornerRadius="10"
+                        Clicked="OnSignOutClicked" />
+
+                <!-- 茶トラ猫アイコン装飾 & バージョン表示 (DEC-024 / DEC-033 不変条件) -->
+                <Image Source="chatora.png"
+                       WidthRequest="64"
+                       HeightRequest="64"
+                       HorizontalOptions="Center"
+                       Margin="0,12,0,4" />
+                <Label x:Name="AppVersionLabel"
+                       Text="v1.0.0"
+                       FontSize="12"
+                       HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}"
+                       Margin="0,0,0,16" />
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- 下部固定保存フッター (DEC-024) -->
+        <Button Grid.Row="1"
+                Text="💾 設定を保存する"
+                BackgroundColor="{StaticResource PrimaryBlue}"
+                TextColor="White"
+                FontAttributes="Bold"
+                HeightRequest="48"
+                CornerRadius="10"
+                Margin="0,10,0,0"
+                Clicked="OnSaveClicked" />
+    </Grid>
+</ContentPage>

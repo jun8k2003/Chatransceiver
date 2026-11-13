@@ -138,7 +138,10 @@ serve(async (req) => {
         body: JSON.stringify({
           message: {
             token: t.fcm_token,
-            // カスタムのクリックハンドラで利用するデータ
+            android: {
+              priority: 'high'
+            },
+            // カスタムのクリックハンドラおよびAndroidバックグラウンド自動再生で利用するデータ
             data: {
               ...badgeData,
               url: `/?c=${communitySlug}&m=${record.message_id || ''}`,
@@ -147,7 +150,8 @@ serve(async (req) => {
               communityName: communityName,
               senderName: senderName,
               messageType: audioUrl ? 'audio' : 'text',
-              textContent: textContent
+              textContent: textContent,
+              audioUrl: audioUrl
             }
           }
         })

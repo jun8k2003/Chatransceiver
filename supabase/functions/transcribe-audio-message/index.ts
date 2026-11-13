@@ -69,8 +69,8 @@ serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         config: {
-          encoding: 'WEBM_OPUS',
-          sampleRateHertz: 48000,
+          encoding: record.audio_url.endsWith('.wav') ? 'LINEAR16' : 'WEBM_OPUS',
+          sampleRateHertz: record.audio_url.endsWith('.wav') ? 16000 : 48000,
           languageCode: 'ja-JP'
         },
         audio: { content: audioBase64 }

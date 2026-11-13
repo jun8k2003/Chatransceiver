@@ -216,3 +216,70 @@ DEC-024 のリデザインにより、従来の3ペイン（個別／グルー�
 ### 7.4. 背景画像（ぼかし対応）
 * 任意の画像ファイルをチャット背景に設定できます。画像はサーバーではなく**ブラウザの IndexedDB にローカル保存**されます（`ChatransceiverDB` / `backgroundStore`）。
 * 表示方法（`cover`：全体を埋める／`contain`：全体を表示）と、背景ぼかしのON/OFF（`bg-blur`）を選択できます。表示方法・ぼかし設定は localStorage に保存されます。
+
+---
+
+## 8. Androidネイティブアプリ版 (.NET MAUI) 仕様 (DEC-038)
+
+Web (PWA) 版におけるモバイルブラウザのOS制約（画面ロック中のTTS読み上げ不可 `DEC-025`、メディアボタン捕捉に微小ノイズ連続再生が必須 `DEC-027`、スマホでの録音と文字起こし同時実行不可 `DEC-036`）を根本解決するため、同一リポジトリの `android/` ディレクトリ配下に **C# / .NET MAUI (XAML)** によるAndroidネイティブアプリを併存開発します。
+
+> **実装ブループリント**: 具体的なディレクトリ構成・クラス設計・マニフェスト定義・フェーズ別実装手順は [android_implementation_plan.md](./android_implementation_plan.md) を参照してください。
+
+### 8.1. 機能スコープ（Web版との差分とスリム化）
+バックエンド（Supabase / Firebase）はWeb版と完全共有しつつ、クライアント側のコード量を抑えて保守性を高めるため、Web版固有の代替策や装飾機能を除外したスリムなXAMLネイティブUIとします。
+
+* **搭載する機能**:
+  * Googleログイン / Magic Link認証、初回ニックネーム設定、ログアウト（FCM解除＋非破壊切断）
+  * コミュニティ接続（ID入力・履歴選択・招待URLのコピペ貼り付けによる参加）・切断・退会（完全クリーンアップRPC `leave_community_and_cleanup`）
+  * 統合リスト（フィルタチップ：すべて／個別／グループ、未読バッジ、Realtime Presence によるオンライン表示、新規グループ作成、グループ名編集）
+  * チャット画面（メッセージ履歴、音声再生 `▶` / TTS再読み上げ、自身の発言の取り消し `🗑️`、自動再生停止オーバーレイ）
+  * 音声PTT送信（最大15秒録音＋端末側での音声認識文字起こし併用）、テキスト入力送信、録音モード切替（「両方」「録音のみ」「文字おこしのみ」）
+  * 疑似コールサイン音（再生前後の効果音 ON/OFF）、カラーテーマ切替（ダーク／ライト）
+  * **Androidネイティブ特化機能**: FCMプッシュ通知、**DeepSleep（画面ロック）中の着信直接再生（音声＋ネイティブTTS）**、**画面ロック中も動作するイヤフォンPlay/PauseボタンPTT**
+* **Android版では非搭載とする機能（除外）**:
+  * **常時表示 (☀️ Screen Wake Lock)**: 画面消灯（DeepSleep）中も着信再生・イヤフォンPTTが動作するため不要。
+  * **TTT (ウェイクワード常時待ち受け `DEC-029`)**: 電池消費が大きく、ロック中もイヤフォンボタンPTTで確実に発話できるため不要。
+  * **微小ノイズ連続ループ再生 (`DEC-027`)**: Androidネイティブの `MediaSession` では不要。
+  * **背景画像・ぼかし設定**: コード量削減のため非搭載。
+  * **Discord Webhook / カスタムWebhookの設定UI**: 設定変更はWeb版から行えばDB上で共有されサーバー側で動作するため、Androidアプリ内の設定画面からは除外。
+
+### 8.2. 認証リダイレクトとコミュニティ参加（Web版との並存）
+1. **カスタムURLスキームによる認証復帰**:
+   * Google OAuth および Magic Link のリダイレクト先として、Androidアプリ専用のカスタムスキーム **`chatransceiver://auth-callback`** を使用します（Web版の `https://chatransceiver13162.web.app` とSupabaseダッシュボードの `Redirect URLs` 上で並存）。
+2. **招待URLのコピペ参加**:
+   * コミュニティID入力欄に、招待URL（`https://chatransceiver13162.web.app/?c=[slug]&code=[invite_code]`）をそのまま貼り付けた場合、クエリパラメータから `slug` を自動抽出して参加確認・入室処理を行います（もちろん `slug` の直接手入力も可能）。
+
+### 8.3. DeepSleep（画面ロック）中の着信自動再生と省電力ハイブリッド待機
+「数秒の遅延・ウォームアップを許容する非同期チャット型トランシーバー」という思想を活かし、待機中のバッテリー消費を最小化するイベント駆動設計とします。
+
+1. **待機中（消費電力ほぼゼロ）**:
+   * イヤフォンPTT待機を有効にしている間は `ForegroundService` を常駐させますが、画面消灯中は Supabase Realtime (WebSocket) や `PARTIAL_WAKE_LOCK` を保持し続けず、無音ノイズ再生も行いません（OSのDeepSleep / Dozeを妨げない）。
+2. **高優先度FCMによる起床と再生**:
+   * バックエンドの `send-push-notification` Edge Function から **`android: { priority: "high" }`** および `data.audioUrl`・`data.textContent`・`data.messageType` を含むデータメッセージを送信します。
+   * Android側の `FirebaseMessagingService.OnMessageReceived` がDeepSleepから起床し、再生完了までの間だけ一時的に `PARTIAL_WAKE_LOCK`（タイムアウト付き）を取得します。
+   * 再生キュー（`AudioPlaybackQueue`）に積み、以下を順次実行します：
+     * 前チャイム（`ptt-start.wav`）再生
+     * **音声メッセージ (`messageType == "audio"`)**: `audioUrl` をダウンロードし、ネイティブ `MediaPlayer`（または `AudioTrack`）で再生
+     * **テキストメッセージ (`messageType == "text"`)**: Android OSネイティブの **`Android.Speech.Tts.TextToSpeech`** を起動（ウォームアップ1秒程度を許容）し、`textContent` を音声合成で読み上げ
+     * 後チャイム（`ptt-start.wav`）再生
+   * キューが空になり次第 `WakeLock` を解放し、再びDeepSleepへ戻ります。
+   * ※音声が自動再生されても、アプリ画面を開いて該当ルームを表示するまでは `user_inboxes.is_read = false`（未読状態）を維持します（耳と目の分離 `DEC-010`）。
+
+### 8.4. イヤフォンPlay/Pauseボタンによるロック中PTT
+* ヘッダーの🎧トグルをONにすると、`ForegroundService` と紐づいた Androidネイティブ `MediaSession` を有効化します。
+* 画面消灯・ロック中であっても、Bluetoothイヤフォンや有線イヤフォンのPlay/Pause（`MEDIA_PLAY_PAUSE` / `HEADSETHOOK`）ボタン押下を捕捉します（600msデバウンス適用）。
+  * **1回目押下**: `PARTIAL_WAKE_LOCK` を一時取得し、上昇ビープ音（800Hz→1200Hz）を鳴らして録音開始（最大15秒）。
+  * **2回目押下（または15秒経過）**: 下降ビープ音（1200Hz→800Hz）を鳴らして録音を停止し、音声ファイル＋文字起こしテキストをSupabaseへ送信後、`WakeLock` を解放します。
+  * **送信先未選択時**: エラービープ音（400Hz×2回）を鳴らして通知します。
+
+### 8.5. 端末側での音声録音＋文字起こし両立（マイク競合回避）
+* Web版モバイルChromeでは録音と音声認識のマイク競合により同時実行ができませんでしたが、Androidネイティブ版では **`AudioRecord` による単一マイク録音（16kHz / 16bit / モノラル PCM）** を行います。
+* 取得したPCMストリームを以下の2系統へ同時に分岐します：
+  1. **送信用音声ファイル生成**: WAVファイル（`<sender_id>/<timestamp>.wav`、15秒で約480KB、Webブラウザ・Android双方で標準再生可能）として書き出し、Storageバケット `voice-messages` へアップロード。
+  2. **端末内音声認識 (`SpeechRecognizer`)**: Android 13 (API 33+) の `RecognizerIntent.ExtraAudioSource`（`ParcelFileDescriptor.CreatePipe()`）を用いて同一PCMストリームをOS標準の `SpeechRecognizer` に流し込み、**サーバーの月200回STT枠を消費せずに端末側で文字起こしテキストを取得**します。
+* 認識テキストが得られた場合は `needs_transcription = false` として送信し、API 33未満の端末や認識結果が空だった場合のみ `needs_transcription = true`（サーバー側事後STTへのフォールバック）として送信します。
+
+### 8.6. リポジトリ構成・ビルド・CI/CDパイプライン
+* **ディレクトリ分離**: Android向けソースコード一式はリポジトリ直下の `android/` フォルダに配置し、専用の `android/.gitignore` で `.NET / Android` 固有の生成物（`bin/`, `obj/`, `*.keystore`, `google-services.json` 等）をカスケード除外します。
+* **ビルドスクリプト**: `package.json` の既存 `npm run build`（Web版）とは別に、`npm run build:android` を定義します。
+* **GitHub Actions**: 既存のWebデプロイ用ワークフローには `paths-ignore: ['android/**']` を設定して干渉を防ぎ、Androidパッケージ（APK）作成用には独立したワークフロー（`.github/workflows/android-build.yml`、`workflow_dispatch` による手動起動対応）を用意します。
