@@ -40,8 +40,16 @@ public partial class SettingsModalPage : ContentPage
         MainActivity.Instance?.RequestIgnoreBatteryOptimizations();
     }
 
+    private void SetBusy(bool busy, string message = "処理中...")
+    {
+        SettingsBusyLabel.Text = message;
+        SettingsBusyIndicator.IsRunning = busy;
+        SettingsBusyOverlay.IsVisible = busy;
+    }
+
     private async void OnSaveClicked(object? sender, EventArgs e)
     {
+        SetBusy(true, "設定を保存中...");
         try
         {
             AppConfig.AutoPlayEnabled = AutoPlaySwitch.IsToggled;
@@ -84,6 +92,10 @@ public partial class SettingsModalPage : ContentPage
         {
             await DisplayAlert("保存エラー", ex.Message, "OK");
         }
+        finally
+        {
+            SetBusy(false);
+        }
     }
 
     private async void OnSignOutClicked(object? sender, EventArgs e)
@@ -95,10 +107,18 @@ public partial class SettingsModalPage : ContentPage
             "キャンセル");
         if (!confirm) return;
 
-        await Navigation.PopModalAsync();
-        if (_onSignOutRequested != null)
+        SetBusy(true, "ログアウト処理中...");
+        try
         {
-            await _onSignOutRequested();
+            if (_onSignOutRequested != null)
+            {
+                await _onSignOutRequested();
+            }
+            await Navigation.PopModalAsync();
+        }
+        finally
+        {
+            SetBusy(false);
         }
     }
 

@@ -18,9 +18,38 @@ public partial class MainPage : ContentPage
     private UnifiedListItem? _activeItem;
     private string? _activeRoomId;
     private RecordingResult? _stoppedRecordingResult;
+    private int _busyDepth;
 
     public ObservableCollection<UnifiedListItem> VisibleItems { get; } = new();
     public ObservableCollection<SupabaseMessage> RoomMessages { get; } = new();
+
+    private async Task RunWithBusyAsync(string message, Func<Task> action)
+    {
+        _busyDepth++;
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            BusyMessageLabel.Text = message;
+            BusyIndicator.IsRunning = true;
+            BusyOverlay.IsVisible = true;
+        });
+
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            _busyDepth = Math.Max(0, _busyDepth - 1);
+            if (_busyDepth == 0)
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    BusyIndicator.IsRunning = false;
+                    BusyOverlay.IsVisible = false;
+                });
+            }
+        }
+    }
 
     public MainPage()
     {
@@ -50,15 +79,18 @@ public partial class MainPage : ContentPage
     {
         UpdateHeaderIconStates();
 
-        var user = await SupabaseClientService.Instance.GetCurrentUserAsync();
-        if (user != null)
+        await RunWithBusyAsync("セッションを確認中...", async () =>
         {
-            await ApplyLoggedInUserAsync(user);
-        }
-        else
-        {
-            LoginOverlay.IsVisible = true;
-        }
+            var user = await SupabaseClientService.Instance.GetCurrentUserAsync();
+            if (user != null)
+            {
+                await ApplyLoggedInUserAsync(user);
+            }
+            else
+            {
+                LoginOverlay.IsVisible = true;
+            }
+        });
     }
 
     private void OnAuthStateChanged(SupabaseUser user)
@@ -108,7 +140,10 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            await SupabaseClientService.Instance.SignInWithGoogleAsync();
+            await RunWithBusyAsync("Googleログイン処理中...", async () =>
+            {
+                await SupabaseClientService.Instance.SignInWithGoogleAsync();
+            });
         }
         catch (Exception ex)
         {
@@ -127,7 +162,10 @@ public partial class MainPage : ContentPage
 
         try
         {
-            await SupabaseClientService.Instance.SignInWithMagicLinkAsync(email);
+            await RunWithBusyAsync("ログインリンクを送信中...", async () =>
+            {
+                await SupabaseClientService.Instance.SignInWithMagicLinkAsync(email);
+            });
             await DisplayAlert(
                 "送信完了",
                 $"ログイン用リンクを {email} 宛に送信しました。メール内のリンクをタップするとこのアプリに戻ってログインが完了します。",
@@ -175,17 +213,20 @@ public partial class MainPage : ContentPage
 
         try
         {
-            var community = await SupabaseClientService.Instance.ConnectCommunityAsync(_currentUser.Id, slugOrInviteUrl);
-            _currentCommunity = community;
-            CommunityPillButton.Text = $"🌐 {community.Name} ▾";
+            await RunWithBusyAsync("コミュニティに接続中...", async () =>
+            {
+                var community = await SupabaseClientService.Instance.ConnectCommunityAsync(_currentUser.Id, slugOrInviteUrl);
+                _currentCommunity = community;
+                CommunityPillButton.Text = $"🌐 {community.Name} ▾";
 
-            await ReloadCommunityDataAsync();
+                await ReloadCommunityDataAsync();
 
-            RealtimeService.Instance.StartForegroundSync(
-                _currentUser.Id,
-                community.Id,
-                _activeRoomId,
-                RoomMessages.Select(m => m.Id));
+                RealtimeService.Instance.StartForegroundSync(
+                    _currentUser.Id,
+                    community.Id,
+                    _activeRoomId,
+                    RoomMessages.Select(m => m.Id));
+            });
         }
         catch (Exception ex)
         {
@@ -303,11 +344,14 @@ public partial class MainPage : ContentPage
 
         try
         {
-            var slug = _currentCommunity.Slug;
-            await SupabaseClientService.Instance.LeaveCommunityAsync(_currentUser.Id, _currentCommunity.Id);
-            AppConfig.RemoveCommunityHistory(slug);
-            DisconnectCommunityNonDestructive();
-            CommunityMenuOverlay.IsVisible = false;
+            await RunWithBusyAsync("コミュニティ退会処理中...", async () =>
+            {
+                var slug = _currentCommunity.Slug;
+                await SupabaseClientService.Instance.LeaveCommunityAsync(_currentUser.Id, _currentCommunity.Id);
+                AppConfig.RemoveCommunityHistory(slug);
+                DisconnectCommunityNonDestructive();
+                CommunityMenuOverlay.IsVisible = false;
+            });
         }
         catch (Exception ex)
         {
@@ -361,17 +405,20 @@ public partial class MainPage : ContentPage
 
         try
         {
-            var roomId = await SupabaseClientService.Instance.CreateGroupRoomAsync(_currentCommunity.Id, _currentUser.Id, selectedIds);
-            _isGroupSelectMode = false;
-            GroupCreateConfirmBar.IsVisible = false;
-            SetFilter("all");
-            await ReloadCommunityDataAsync();
-
-            var createdGroup = VisibleItems.FirstOrDefault(i => i.IsGroup && i.Id == roomId);
-            if (createdGroup != null)
+            await RunWithBusyAsync("グループを作成中...", async () =>
             {
-                await OpenUnifiedItemChatAsync(createdGroup);
-            }
+                var roomId = await SupabaseClientService.Instance.CreateGroupRoomAsync(_currentCommunity.Id, _currentUser.Id, selectedIds);
+                _isGroupSelectMode = false;
+                GroupCreateConfirmBar.IsVisible = false;
+                SetFilter("all");
+                await ReloadCommunityDataAsync();
+
+                var createdGroup = VisibleItems.FirstOrDefault(i => i.IsGroup && i.Id == roomId);
+                if (createdGroup != null)
+                {
+                    await OpenUnifiedItemChatAsync(createdGroup);
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -398,41 +445,44 @@ public partial class MainPage : ContentPage
 
         try
         {
-            _activeItem = item;
-            string roomId;
-            if (item.IsGroup)
+            await RunWithBusyAsync("チャット履歴を読み込み中...", async () =>
             {
-                roomId = item.Id;
-            }
-            else
-            {
-                roomId = await SupabaseClientService.Instance.GetOrCreateIndividualRoomAsync(
-                    _currentCommunity.Id,
-                    _currentUser.Id,
-                    item.Id);
-            }
+                _activeItem = item;
+                string roomId;
+                if (item.IsGroup)
+                {
+                    roomId = item.Id;
+                }
+                else
+                {
+                    roomId = await SupabaseClientService.Instance.GetOrCreateIndividualRoomAsync(
+                        _currentCommunity.Id,
+                        _currentUser.Id,
+                        item.Id);
+                }
 
-            _activeRoomId = roomId;
-            AppConfig.ActiveRoomId = roomId;
-            AppConfig.ActiveRoomTitle = item.DisplayTitle;
+                _activeRoomId = roomId;
+                AppConfig.ActiveRoomId = roomId;
+                AppConfig.ActiveRoomTitle = item.DisplayTitle;
 
-            ChatHeaderTitleLabel.Text = item.DisplayTitle;
-            ChatHeaderSubtitleLabel.Text = item.Subtitle;
-            EditGroupNameButton.IsVisible = item.IsGroup;
-            ClearRoomButton.IsVisible = true;
+                ChatHeaderTitleLabel.Text = item.DisplayTitle;
+                ChatHeaderSubtitleLabel.Text = item.Subtitle;
+                EditGroupNameButton.IsVisible = item.IsGroup;
+                ClearRoomButton.IsVisible = true;
 
-            // チャットを開いた時点で既読化 (DEC-010)
-            await SupabaseClientService.Instance.MarkAsReadAsync(roomId, _currentUser.Id);
-            item.UnreadCount = 0;
+                // チャットを開いた時点で既読化 (DEC-010)
+                await SupabaseClientService.Instance.MarkAsReadAsync(roomId, _currentUser.Id);
+                item.UnreadCount = 0;
 
-            var msgs = await SupabaseClientService.Instance.GetRoomMessagesAsync(roomId, _currentUser.Id);
-            RoomMessages.Clear();
-            foreach (var m in msgs) RoomMessages.Add(m);
+                var msgs = await SupabaseClientService.Instance.GetRoomMessagesAsync(roomId, _currentUser.Id);
+                RoomMessages.Clear();
+                foreach (var m in msgs) RoomMessages.Add(m);
 
-            RealtimeService.Instance.UpdateActiveRoom(roomId, msgs.Select(m => m.Id));
-            await ReloadCommunityDataAsync();
+                RealtimeService.Instance.UpdateActiveRoom(roomId, msgs.Select(m => m.Id));
+                await ReloadCommunityDataAsync();
 
-            ShowPane(showChat: true);
+                ShowPane(showChat: true);
+            });
         }
         catch (Exception ex)
         {
@@ -488,14 +538,17 @@ public partial class MainPage : ContentPage
 
         try
         {
-            await SupabaseClientService.Instance.UpdateRoomNameAsync(_activeRoomId, result);
-            await ReloadCommunityDataAsync();
-            var updated = _groups.FirstOrDefault(g => g.Id == _activeRoomId);
-            if (updated != null)
+            await RunWithBusyAsync("グループ名を更新中...", async () =>
             {
-                ChatHeaderTitleLabel.Text = $"👥 {updated.Name}";
-                AppConfig.ActiveRoomTitle = ChatHeaderTitleLabel.Text;
-            }
+                await SupabaseClientService.Instance.UpdateRoomNameAsync(_activeRoomId, result);
+                await ReloadCommunityDataAsync();
+                var updated = _groups.FirstOrDefault(g => g.Id == _activeRoomId);
+                if (updated != null)
+                {
+                    ChatHeaderTitleLabel.Text = $"👥 {updated.Name}";
+                    AppConfig.ActiveRoomTitle = ChatHeaderTitleLabel.Text;
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -518,20 +571,23 @@ public partial class MainPage : ContentPage
 
         try
         {
-            if (_activeItem.IsGroup)
+            await RunWithBusyAsync("履歴を削除中...", async () =>
             {
-                await SupabaseClientService.Instance.DeleteGroupAsync(_activeRoomId);
-                _activeRoomId = null;
-                _activeItem = null;
-                RoomMessages.Clear();
-                await ReloadCommunityDataAsync();
-                ShowPane(showChat: false);
-            }
-            else
-            {
-                await SupabaseClientService.Instance.DeleteMessagesAsync(_activeRoomId);
-                RoomMessages.Clear();
-            }
+                if (_activeItem.IsGroup)
+                {
+                    await SupabaseClientService.Instance.DeleteGroupAsync(_activeRoomId);
+                    _activeRoomId = null;
+                    _activeItem = null;
+                    RoomMessages.Clear();
+                    await ReloadCommunityDataAsync();
+                    ShowPane(showChat: false);
+                }
+                else
+                {
+                    await SupabaseClientService.Instance.DeleteMessagesAsync(_activeRoomId);
+                    RoomMessages.Clear();
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -635,14 +691,17 @@ public partial class MainPage : ContentPage
 
             if (result.WavBytes != null || !string.IsNullOrWhiteSpace(result.Transcript))
             {
-                var sent = await SupabaseClientService.Instance.SendMessageAsync(
-                    _activeRoomId,
-                    _currentUser.Id,
-                    result.Transcript,
-                    result.WavBytes,
-                    result.NeedsTranscription);
-                RoomMessages.Add(sent);
-                ScrollMessagesToBottom(animate: true);
+                await RunWithBusyAsync("音声メッセージを送信中...", async () =>
+                {
+                    var sent = await SupabaseClientService.Instance.SendMessageAsync(
+                        _activeRoomId,
+                        _currentUser.Id,
+                        result.Transcript,
+                        result.WavBytes,
+                        result.NeedsTranscription);
+                    RoomMessages.Add(sent);
+                    ScrollMessagesToBottom(animate: true);
+                });
             }
         }
         catch (Exception ex)
@@ -704,9 +763,12 @@ public partial class MainPage : ContentPage
         try
         {
             TextMessageEntry.Text = string.Empty;
-            var sent = await SupabaseClientService.Instance.SendMessageAsync(_activeRoomId, _currentUser.Id, text);
-            RoomMessages.Add(sent);
-            ScrollMessagesToBottom(animate: true);
+            await RunWithBusyAsync("メッセージを送信中...", async () =>
+            {
+                var sent = await SupabaseClientService.Instance.SendMessageAsync(_activeRoomId, _currentUser.Id, text);
+                RoomMessages.Add(sent);
+                ScrollMessagesToBottom(animate: true);
+            });
         }
         catch (Exception ex)
         {
@@ -719,6 +781,10 @@ public partial class MainPage : ContentPage
     private async void OnPlayMessageBubbleClicked(object? sender, EventArgs e)
     {
         if (sender is not Button btn || btn.CommandParameter is not SupabaseMessage msg) return;
+
+        var originalText = btn.Text;
+        btn.IsEnabled = false;
+        btn.Text = "⏳ 再生中...";
 
         try
         {
@@ -759,6 +825,11 @@ public partial class MainPage : ContentPage
         {
             await DisplayAlert("再生エラー", ex.Message, "OK");
         }
+        finally
+        {
+            btn.Text = originalText;
+            btn.IsEnabled = true;
+        }
     }
 
     private async void OnRevokeMessageClicked(object? sender, EventArgs e)
@@ -771,11 +842,14 @@ public partial class MainPage : ContentPage
 
         try
         {
-            await SupabaseClientService.Instance.RevokeMessageAsync(msg.Id, _currentUser.Id);
-            msg.IsRevoked = true;
-            msg.AudioUrl = null;
-            msg.TextContent = string.Empty;
-            msg.NotifyChanged();
+            await RunWithBusyAsync("発言を取り消し中...", async () =>
+            {
+                await SupabaseClientService.Instance.RevokeMessageAsync(msg.Id, _currentUser.Id);
+                msg.IsRevoked = true;
+                msg.AudioUrl = null;
+                msg.TextContent = string.Empty;
+                msg.NotifyChanged();
+            });
         }
         catch (Exception ex)
         {
@@ -794,31 +868,49 @@ public partial class MainPage : ContentPage
             bool confirm = await DisplayAlert("プッシュ通知の解除", "この端末でのプッシュ通知をOFFにしますか？", "OFFにする", "キャンセル");
             if (!confirm) return;
 
-            await SupabaseClientService.Instance.UnregisterFcmTokenAsync();
-            UpdateHeaderIconStates();
+            await RunWithBusyAsync("プッシュ通知を解除中...", async () =>
+            {
+                await SupabaseClientService.Instance.UnregisterFcmTokenAsync();
+                UpdateHeaderIconStates();
+            });
         }
         else
         {
-            var token = AppConfig.PendingFcmToken;
-            if (string.IsNullOrEmpty(token))
+            bool ok = false;
+            bool missingToken = false;
+
+            await RunWithBusyAsync("プッシュ通知を登録中...", async () =>
             {
-                try
+                var token = AppConfig.PendingFcmToken;
+                if (string.IsNullOrEmpty(token))
                 {
-                    var task = Firebase.Messaging.FirebaseMessaging.Instance.GetToken();
-                    await System.Threading.Tasks.Task.Delay(600);
-                    if (task.IsSuccessful && task.Result != null)
+                    try
                     {
-                        token = task.Result.ToString();
-                        AppConfig.PendingFcmToken = token;
+                        var task = Firebase.Messaging.FirebaseMessaging.Instance.GetToken();
+                        await System.Threading.Tasks.Task.Delay(600);
+                        if (task.IsSuccessful && task.Result != null)
+                        {
+                            token = task.Result.ToString();
+                            AppConfig.PendingFcmToken = token;
+                        }
+                    }
+                    catch
+                    {
+                        // google-services.json 未設定環境等
                     }
                 }
-                catch
-                {
-                    // google-services.json 未設定環境等
-                }
-            }
 
-            if (string.IsNullOrEmpty(token))
+                if (string.IsNullOrEmpty(token))
+                {
+                    missingToken = true;
+                    return;
+                }
+
+                ok = await SupabaseClientService.Instance.RegisterFcmTokenAsync(token);
+                UpdateHeaderIconStates();
+            });
+
+            if (missingToken)
             {
                 await DisplayAlert(
                     "FCMトークン未取得",
@@ -827,8 +919,6 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            bool ok = await SupabaseClientService.Instance.RegisterFcmTokenAsync(token);
-            UpdateHeaderIconStates();
             if (ok)
             {
                 await DisplayAlert("通知ON", "プッシュ通知および画面ロック中の着信自動再生を有効にしました。", "OK");

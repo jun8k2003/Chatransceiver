@@ -168,5 +168,35 @@
                 CornerRadius="10"
                 Margin="0,10,0,0"
                 Clicked="OnSaveClicked" />
+
+        <!-- 設定保存・ログアウト 通信中ローディングオーバーレイ -->
+        <Grid x:Name="SettingsBusyOverlay"
+              Grid.RowSpan="2"
+              IsVisible="False"
+              BackgroundColor="#77000000"
+              InputTransparent="False">
+            <Border VerticalOptions="Center"
+                    HorizontalOptions="Center"
+                    Padding="24,18"
+                    Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                    StrokeThickness="1"
+                    StrokeShape="RoundRectangle 14"
+                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}">
+                <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
+                    <ActivityIndicator x:Name="SettingsBusyIndicator"
+                                       IsRunning="False"
+                                       WidthRequest="40"
+                                       HeightRequest="40"
+                                       HorizontalOptions="Center"
+                                       Color="{StaticResource PrimaryBlue}" />
+                    <Label x:Name="SettingsBusyLabel"
+                           Text="保存中..."
+                           FontSize="13"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center"
+                           TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
     </Grid>
 </ContentPage>
