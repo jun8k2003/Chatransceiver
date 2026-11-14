@@ -797,38 +797,12 @@ public partial class MainPage : ContentPage
 
         try
         {
-            if (AppConfig.CallSignEnabled)
-            {
-                try
-                {
-                    await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"CallSign before error: {ex.Message}");
-                }
-            }
-
-            if (msg.HasAudio && !string.IsNullOrEmpty(msg.AudioUrl))
-            {
-                await NativeAudioService.Instance.PlayRemoteAudioAsync(msg.AudioUrl);
-            }
-            else if (!string.IsNullOrEmpty(msg.TextContent))
-            {
-                await NativeAudioService.Instance.SpeakTextAsync(msg.TextContent);
-            }
-
-            if (AppConfig.CallSignEnabled)
-            {
-                try
-                {
-                    await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"CallSign after error: {ex.Message}");
-                }
-            }
+            var isAudio = msg.HasAudio && !string.IsNullOrEmpty(msg.AudioUrl);
+            var content = isAudio ? msg.AudioUrl! : msg.TextContent;
+            await NativeAudioService.Instance.PlayMessageAsync(
+                isAudio: isAudio,
+                content: content,
+                callSignEnabled: AppConfig.CallSignEnabled);
         }
         catch (Exception ex)
         {

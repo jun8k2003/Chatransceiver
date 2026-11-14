@@ -78,7 +78,7 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
     public async Task PlayCallSignAssetAsync(float volume = 0.3f)
     {
         var context = global::Android.App.Application.Context;
-        var cacheFile = Path.Combine(context.CacheDir!.AbsolutePath, "ptt_start_cached.wav");
+        var cacheFile = Path.Combine(context.CacheDir!.AbsolutePath, "ptt_start_v2.wav");
         if (!File.Exists(cacheFile))
         {
             await using var stream = await FileSystem.OpenAppPackageFileAsync("ptt_start.wav");
@@ -89,9 +89,9 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
     }
 
     /// <summary>
-    /// Supabase Storage 上の音声ファイルをキャッシュへDLしてから確実に再生する
+    /// リモート音声ファイルをダウンロードしてローカル一時ファイルパスを返す
     /// </summary>
-    public async Task PlayRemoteAudioAsync(string audioUrl, float volume = 1.0f)
+    public async Task<string> DownloadRemoteAudioToTempAsync(string audioUrl)
     {
         var context = global::Android.App.Application.Context;
         var ext = audioUrl.Contains(".wav", StringComparison.OrdinalIgnoreCase) ? ".wav" : ".webm";
@@ -100,16 +100,114 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
         {
             var bytes = await _http.GetByteArrayAsync(audioUrl);
             await File.WriteAllBytesAsync(tempFile, bytes);
+            return tempFile;
+        }
+        catch
+        {
+            DeleteTempFileQuietly(tempFile);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Supabase Storage 上の音声ファイルをキャッシュへDLしてから確実に再生する
+    /// </summary>
+    public async Task PlayRemoteAudioAsync(string audioUrl, float volume = 1.0f)
+    {
+        var tempFile = await DownloadRemoteAudioToTempAsync(audioUrl);
+        try
+        {
             await PlayLocalFileAsync(tempFile, volume);
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempFile)) File.Delete(tempFile);
-            }
-            catch { }
+            DeleteTempFileQuietly(tempFile);
         }
+    }
+
+    /// <summary>
+    /// コールサイン音とメッセージ本体（音声またはTTS）を最小遅延で連続再生する。
+    /// 音声のダウンロードやTTS初期化を再生前コールサインと並列で開始し、間の無音ギャップを短縮する。
+    /// </summary>
+    public async Task PlayMessageAsync(
+        bool isAudio,
+        string content,
+        bool callSignEnabled,
+        Func<bool>? isCancelled = null)
+    {
+        if (string.IsNullOrEmpty(content)) return;
+
+        Task<string>? downloadTask = isAudio ? DownloadRemoteAudioToTempAsync(content) : null;
+        if (!isAudio)
+        {
+            _ = EnsureTtsInitializedAsync();
+        }
+
+        string? tempFile = null;
+        try
+        {
+            if (callSignEnabled && !(isCancelled?.Invoke() ?? false))
+            {
+                try
+                {
+                    await PlayCallSignAssetAsync(0.3f);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"CallSign before error: {ex.Message}");
+                }
+            }
+
+            if (!(isCancelled?.Invoke() ?? false))
+            {
+                if (downloadTask != null)
+                {
+                    tempFile = await downloadTask;
+                    if (!(isCancelled?.Invoke() ?? false))
+                    {
+                        await PlayLocalFileAsync(tempFile, 1.0f);
+                    }
+                }
+                else
+                {
+                    await SpeakTextAsync(content);
+                }
+            }
+
+            if (callSignEnabled && !(isCancelled?.Invoke() ?? false))
+            {
+                try
+                {
+                    await PlayCallSignAssetAsync(0.3f);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"CallSign after error: {ex.Message}");
+                }
+            }
+        }
+        finally
+        {
+            if (tempFile == null && downloadTask != null)
+            {
+                _ = downloadTask.ContinueWith(t =>
+                {
+                    if (t.IsCompletedSuccessfully) DeleteTempFileQuietly(t.Result);
+                    else if (t.IsFaulted) _ = t.Exception;
+                }, TaskScheduler.Default);
+            }
+            DeleteTempFileQuietly(tempFile);
+        }
+    }
+
+    private static void DeleteTempFileQuietly(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch { }
     }
 
     private Task PlayLocalFileAsync(string filePath, float volume)

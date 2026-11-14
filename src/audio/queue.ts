@@ -1,5 +1,4 @@
 import { AudioManager } from './manager';
-import pttStartUrl from '../assets/ptt-start.wav';
 
 export interface QueueItem {
   id: string;              // メッセージのユニークID
@@ -72,35 +71,12 @@ export class AudioPlaybackQueue {
         currentItem.onPlayStart();
       }
 
-      // 再生前チャイム (停止要求中はスキップ)
-      if (this.callSignEnabled && !this.stopRequested) {
-        try {
-          await this.audioManager.playAudio(pttStartUrl, 0.3);
-        } catch (error) {
-          console.warn('Failed to play ptt-start before:', error);
-        }
-      }
-
-      // データのタイプに応じて再生処理を分岐 (DEC-018)。
-      // 各 await 後に stopRequested を再チェックし、停止要求があれば本体・後続を鳴らさない (DEC-032)
-      if (!this.stopRequested) {
-        if (currentItem.type === 'audio') {
-          // 音声ファイル再生
-          await this.audioManager.playAudio(currentItem.content);
-        } else {
-          // テキスト音声合成 (TTS) 再生
-          await this.audioManager.speakText(currentItem.content);
-        }
-      }
-
-      // 再生後チャイム (停止要求中は鳴らさない)
-      if (this.callSignEnabled && !this.stopRequested) {
-        try {
-          await this.audioManager.playAudio(pttStartUrl, 0.3);
-        } catch (error) {
-          console.warn('Failed to play ptt-start after:', error);
-        }
-      }
+      await this.audioManager.playMessage({
+        type: currentItem.type,
+        content: currentItem.content,
+        callSignEnabled: this.callSignEnabled,
+        isCancelled: () => this.stopRequested
+      });
     } catch (error) {
       console.error('AudioPlaybackQueue playback error:', error);
     } finally {

@@ -115,44 +115,11 @@ public class AudioPlaybackQueue
                 currentItem.OnPlayStart?.Invoke();
                 PlaybackStarted?.Invoke(currentItem);
 
-                // 1. 再生前チャイム (疑似コールサイン音)
-                if (AppConfig.CallSignEnabled && !_stopRequested)
-                {
-                    try
-                    {
-                        await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"CallSign before error: {ex.Message}");
-                    }
-                }
-
-                // 2. メッセージ本体 (音声ファイル または ネイティブTTS)
-                if (!_stopRequested)
-                {
-                    if (currentItem.Type == "audio" && !string.IsNullOrEmpty(currentItem.Content))
-                    {
-                        await NativeAudioService.Instance.PlayRemoteAudioAsync(currentItem.Content);
-                    }
-                    else if (!string.IsNullOrEmpty(currentItem.Content))
-                    {
-                        await NativeAudioService.Instance.SpeakTextAsync(currentItem.Content);
-                    }
-                }
-
-                // 3. 再生後チャイム
-                if (AppConfig.CallSignEnabled && !_stopRequested)
-                {
-                    try
-                    {
-                        await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"CallSign after error: {ex.Message}");
-                    }
-                }
+                await NativeAudioService.Instance.PlayMessageAsync(
+                    isAudio: currentItem.Type == "audio",
+                    content: currentItem.Content,
+                    callSignEnabled: AppConfig.CallSignEnabled,
+                    isCancelled: () => _stopRequested);
             }
             catch (Exception ex)
             {

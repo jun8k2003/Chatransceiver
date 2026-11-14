@@ -9,7 +9,6 @@ import { AppBadgeService } from './services/appbadge';
 import { WakeLockService } from './services/wakelock';
 import { MediaButtonPttService } from './services/mediabutton';
 import { saveBackgroundImage, loadBackgroundImage, deleteBackgroundImage } from './utils/db';
-import pttStartUrl from './assets/ptt-start.wav';
 
 /**
  * App (src/app.ts)
@@ -1406,27 +1405,11 @@ export class App {
     if (!msg) return;
 
     try {
-      if (this.state.callSignEnabled) {
-        try {
-          await this.audioManager.playAudio(pttStartUrl, 0.3);
-        } catch (error) {
-          console.warn('Failed to play ptt-start before:', error);
-        }
-      }
-
-      if (msg.audioUrl) {
-        await this.audioManager.playAudio(msg.audioUrl);
-      } else {
-        await this.audioManager.speakText(msg.textContent);
-      }
-
-      if (this.state.callSignEnabled) {
-        try {
-          await this.audioManager.playAudio(pttStartUrl, 0.3);
-        } catch (error) {
-          console.warn('Failed to play ptt-start after:', error);
-        }
-      }
+      await this.audioManager.playMessage({
+        type: msg.audioUrl ? 'audio' : 'text',
+        content: msg.audioUrl || msg.textContent,
+        callSignEnabled: this.state.callSignEnabled
+      });
     } catch (e) {
       console.error(e);
     }

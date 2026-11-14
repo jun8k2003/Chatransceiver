@@ -1,3 +1,5 @@
+import pttStartUrl from '../assets/ptt-start.wav';
+
 /**
  * AudioManager (src/audio/manager.ts)
  * 録音、音量メーター解析、音声再生、音声認識(SpeechRecognition)、音声合成(SpeechSynthesis)の
@@ -184,16 +186,32 @@ export class AudioManager {
   }
 
   /**
+   * 音声URLの事前読み込みを開始する（コールサイン再生と並列でバッファリングするため）
+   */
+  preloadAudio(url: string): HTMLAudioElement {
+    const audio = new Audio(url);
+    audio.preload = 'auto';
+    audio.load();
+    return audio;
+  }
+
+  /**
    * 音声ファイルの再生
    * @param url 音声ファイルのURL (ローカルの Blob URL またはクラウドの Storage URL)
    * @param volume 音量 (0.0 ~ 1.0, デフォルトは 1.0)
    */
   playAudio(url: string, volume: number = 1.0): Promise<void> {
+    return this.playAudioElement(new Audio(url), volume);
+  }
+
+  /**
+   * 準備済み（または新規作成）HTMLAudioElement を再生する
+   */
+  playAudioElement(audio: HTMLAudioElement, volume: number = 1.0): Promise<void> {
     return new Promise((resolve, reject) => {
       // 既存の再生があれば停止
       this.stopAllPlayback();
 
-      const audio = new Audio(url);
       audio.volume = volume;
       this.activeAudioElement = audio;
       this.activeAudioResolve = resolve;
@@ -218,6 +236,52 @@ export class AudioManager {
         reject(err);
       });
     });
+  }
+
+  /**
+   * コールサイン音とメッセージ本体（音声またはTTS）を最小遅延で連続再生する。
+   * 音声の場合は再生前コールサインと同時にプリロードを開始し、間の無音ギャップを短縮する。
+   */
+  async playMessage(options: {
+    type: 'audio' | 'text';
+    content: string;
+    callSignEnabled: boolean;
+    isCancelled?: () => boolean;
+  }): Promise<void> {
+    const { type, content, callSignEnabled, isCancelled } = options;
+    const preloadedAudio = type === 'audio' && content ? this.preloadAudio(content) : null;
+    let bodyStarted = false;
+
+    try {
+      if (callSignEnabled && !isCancelled?.()) {
+        try {
+          await this.playAudio(pttStartUrl, 0.3);
+        } catch (error) {
+          console.warn('Failed to play ptt-start before:', error);
+        }
+      }
+
+      if (!isCancelled?.()) {
+        if (preloadedAudio) {
+          bodyStarted = true;
+          await this.playAudioElement(preloadedAudio);
+        } else {
+          await this.speakText(content);
+        }
+      }
+
+      if (callSignEnabled && !isCancelled?.()) {
+        try {
+          await this.playAudio(pttStartUrl, 0.3);
+        } catch (error) {
+          console.warn('Failed to play ptt-start after:', error);
+        }
+      }
+    } finally {
+      if (preloadedAudio && !bodyStarted) {
+        preloadedAudio.src = '';
+      }
+    }
   }
 
   /**
