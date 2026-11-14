@@ -144,3 +144,8 @@ public class RecordingResult
     public string Transcript { get; set; } = string.Empty;
     public bool NeedsTranscription { get; set; }
 }
+
+public sealed record AudioDeviceOption(string Key, string DisplayName)
+{
+    public override string ToString() => DisplayName;
+}

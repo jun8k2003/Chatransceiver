@@ -1,5 +1,8 @@
 using Chatransceiver.Maui.Models;
 using Chatransceiver.Maui.Services;
+#if ANDROID
+using Chatransceiver.Maui.Platforms.Android.Services;
+#endif
 
 namespace Chatransceiver.Maui.Views;
 
@@ -35,6 +38,74 @@ public partial class SettingsModalPage : ContentPage
             "text_only" => 2,
             _ => 0
         };
+
+        LoadAudioDevicePickers();
+    }
+
+    private void LoadAudioDevicePickers(string? overrideOutputKey = null, string? overrideOutputLabel = null, string? overrideInputKey = null, string? overrideInputLabel = null)
+    {
+        var savedOutKey = overrideOutputKey ?? AppConfig.PreferredAudioOutputKey;
+        var savedOutLabel = overrideOutputLabel ?? AppConfig.PreferredAudioOutputLabel;
+        var savedInKey = overrideInputKey ?? AppConfig.PreferredAudioInputKey;
+        var savedInLabel = overrideInputLabel ?? AppConfig.PreferredAudioInputLabel;
+
+#if ANDROID
+        var outputOptions = AudioDeviceService.GetOutputDeviceOptions();
+        var inputOptions = AudioDeviceService.GetInputDeviceOptions();
+#else
+        var outputOptions = new List<AudioDeviceOption> { new(string.Empty, "システム規定に従う") };
+        var inputOptions = new List<AudioDeviceOption> { new(string.Empty, "システム規定に従う") };
+#endif
+
+        PopulateDevicePicker(OutputDevicePicker, outputOptions, savedOutKey, savedOutLabel);
+        PopulateDevicePicker(InputDevicePicker, inputOptions, savedInKey, savedInLabel);
+    }
+
+    private static void PopulateDevicePicker(Picker picker, List<AudioDeviceOption> options, string savedKey, string savedLabel)
+    {
+        int selectedIndex = 0;
+        if (!string.IsNullOrEmpty(savedKey))
+        {
+            int idx = options.FindIndex(o => o.Key == savedKey);
+            if (idx >= 0)
+            {
+                selectedIndex = idx;
+            }
+            else
+            {
+                var label = string.IsNullOrWhiteSpace(savedLabel) ? savedKey : savedLabel;
+                const string suffix = " (未接続・規定で代用)";
+                if (!label.EndsWith(suffix, StringComparison.Ordinal))
+                {
+                    label += suffix;
+                }
+                options.Insert(1, new AudioDeviceOption(savedKey, label));
+                selectedIndex = 1;
+            }
+        }
+
+        picker.ItemsSource = options;
+        picker.SelectedIndex = selectedIndex;
+    }
+
+    private void OnRefreshAudioDevicesClicked(object? sender, EventArgs e)
+    {
+        var currentOut = OutputDevicePicker.SelectedItem as AudioDeviceOption;
+        var currentIn = InputDevicePicker.SelectedItem as AudioDeviceOption;
+        LoadAudioDevicePickers(
+            overrideOutputKey: currentOut?.Key,
+            overrideOutputLabel: StripDisconnectedSuffix(currentOut?.DisplayName),
+            overrideInputKey: currentIn?.Key,
+            overrideInputLabel: StripDisconnectedSuffix(currentIn?.DisplayName));
+    }
+
+    private static string? StripDisconnectedSuffix(string? label)
+    {
+        if (string.IsNullOrEmpty(label)) return label;
+        const string suffix = " (未接続・規定で代用)";
+        return label.EndsWith(suffix, StringComparison.Ordinal)
+            ? label[..^suffix.Length]
+            : label;
     }
 
     private void OnBatteryOptimizationClicked(object? sender, EventArgs e)
@@ -74,6 +145,17 @@ public partial class SettingsModalPage : ContentPage
                 2 => "text_only",
                 _ => "both"
             };
+
+            if (OutputDevicePicker.SelectedItem is AudioDeviceOption selectedOut)
+            {
+                AppConfig.PreferredAudioOutputKey = selectedOut.Key;
+                AppConfig.PreferredAudioOutputLabel = StripDisconnectedSuffix(selectedOut.DisplayName) ?? "システム規定に従う";
+            }
+            if (InputDevicePicker.SelectedItem is AudioDeviceOption selectedIn)
+            {
+                AppConfig.PreferredAudioInputKey = selectedIn.Key;
+                AppConfig.PreferredAudioInputLabel = StripDisconnectedSuffix(selectedIn.DisplayName) ?? "システム規定に従う";
+            }
 
             if (!string.IsNullOrWhiteSpace(SupabaseUrlEntry.Text))
             {

@@ -39,6 +39,50 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <!-- スピーカー・マイク切り替え設定 -->
+                <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
+                        BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
+                        StrokeShape="RoundRectangle 16"
+                        Padding="14">
+                    <VerticalStackLayout Spacing="12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Text="🎧 スピーカー・マイク切り替え"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center"
+                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                            <Button Grid.Column="1"
+                                    Text="🔄 再読込"
+                                    FontSize="12"
+                                    HeightRequest="30"
+                                    MinimumWidthRequest="0"
+                                    MinimumHeightRequest="0"
+                                    Padding="10,0"
+                                    CornerRadius="10"
+                                    BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
+                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
+                                    Clicked="OnRefreshAudioDevicesClicked" />
+                        </Grid>
+
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="スピーカー (音声出力)"
+                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                            <Picker x:Name="OutputDevicePicker"
+                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Spacing="4">
+                            <Label Text="マイク (音声入力)"
+                                   TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                            <Picker x:Name="InputDevicePicker"
+                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                        </VerticalStackLayout>
+
+                        <Label Text="初期値は「システム規定に従う」です。接続中の Bluetooth / 有線 / 本体の各デバイスに任意で切り替えられます。"
+                               FontSize="11"
+                               TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                    </VerticalStackLayout>
+                </Border>
+
                 <!-- 音声・トランシーバー設定 -->
                 <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"

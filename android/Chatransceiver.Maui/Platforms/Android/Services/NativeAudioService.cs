@@ -219,11 +219,18 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
         {
             StopActiveMediaPlayer();
 
+            var preferredOut = AudioDeviceService.FindPreferredOutputDevice();
+            bool useCommRoute = AudioDeviceService.RequiresCommunicationUsage(preferredOut);
+            if (useCommRoute)
+            {
+                AudioDeviceService.BeginOutputCommunicationRoute(preferredOut);
+            }
+
             var player = new MediaPlayer();
             _activePlayer = player;
 
             var attrs = new AudioAttributes.Builder()
-                ?.SetUsage(AudioUsageKind.Media)
+                ?.SetUsage(useCommRoute ? AudioUsageKind.VoiceCommunication : AudioUsageKind.Media)
                 ?.SetContentType(AudioContentType.Speech)
                 ?.Build();
             if (attrs != null)
@@ -232,6 +239,10 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
             }
 
             player.SetDataSource(filePath);
+            if (preferredOut != null && OperatingSystem.IsAndroidVersionAtLeast(28))
+            {
+                player.SetPreferredDevice(preferredOut);
+            }
             player.SetVolume(volume, volume);
             player.Completion += (_, _) =>
             {
@@ -274,6 +285,7 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
             }
             catch { }
         }
+        AudioDeviceService.EndOutputCommunicationRoute();
     }
 
     /// <summary>
@@ -285,6 +297,24 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
 
         await EnsureTtsInitializedAsync();
         if (!_ttsReady || _tts == null) return;
+
+        var preferredOut = AudioDeviceService.FindPreferredOutputDevice();
+        if (preferredOut != null)
+        {
+            var synthesizedPath = await SynthesizeTtsToTempWavAsync(text);
+            if (!string.IsNullOrEmpty(synthesizedPath))
+            {
+                try
+                {
+                    await PlayLocalFileAsync(synthesizedPath, 1.0f);
+                }
+                finally
+                {
+                    DeleteTempFileQuietly(synthesizedPath);
+                }
+                return;
+            }
+        }
 
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _activeSpeechTcs = tcs;
@@ -303,6 +333,53 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         await using var reg = cts.Token.Register(() => tcs.TrySetResult(false));
         await tcs.Task;
+    }
+
+    private async Task<string?> SynthesizeTtsToTempWavAsync(string text)
+    {
+        if (_tts == null) return null;
+
+        var context = global::Android.App.Application.Context;
+        var tempFile = Path.Combine(context.CacheDir!.AbsolutePath, $"tts_{Guid.NewGuid():N}.wav");
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _activeSpeechTcs = tcs;
+        var utteranceId = Guid.NewGuid().ToString("N");
+
+        _tts.SetOnUtteranceProgressListener(new TtsUtteranceListener(utteranceId, () =>
+        {
+            tcs.TrySetResult(true);
+        }));
+
+        try
+        {
+            var result = _tts.SynthesizeToFile(
+                new Java.Lang.String(text),
+                new Bundle(),
+                new Java.IO.File(tempFile),
+                utteranceId);
+
+            if (result != OperationResult.Success)
+            {
+                DeleteTempFileQuietly(tempFile);
+                return null;
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await using var reg = cts.Token.Register(() => tcs.TrySetResult(false));
+            bool ok = await tcs.Task;
+
+            if (ok && File.Exists(tempFile) && new FileInfo(tempFile).Length > 44)
+            {
+                return tempFile;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"SynthesizeTtsToTempWavAsync error: {ex.Message}");
+        }
+
+        DeleteTempFileQuietly(tempFile);
+        return null;
     }
 
     private Task<bool> EnsureTtsInitializedAsync()
@@ -418,8 +495,11 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
                     offset += count;
                 }
 
+                var preferredOut = AudioDeviceService.FindPreferredOutputDevice();
+                bool useCommRoute = AudioDeviceService.RequiresCommunicationUsage(preferredOut);
+
                 var attrs = new AudioAttributes.Builder()
-                    ?.SetUsage(AudioUsageKind.Media)
+                    ?.SetUsage(useCommRoute ? AudioUsageKind.VoiceCommunication : AudioUsageKind.Media)
                     ?.SetContentType(AudioContentType.Sonification)
                     ?.Build();
                 var format = new AudioFormat.Builder()
@@ -430,17 +510,36 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
 
                 if (attrs == null || format == null) return;
 
-                int byteLen = pcm.Length * 2;
-                using var track = new AudioTrack(
-                    attrs,
-                    format,
-                    byteLen,
-                    AudioTrackMode.Static,
-                    0);
-                track.Write(pcm, 0, pcm.Length);
-                track.Play();
-                Thread.Sleep(tones.Sum(t => t.DurationMs) + 50);
-                track.Stop();
+                if (useCommRoute)
+                {
+                    AudioDeviceService.BeginOutputCommunicationRoute(preferredOut);
+                }
+
+                try
+                {
+                    int byteLen = pcm.Length * 2;
+                    using var track = new AudioTrack(
+                        attrs,
+                        format,
+                        byteLen,
+                        AudioTrackMode.Static,
+                        0);
+                    if (preferredOut != null)
+                    {
+                        track.SetPreferredDevice(preferredOut);
+                    }
+                    track.Write(pcm, 0, pcm.Length);
+                    track.Play();
+                    Thread.Sleep(tones.Sum(t => t.DurationMs) + 50);
+                    track.Stop();
+                }
+                finally
+                {
+                    if (useCommRoute)
+                    {
+                        AudioDeviceService.EndOutputCommunicationRoute();
+                    }
+                }
             }
             catch (Exception ex)
             {

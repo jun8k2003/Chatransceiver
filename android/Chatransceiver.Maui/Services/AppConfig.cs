@@ -114,6 +114,30 @@ public static partial class AppConfig
         set => Preferences.Default.Set("unread_badge_enabled", value);
     }
 
+    public static string PreferredAudioOutputKey
+    {
+        get => Preferences.Default.Get("preferred_audio_output_key", string.Empty);
+        set => Preferences.Default.Set("preferred_audio_output_key", value);
+    }
+
+    public static string PreferredAudioOutputLabel
+    {
+        get => Preferences.Default.Get("preferred_audio_output_label", "システム規定に従う");
+        set => Preferences.Default.Set("preferred_audio_output_label", value);
+    }
+
+    public static string PreferredAudioInputKey
+    {
+        get => Preferences.Default.Get("preferred_audio_input_key", string.Empty);
+        set => Preferences.Default.Set("preferred_audio_input_key", value);
+    }
+
+    public static string PreferredAudioInputLabel
+    {
+        get => Preferences.Default.Get("preferred_audio_input_label", "システム規定に従う");
+        set => Preferences.Default.Set("preferred_audio_input_label", value);
+    }
+
     /// <summary>
     /// 録音モード: "both" (音声+文字起こし) | "audio_only" (録音のみ) | "text_only" (文字起こしのみ)
     /// </summary>

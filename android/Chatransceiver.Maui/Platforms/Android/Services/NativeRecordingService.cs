@@ -51,6 +51,9 @@ public class NativeRecordingService
         int minBuf = AudioRecord.GetMinBufferSize(SampleRate, ChannelIn.Mono, Encoding.Pcm16bit);
         int bufferSize = Math.Max(minBuf * 2, SampleRate); // 約0.5秒分バッファ
 
+        var preferredIn = AudioDeviceService.FindPreferredInputDevice();
+        AudioDeviceService.BeginInputRouting(preferredIn);
+
         try
         {
             _audioRecord = new AudioRecord(
@@ -64,12 +67,19 @@ public class NativeRecordingService
             {
                 _audioRecord.Release();
                 _audioRecord = null;
+                AudioDeviceService.EndInputRouting();
                 return false;
+            }
+
+            if (preferredIn != null)
+            {
+                _audioRecord.SetPreferredDevice(preferredIn);
             }
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"AudioRecord init failed: {ex.Message}");
+            AudioDeviceService.EndInputRouting();
             return false;
         }
 
@@ -255,6 +265,7 @@ public class NativeRecordingService
         }
         catch { }
         _audioRecord = null;
+        AudioDeviceService.EndInputRouting();
 
         string transcript = _latestPartialTranscript;
         if (_speechResultTcs != null)
