@@ -104,7 +104,7 @@ public class SupabaseMessage : INotifyPropertyChanged
         ? "この発言は取り消しされました。"
         : (string.IsNullOrEmpty(TextContent) ? "🎤 音声メッセージ" : TextContent);
 
-    public string TimeText => CreatedAt.ToLocalTime().ToString("HH:mm");
+    public string TimeText => CreatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm");
     public string PlayButtonLabel => HasAudio ? "▶ 音声再生" : "🔊 読み上げ";
 
     // 自分の発言は右寄せ（右上角を直角）、相手の発言は左寄せ（左上角を直角）
