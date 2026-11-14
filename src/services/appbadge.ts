@@ -9,11 +9,18 @@ export class AppBadgeService {
     this.supabaseService = supabaseService;
   }
 
-  async refresh(userId: string | null): Promise<void> {
+  async refresh(userId: string | null, enabled: boolean = true): Promise<void> {
     const revision = ++this.revision;
     if (typeof navigator.setAppBadge !== 'function') return;
 
     try {
+      if (!enabled) {
+        if (typeof navigator.clearAppBadge === 'function') {
+          await navigator.clearAppBadge();
+        }
+        return;
+      }
+
       const count = userId ? await this.supabaseService.getUnreadCount(userId) : 0;
       // 古い取得結果で、既読後やログアウト後のバッジを上書きしない。
       if (revision !== this.revision) return;

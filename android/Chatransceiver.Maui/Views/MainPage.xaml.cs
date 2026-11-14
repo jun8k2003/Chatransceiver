@@ -263,6 +263,8 @@ public partial class MainPage : ContentPage
     {
         VisibleItems.Clear();
 
+        bool showUnreadBadge = AppConfig.UnreadBadgeEnabled;
+
         if (_currentFilter == "all" || _currentFilter == "group")
         {
             foreach (var g in _groups)
@@ -274,6 +276,7 @@ public partial class MainPage : ContentPage
                     DisplayTitle = $"👥 {g.Name}",
                     Subtitle = $"メンバー ({g.MemberCount}人): {g.MemberNames}",
                     UnreadCount = g.UnreadCount,
+                    ShowUnreadBadge = showUnreadBadge,
                     IsActiveRoom = _activeRoomId == g.Id
                 });
             }
@@ -291,6 +294,7 @@ public partial class MainPage : ContentPage
                     Subtitle = "個別チャット",
                     IsOnline = m.IsOnline,
                     UnreadCount = m.UnreadCount,
+                    ShowUnreadBadge = showUnreadBadge,
                     IsActiveRoom = _activeItem != null && !_activeItem.IsGroup && _activeItem.Id == m.Id
                 });
             }

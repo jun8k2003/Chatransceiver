@@ -1,6 +1,7 @@
 export const DB_NAME = 'ChatransceiverDB';
 export const STORE_NAME = 'backgroundStore';
 export const BG_IMAGE_KEY = 'custom_bg_image';
+export const UNREAD_BADGE_KEY = 'unread_badge_enabled';
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -23,16 +24,25 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveBackgroundImage(blob: Blob): Promise<void> {
+async function putValue<T>(key: string, value: T): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-    const request = store.put(blob, BG_IMAGE_KEY);
+    const request = store.put(value, key);
 
     request.onsuccess = () => resolve();
     request.onerror = (event) => reject((event.target as IDBRequest).error);
   });
+}
+
+export async function saveBackgroundImage(blob: Blob): Promise<void> {
+  return putValue(BG_IMAGE_KEY, blob);
+}
+
+export async function saveUnreadBadgeEnabled(enabled: boolean): Promise<void> {
+  if (typeof indexedDB === 'undefined') return;
+  return putValue(UNREAD_BADGE_KEY, enabled);
 }
 
 export async function loadBackgroundImage(): Promise<Blob | null> {

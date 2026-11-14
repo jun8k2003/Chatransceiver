@@ -22,6 +22,8 @@ public class ChatFcmService : FirebaseMessagingService
 {
     private const string SilentMsgChannelId = "chatransceiver_messages_silent";
     private const string SoundMsgChannelId = "chatransceiver_messages_sound";
+    private const string SilentMsgNoBadgeChannelId = "chatransceiver_messages_silent_nobadge";
+    private const string SoundMsgNoBadgeChannelId = "chatransceiver_messages_sound_nobadge";
 
     public override void OnNewToken(string token)
     {
@@ -82,35 +84,71 @@ public class ChatFcmService : FirebaseMessagingService
         }
     }
 
+    /// <summary>
+    /// バッジ表示が有効な旧チャンネルの通知を消去し、ランチャーのアプリアイコンバッジを残さないようにする。
+    /// </summary>
+    public static void ClearBadgeEnabledNotifications(Context context)
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(26)) return;
+        try
+        {
+            var nm = (NotificationManager?)context.GetSystemService(NotificationService);
+            if (nm == null) return;
+
+            foreach (var sbn in nm.GetActiveNotifications() ?? [])
+            {
+                var chId = sbn.Notification?.ChannelId;
+                if (chId == SilentMsgChannelId || chId == SoundMsgChannelId)
+                {
+                    nm.Cancel(sbn.Tag, sbn.Id);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ClearBadgeEnabledNotifications error: {ex.Message}");
+        }
+    }
+
+    private void EnsureNotificationChannel(NotificationManager nm, string channelId, bool silent, bool showBadge)
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(26)) return;
+
+        string suffix = showBadge ? string.Empty : "（バッジなし）";
+        string channelName = silent
+            ? $"新着メッセージ通知（自動再生時・無音）{suffix}"
+            : $"新着メッセージ通知（自動再生OFF時・通知音あり）{suffix}";
+        var importance = silent ? NotificationImportance.Default : NotificationImportance.High;
+
+        var channel = new NotificationChannel(channelId, channelName, importance);
+        channel.SetShowBadge(showBadge);
+        if (silent)
+        {
+            channel.SetSound(null, null);
+            channel.EnableVibration(false);
+        }
+        nm.CreateNotificationChannel(channel);
+    }
+
     private void ShowSystemNotification(string title, string body, bool silent)
     {
         try
         {
-            string channelId = silent ? SilentMsgChannelId : SoundMsgChannelId;
+            bool showBadge = AppConfig.UnreadBadgeEnabled;
+            string channelId = (silent, showBadge) switch
+            {
+                (true, true) => SilentMsgChannelId,
+                (true, false) => SilentMsgNoBadgeChannelId,
+                (false, true) => SoundMsgChannelId,
+                (false, false) => SoundMsgNoBadgeChannelId,
+            };
 
             if (OperatingSystem.IsAndroidVersionAtLeast(26))
             {
                 var nm = (NotificationManager?)GetSystemService(NotificationService);
                 if (nm != null)
                 {
-                    if (silent)
-                    {
-                        var silentChannel = new NotificationChannel(
-                            SilentMsgChannelId,
-                            "新着メッセージ通知（自動再生時・無音）",
-                            NotificationImportance.Default);
-                        silentChannel.SetSound(null, null);
-                        silentChannel.EnableVibration(false);
-                        nm.CreateNotificationChannel(silentChannel);
-                    }
-                    else
-                    {
-                        var soundChannel = new NotificationChannel(
-                            SoundMsgChannelId,
-                            "新着メッセージ通知（自動再生OFF時・通知音あり）",
-                            NotificationImportance.High);
-                        nm.CreateNotificationChannel(soundChannel);
-                    }
+                    EnsureNotificationChannel(nm, channelId, silent, showBadge);
                 }
             }
 
@@ -122,15 +160,21 @@ public class ChatFcmService : FirebaseMessagingService
                 openIntent,
                 PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
-            var notification = new NotificationCompat.Builder(this, channelId)
+            var builder = new NotificationCompat.Builder(this, channelId)
                 .SetContentTitle(title)
                 .SetContentText(body)
                 .SetSmallIcon(global::Android.Resource.Drawable.SymActionChat)
                 .SetAutoCancel(true)
                 .SetSilent(silent)
                 .SetPriority(silent ? NotificationCompat.PriorityDefault : NotificationCompat.PriorityHigh)
-                .SetContentIntent(pendingIntent)
-                .Build();
+                .SetContentIntent(pendingIntent);
+
+            if (!showBadge)
+            {
+                builder.SetNumber(0);
+            }
+
+            var notification = builder.Build();
 
             var manager = NotificationManagerCompat.From(this);
             manager.Notify(Random.Shared.Next(3000, 9999), notification);

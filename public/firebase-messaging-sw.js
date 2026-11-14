@@ -18,9 +18,63 @@ if (apiKey && projectId) {
   const messaging = firebase.messaging();
 }
 
+const UNREAD_BADGE_DB_NAME = 'ChatransceiverDB';
+const UNREAD_BADGE_STORE_NAME = 'backgroundStore';
+const UNREAD_BADGE_KEY = 'unread_badge_enabled';
+
+function isUnreadBadgeEnabled() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(true);
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(UNREAD_BADGE_DB_NAME, 1);
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(UNREAD_BADGE_STORE_NAME)) {
+          db.createObjectStore(UNREAD_BADGE_STORE_NAME);
+        }
+      };
+      request.onsuccess = (event) => {
+        try {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(UNREAD_BADGE_STORE_NAME)) {
+            db.close();
+            resolve(true);
+            return;
+          }
+          const tx = db.transaction(UNREAD_BADGE_STORE_NAME, 'readonly');
+          const store = tx.objectStore(UNREAD_BADGE_STORE_NAME);
+          const getReq = store.get(UNREAD_BADGE_KEY);
+          getReq.onsuccess = () => {
+            const val = getReq.result;
+            db.close();
+            resolve(val === undefined ? true : val !== false);
+          };
+          getReq.onerror = () => {
+            db.close();
+            resolve(true);
+          };
+        } catch {
+          resolve(true);
+        }
+      };
+      request.onerror = () => resolve(true);
+    } catch {
+      resolve(true);
+    }
+  });
+}
+
 async function updateAppBadge(unreadCount) {
   if (typeof navigator.setAppBadge !== 'function') return;
   try {
+    const badgeEnabled = await isUnreadBadgeEnabled();
+    if (!badgeEnabled) {
+      if (typeof navigator.clearAppBadge === 'function') {
+        await navigator.clearAppBadge();
+      }
+      return;
+    }
+
     const count = typeof unreadCount === 'string' && /^\d+$/.test(unreadCount)
       ? Number(unreadCount) : NaN;
     if (!Number.isSafeInteger(count)) {

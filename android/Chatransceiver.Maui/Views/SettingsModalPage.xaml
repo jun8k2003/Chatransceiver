@@ -130,6 +130,19 @@
                                     OnColor="{StaticResource PrimaryBlue}" />
                         </Grid>
 
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout>
+                                <Label Text="未読バッジを表示する"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                <Label Text="一覧の未読件数やアプリアイコンの未読バッジを表示します"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                            <Switch x:Name="UnreadBadgeSwitch"
+                                    Grid.Column="1"
+                                    OnColor="{StaticResource PrimaryBlue}" />
+                        </Grid>
+
                         <Label Text="Supabase URL (上級者向け)"
                                FontSize="12"
                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />

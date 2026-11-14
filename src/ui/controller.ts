@@ -35,6 +35,7 @@ export interface UIState {
   tttWakeWord: string;
   bgSize?: 'cover' | 'contain';
   bgBlur?: boolean;
+  unreadBadgeEnabled: boolean;
   isAutoplaying?: boolean;
   autoplaySenderName?: string;
 }
@@ -46,6 +47,7 @@ export interface SaveSettingsInput {
   recordMode: 'both' | 'audio_only' | 'text_only';
   theme: 'light' | 'dark';
   callSignEnabled: boolean;
+  unreadBadgeEnabled: boolean;
   discordWebhookUrl?: string;
   tttWakeWord?: string;
   bgImageFile?: File | null;
@@ -97,6 +99,7 @@ export class UIController {
   private btnSettingsBgClear: HTMLButtonElement;
   private settingsBgSizeSelect: HTMLSelectElement;
   private settingsBgBlurCheck: HTMLInputElement;
+  private settingsUnreadBadgeCheck: HTMLInputElement;
   private bgImageClearRequested: boolean = false;
 
   // 全画面ローディング
@@ -305,6 +308,7 @@ export class UIController {
     this.btnSettingsBgClear = document.getElementById('btnSettingsBgClear') as HTMLButtonElement;
     this.settingsBgSizeSelect = document.getElementById('settingsBgSize') as HTMLSelectElement;
     this.settingsBgBlurCheck = document.getElementById('settingsBgBlur') as HTMLInputElement;
+    this.settingsUnreadBadgeCheck = document.getElementById('settingsUnreadBadge') as HTMLInputElement;
 
     // 画像クリアボタン
     if (this.btnSettingsBgClear) {
@@ -413,6 +417,7 @@ export class UIController {
       const bgImageFile = (this.settingsBgImageInput.files && this.settingsBgImageInput.files.length > 0) ? this.settingsBgImageInput.files[0] : null;
       const bgSize = this.settingsBgSizeSelect.value as 'cover' | 'contain';
       const bgBlur = this.settingsBgBlurCheck.checked;
+      const unreadBadgeEnabled = this.settingsUnreadBadgeCheck.checked;
 
       onSaveSettings({
         nickname: newNickname,
@@ -421,6 +426,7 @@ export class UIController {
         recordMode,
         theme,
         callSignEnabled,
+        unreadBadgeEnabled,
         discordWebhookUrl,
         tttWakeWord: wakeWord,
         bgImageFile,
@@ -782,6 +788,7 @@ export class UIController {
       if (state.bgBlur !== undefined) {
         this.settingsBgBlurCheck.checked = state.bgBlur;
       }
+      this.settingsUnreadBadgeCheck.checked = state.unreadBadgeEnabled;
 
       // TTT トグルの状態同期（録音中はロック）
       if (this.tttToggleInput) {
@@ -849,7 +856,8 @@ export class UIController {
       state.selectedUserIds,
       state.activeChatHistoryId,
       state.playingUserId,
-      state.playingGroupId
+      state.playingGroupId,
+      state.unreadBadgeEnabled
     );
 
     // 4. チャットウィンドウの描画

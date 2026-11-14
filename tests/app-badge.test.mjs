@@ -77,11 +77,12 @@ test('count failures preserve the existing badge and API failures are contained'
   await rejected.refresh(null);
 });
 
-async function push({ unreadCount, navigator = {}, windowClients = [] }) {
+async function push({ unreadCount, navigator = {}, windowClients = [], indexedDB = undefined }) {
   const handlers = {};
   const notifications = [];
   const context = vm.createContext({
     navigator, URL, URLSearchParams, console: quietConsole, importScripts() {},
+    indexedDB,
     location: { search: '' },
     clients: { matchAll: async () => windowClients },
     self: {
@@ -98,6 +99,74 @@ async function push({ unreadCount, navigator = {}, windowClients = [] }) {
   await completion;
   return notifications;
 }
+
+function mockIndexedDB(storedValues) {
+  return {
+    open() {
+      const req = {};
+      queueMicrotask(() => {
+        const db = {
+          objectStoreNames: { contains: () => true },
+          transaction() {
+            return {
+              objectStore() {
+                return {
+                  get(key) {
+                    const getReq = {};
+                    queueMicrotask(() => {
+                      getReq.result = storedValues[key];
+                      getReq.onsuccess?.();
+                    });
+                    return getReq;
+                  }
+                };
+              }
+            };
+          },
+          close() {}
+        };
+        req.result = db;
+        req.onsuccess?.({ target: req });
+      });
+      return req;
+    }
+  };
+}
+
+test('disabling unread badge clears app badge and skips unread query', async () => {
+  const calls = [];
+  const service = badgeService(() => assert.fail('unexpected query'), {
+    setAppBadge: async (value) => calls.push(value),
+    clearAppBadge: async () => calls.push('clear')
+  });
+  await service.refresh('user', false);
+  assert.deepEqual(calls, ['clear']);
+});
+
+test('background pushes clear badge without setting it when unread badge setting is disabled', async () => {
+  const calls = [];
+  const notifications = await push({
+    unreadCount: '5',
+    indexedDB: mockIndexedDB({ unread_badge_enabled: false }),
+    navigator: {
+      setAppBadge: async (count) => calls.push(count),
+      clearAppBadge: async () => calls.push('clear')
+    }
+  });
+  assert.deepEqual(calls, ['clear']);
+  assert.equal(notifications.length, 1);
+
+  const enabledCalls = [];
+  await push({
+    unreadCount: '5',
+    indexedDB: mockIndexedDB({ unread_badge_enabled: true }),
+    navigator: {
+      setAppBadge: async (count) => enabledCalls.push(count),
+      clearAppBadge: async () => enabledCalls.push('clear')
+    }
+  });
+  assert.deepEqual(enabledCalls, [5]);
+});
 
 test('background pushes set/clear numeric badges and tolerate old or invalid payloads', async () => {
   for (const [unreadCount, expected] of [['6', 6], ['0', 'clear'], [undefined, undefined], ['-1', undefined], ['invalid', undefined]]) {

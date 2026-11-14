@@ -23,6 +23,7 @@ public partial class SettingsModalPage : ContentPage
         AutoPlaySwitch.IsToggled = AppConfig.AutoPlayEnabled;
         EchoSentSwitch.IsToggled = AppConfig.EchoSentEnabled;
         CallSignSwitch.IsToggled = AppConfig.CallSignEnabled;
+        UnreadBadgeSwitch.IsToggled = AppConfig.UnreadBadgeEnabled;
         LightThemeSwitch.IsToggled = AppConfig.Theme == "light";
         SupabaseUrlEntry.Text = AppConfig.SupabaseUrl;
         SupabaseKeyEntry.Text = AppConfig.SupabaseAnonKey;
@@ -56,6 +57,14 @@ public partial class SettingsModalPage : ContentPage
             AppConfig.AutoPlayEnabled = AutoPlaySwitch.IsToggled;
             AppConfig.EchoSentEnabled = EchoSentSwitch.IsToggled;
             AppConfig.CallSignEnabled = CallSignSwitch.IsToggled;
+            AppConfig.UnreadBadgeEnabled = UnreadBadgeSwitch.IsToggled;
+#if ANDROID
+            if (!AppConfig.UnreadBadgeEnabled)
+            {
+                Chatransceiver.Maui.Platforms.Android.Services.ChatFcmService.ClearBadgeEnabledNotifications(
+                    global::Android.App.Application.Context);
+            }
+#endif
             AppConfig.Theme = LightThemeSwitch.IsToggled ? "light" : "dark";
             App.ApplyTheme(AppConfig.Theme);
 

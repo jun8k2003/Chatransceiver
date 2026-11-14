@@ -8,7 +8,7 @@ import { FCMService } from './services/FCMService';
 import { AppBadgeService } from './services/appbadge';
 import { WakeLockService } from './services/wakelock';
 import { MediaButtonPttService } from './services/mediabutton';
-import { saveBackgroundImage, loadBackgroundImage, deleteBackgroundImage } from './utils/db';
+import { saveBackgroundImage, loadBackgroundImage, deleteBackgroundImage, saveUnreadBadgeEnabled } from './utils/db';
 
 /**
  * App (src/app.ts)
@@ -53,6 +53,7 @@ export class App {
     fcmSupported: false,
     fcmRegistered: false,
     callSignEnabled: true,
+    unreadBadgeEnabled: true,
     isLoading: true,
     loadingMessage: '初期化中...',
     isTTTMode: false,
@@ -178,6 +179,13 @@ export class App {
     }
     this.playbackQueue.callSignEnabled = this.state.callSignEnabled;
 
+    // 未読バッジ表示設定の読み込み (デフォルトON)
+    const savedUnreadBadge = localStorage.getItem('chatransceiver_unread_badge_enabled');
+    if (savedUnreadBadge !== null) {
+      this.state.unreadBadgeEnabled = savedUnreadBadge === 'true';
+    }
+    void saveUnreadBadgeEnabled(this.state.unreadBadgeEnabled);
+
     // テーマ設定の読み込み
     const savedTheme = localStorage.getItem('chatransceiver_theme') as 'light' | 'dark';
     if (savedTheme === 'light' || savedTheme === 'dark') {
@@ -272,7 +280,7 @@ export class App {
 
     // OAuthリダイレクト後の遅延セッション確立をキャッチするためのリスナー
     supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT') void this.appBadgeService.refresh(null);
+      if (event === 'SIGNED_OUT') void this.appBadgeService.refresh(null, this.state.unreadBadgeEnabled);
       if (event === 'SIGNED_IN' && session) {
         // すでにログイン処理済みの場合はスキップ
         if (this.state.currentUser && this.state.currentUser.id === session.user.id) return;
@@ -304,7 +312,10 @@ export class App {
   }
 
   private refreshAppBadge(): void {
-    void this.appBadgeService.refresh(this.state.currentUser?.id ?? null);
+    void this.appBadgeService.refresh(
+      this.state.currentUser?.id ?? null,
+      this.state.unreadBadgeEnabled
+    );
   }
 
   private async markAsRead(roomId: string, userId: string): Promise<void> {
@@ -1486,6 +1497,7 @@ export class App {
       recordMode,
       theme,
       callSignEnabled,
+      unreadBadgeEnabled,
       discordWebhookUrl,
       tttWakeWord,
       bgImageFile,
@@ -1520,6 +1532,11 @@ export class App {
     this.state.callSignEnabled = callSignEnabled;
     localStorage.setItem('chatransceiver_callsign_enabled', callSignEnabled ? 'true' : 'false');
     this.playbackQueue.callSignEnabled = callSignEnabled;
+
+    this.state.unreadBadgeEnabled = unreadBadgeEnabled;
+    localStorage.setItem('chatransceiver_unread_badge_enabled', unreadBadgeEnabled ? 'true' : 'false');
+    void saveUnreadBadgeEnabled(unreadBadgeEnabled);
+    this.refreshAppBadge();
     
     if (!autoplay) {
       this.playbackQueue.clear();

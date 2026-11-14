@@ -52,6 +52,7 @@ export class ChatListUI {
   private lastActiveChatId: string | null = null;
   private lastPlayingUserId?: string;
   private lastPlayingGroupId?: string;
+  private lastShowUnreadBadge: boolean = true;
 
   private onOpenUser: (userId: string) => void;
   private onOpenGroup: (groupId: string) => void;
@@ -151,7 +152,8 @@ export class ChatListUI {
       this.lastSelectedUserIds,
       this.lastActiveChatId,
       this.lastPlayingUserId,
-      this.lastPlayingGroupId
+      this.lastPlayingGroupId,
+      this.lastShowUnreadBadge
     );
   }
 
@@ -164,7 +166,8 @@ export class ChatListUI {
     selectedUserIds: string[],
     activeChatHistoryId: string | null,
     playingUserId?: string,
-    playingGroupId?: string
+    playingGroupId?: string,
+    showUnreadBadge: boolean = true
   ): void {
     this.lastMembers = members;
     this.lastGroups = groups;
@@ -172,6 +175,7 @@ export class ChatListUI {
     this.lastActiveChatId = activeChatHistoryId;
     this.lastPlayingUserId = playingUserId;
     this.lastPlayingGroupId = playingGroupId;
+    this.lastShowUnreadBadge = showUnreadBadge;
 
     this.listEl.innerHTML = '';
 
@@ -260,7 +264,7 @@ export class ChatListUI {
         ${subHtml}
       </div>
       <div class="item-meta">
-        ${member.unreadCount ? `<span class="unread-badge">${member.unreadCount}</span>` : ''}
+        ${this.lastShowUnreadBadge && member.unreadCount ? `<span class="unread-badge">${member.unreadCount}</span>` : ''}
       </div>
       <button class="btn-item-delete" title="チャット履歴を削除">🗑️</button>
     `;
@@ -314,7 +318,7 @@ export class ChatListUI {
         ${subHtml}
       </div>
       <div class="item-meta">
-        ${group.unreadCount ? `<span class="unread-badge">${group.unreadCount}</span>` : ''}
+        ${this.lastShowUnreadBadge && group.unreadCount ? `<span class="unread-badge">${group.unreadCount}</span>` : ''}
       </div>
       <button class="btn-item-delete" title="グループを削除">🗑️</button>
     `;

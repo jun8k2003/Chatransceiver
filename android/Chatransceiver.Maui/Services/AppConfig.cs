@@ -108,6 +108,12 @@ public static partial class AppConfig
         set => Preferences.Default.Set("callsign_enabled", value);
     }
 
+    public static bool UnreadBadgeEnabled
+    {
+        get => Preferences.Default.Get("unread_badge_enabled", true);
+        set => Preferences.Default.Set("unread_badge_enabled", value);
+    }
+
     /// <summary>
     /// 録音モード: "both" (音声+文字起こし) | "audio_only" (録音のみ) | "text_only" (文字起こしのみ)
     /// </summary>
