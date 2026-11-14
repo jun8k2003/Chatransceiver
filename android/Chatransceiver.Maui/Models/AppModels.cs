@@ -113,8 +113,8 @@ public class SupabaseMessage : INotifyPropertyChanged
     public IShape BubbleStrokeShape => new RoundRectangle
     {
         CornerRadius = IsMine
-            ? new CornerRadius(12, 0, 12, 12)
-            : new CornerRadius(0, 12, 12, 12)
+            ? new CornerRadius(18, 0, 18, 18)
+            : new CornerRadius(0, 18, 18, 18)
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;

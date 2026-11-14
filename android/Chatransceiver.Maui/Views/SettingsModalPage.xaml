@@ -26,7 +26,7 @@
                 <!-- プロフィール設定 -->
                 <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
-                        StrokeShape="RoundRectangle 12"
+                        StrokeShape="RoundRectangle 16"
                         Padding="14">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="👤 プロフィール"
@@ -42,7 +42,7 @@
                 <!-- 音声・トランシーバー設定 -->
                 <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
-                        StrokeShape="RoundRectangle 12"
+                        StrokeShape="RoundRectangle 16"
                         Padding="14">
                     <VerticalStackLayout Spacing="14">
                         <Label Text="🔊 音声・トランシーバー動作"
@@ -114,7 +114,7 @@
                 <!-- 外観テーマ & 接続設定 -->
                 <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
-                        StrokeShape="RoundRectangle 12"
+                        StrokeShape="RoundRectangle 16"
                         Padding="14">
                     <VerticalStackLayout Spacing="12">
                         <Label Text="🎨 外観・接続先設定"
@@ -166,7 +166,7 @@
                         BackgroundColor="{StaticResource DangerRed}"
                         TextColor="White"
                         FontAttributes="Bold"
-                        CornerRadius="10"
+                        CornerRadius="14"
                         Clicked="OnSignOutClicked" />
 
                 <!-- 茶トラ猫アイコン装飾 & バージョン表示 (DEC-024 / DEC-033 不変条件) -->
@@ -191,7 +191,7 @@
                 TextColor="White"
                 FontAttributes="Bold"
                 HeightRequest="48"
-                CornerRadius="10"
+                CornerRadius="14"
                 Margin="0,10,0,0"
                 Clicked="OnSaveClicked" />
 
@@ -206,7 +206,7 @@
                     Padding="24,18"
                     Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                     StrokeThickness="1"
-                    StrokeShape="RoundRectangle 14"
+                    StrokeShape="RoundRectangle 18"
                     BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}">
                 <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
                     <ActivityIndicator x:Name="SettingsBusyIndicator"

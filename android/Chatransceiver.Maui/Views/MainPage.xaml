@@ -47,7 +47,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 Clicked="OnFcmToggleClicked" />
 
@@ -59,7 +59,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 Clicked="OnHeadsetPttToggleClicked" />
 
@@ -70,7 +70,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 Clicked="OnSettingsClicked" />
                     </HorizontalStackLayout>
@@ -93,7 +93,7 @@
                         HeightRequest="36"
                         MinimumHeightRequest="0"
                         Padding="6,0"
-                        CornerRadius="8"
+                        CornerRadius="12"
                         BackgroundColor="{StaticResource PrimaryBlue}"
                         TextColor="White"
                         Clicked="OnShowListPaneClicked" />
@@ -105,7 +105,7 @@
                         HeightRequest="36"
                         MinimumHeightRequest="0"
                         Padding="6,0"
-                        CornerRadius="8"
+                        CornerRadius="12"
                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                         TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                         Clicked="OnShowChatPaneClicked" />
@@ -180,7 +180,7 @@
                             BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
                             Stroke="{StaticResource PrimaryBlue}"
                             StrokeThickness="1"
-                            StrokeShape="RoundRectangle 10"
+                            StrokeShape="RoundRectangle 16"
                             Padding="10">
                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                             <Label Text="メンバー(2人以上)をタップして選択"
@@ -230,7 +230,7 @@
                                 <Border Margin="0,3"
                                         Padding="12,10"
                                         StrokeThickness="1"
-                                        StrokeShape="RoundRectangle 10"
+                                        StrokeShape="RoundRectangle 16"
                                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
                                         Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}">
                                     <Border.GestureRecognizers>
@@ -313,7 +313,7 @@
                                     MinimumWidthRequest="0"
                                     MinimumHeightRequest="0"
                                     Padding="0"
-                                    CornerRadius="8"
+                                    CornerRadius="12"
                                     BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                     Clicked="OnEditGroupNameClicked" />
 
@@ -326,7 +326,7 @@
                                     MinimumWidthRequest="0"
                                     MinimumHeightRequest="0"
                                     Padding="0"
-                                    CornerRadius="8"
+                                    CornerRadius="12"
                                     BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                     Clicked="OnClearRoomClicked" />
                         </Grid>
@@ -353,7 +353,7 @@
                                 <Grid>
                                     <Border HorizontalOptions="{Binding BubbleHorizontalOptions}"
                                             Margin="{Binding BubbleMargin}"
-                                            Padding="12,8"
+                                            Padding="14,10"
                                             StrokeThickness="1"
                                             StrokeShape="{Binding BubbleStrokeShape}"
                                             BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
@@ -388,7 +388,7 @@
                                                         MinimumWidthRequest="0"
                                                         MinimumHeightRequest="0"
                                                         Padding="12,0"
-                                                        CornerRadius="6"
+                                                        CornerRadius="12"
                                                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                                         TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                                                         CommandParameter="{Binding .}"
@@ -401,7 +401,7 @@
                                                         MinimumWidthRequest="0"
                                                         MinimumHeightRequest="0"
                                                         Padding="10,0"
-                                                        CornerRadius="6"
+                                                        CornerRadius="12"
                                                         BackgroundColor="Transparent"
                                                         TextColor="{StaticResource DangerRed}"
                                                         CommandParameter="{Binding .}"
@@ -437,7 +437,7 @@
                                 <Border Grid.Column="0"
                                         Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                                         StrokeThickness="1"
-                                        StrokeShape="RoundRectangle 8"
+                                        StrokeShape="RoundRectangle 14"
                                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgPrimary}, Light={StaticResource LightBgPrimary}}"
                                         Padding="10,2">
                                     <Entry x:Name="TextMessageEntry"
@@ -457,7 +457,7 @@
                                         MinimumWidthRequest="0"
                                         MinimumHeightRequest="0"
                                         Padding="16,0"
-                                        CornerRadius="8"
+                                        CornerRadius="14"
                                         Clicked="OnSendTextClicked" />
                             </Grid>
                         </VerticalStackLayout>
@@ -475,7 +475,7 @@
                     BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
                     Stroke="{StaticResource AccentOrange}"
                     StrokeThickness="2"
-                    StrokeShape="RoundRectangle 16"
+                    StrokeShape="RoundRectangle 22"
                     Padding="20">
                 <VerticalStackLayout Spacing="14">
                     <Grid ColumnDefinitions="*,Auto">
@@ -506,7 +506,7 @@
                     <!-- 文字起こしプレビュー枠 -->
                     <Border Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                             StrokeThickness="1"
-                            StrokeShape="RoundRectangle 10"
+                            StrokeShape="RoundRectangle 14"
                             BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgPrimary}, Light={StaticResource LightBgPrimary}}"
                             MinimumHeightRequest="64"
                             Padding="12">
@@ -524,7 +524,7 @@
                                 FontSize="14"
                                 FontAttributes="Bold"
                                 HeightRequest="46"
-                                CornerRadius="10"
+                                CornerRadius="14"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                                 Clicked="OnModalStopRecordingClicked" />
@@ -535,7 +535,7 @@
                                 FontSize="14"
                                 FontAttributes="Bold"
                                 HeightRequest="46"
-                                CornerRadius="10"
+                                CornerRadius="14"
                                 BackgroundColor="{StaticResource PrimaryBlue}"
                                 TextColor="White"
                                 Clicked="OnModalSendRecordingClicked" />
@@ -544,7 +544,7 @@
                     <Button Text="✕ キャンセル（破棄して閉じる）"
                             FontSize="13"
                             HeightRequest="40"
-                            CornerRadius="8"
+                            CornerRadius="12"
                             BackgroundColor="Transparent"
                             TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}"
                             Clicked="OnCancelRecordingClicked" />
@@ -562,7 +562,7 @@
                     BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
                     Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                     StrokeThickness="1"
-                    StrokeShape="RoundRectangle 14"
+                    StrokeShape="RoundRectangle 18"
                     Padding="16">
                 <VerticalStackLayout Spacing="12">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -578,7 +578,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="12,0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                                 Clicked="OnCloseCommunityMenuClicked" />
@@ -592,7 +592,7 @@
                         <Border Grid.Column="0"
                                 Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                                 StrokeThickness="1"
-                                StrokeShape="RoundRectangle 8"
+                                StrokeShape="RoundRectangle 12"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgPrimary}, Light={StaticResource LightBgPrimary}}"
                                 Padding="8,0">
                             <Entry x:Name="CommunityInputEntry"
@@ -605,7 +605,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="16,0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{StaticResource PrimaryBlue}"
                                 TextColor="White"
                                 FontAttributes="Bold"
@@ -625,7 +625,7 @@
                                         HeightRequest="38"
                                         MinimumHeightRequest="0"
                                         Padding="12,0"
-                                        CornerRadius="8"
+                                        CornerRadius="12"
                                         BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                         TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                                         CommandParameter="{Binding .}"
@@ -644,7 +644,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="6,0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                                 Clicked="OnCopyInviteLinkClicked" />
@@ -655,7 +655,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="6,0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                                 Clicked="OnDisconnectCommunityClicked" />
@@ -666,7 +666,7 @@
                                 MinimumWidthRequest="0"
                                 MinimumHeightRequest="0"
                                 Padding="6,0"
-                                CornerRadius="8"
+                                CornerRadius="12"
                                 BackgroundColor="{StaticResource DangerRed}"
                                 TextColor="White"
                                 Clicked="OnLeaveCommunityClicked" />
@@ -688,7 +688,7 @@
                     Padding="24"
                     Stroke="{StaticResource AccentOrange}"
                     StrokeThickness="2"
-                    StrokeShape="RoundRectangle 18"
+                    StrokeShape="RoundRectangle 22"
                     BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}">
                 <Border.GestureRecognizers>
                     <TapGestureRecognizer Tapped="OnAutoPlayStopOverlayTapped" />
@@ -721,7 +721,7 @@
                 <Border BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
                         Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                         StrokeThickness="1"
-                        StrokeShape="RoundRectangle 16"
+                        StrokeShape="RoundRectangle 22"
                         Padding="24">
                     <VerticalStackLayout Spacing="16">
                         <Image Source="chatora.png"
@@ -745,7 +745,7 @@
                                 TextColor="White"
                                 FontAttributes="Bold"
                                 HeightRequest="48"
-                                CornerRadius="10"
+                                CornerRadius="14"
                                 Clicked="OnGoogleLoginClicked" />
 
                         <BoxView HeightRequest="1" Color="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}" />
@@ -763,7 +763,7 @@
                                 BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgCard}, Light={StaticResource LightBgCard}}"
                                 TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}"
                                 HeightRequest="44"
-                                CornerRadius="10"
+                                CornerRadius="14"
                                 Clicked="OnMagicLinkLoginClicked" />
 
                         <Button Text="⚙️ Supabase接続先設定を確認・変更"
@@ -786,7 +786,7 @@
                     Padding="24,18"
                     Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}"
                     StrokeThickness="1"
-                    StrokeShape="RoundRectangle 14"
+                    StrokeShape="RoundRectangle 18"
                     BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}">
                 <VerticalStackLayout Spacing="12" HorizontalOptions="Center">
                     <ActivityIndicator x:Name="BusyIndicator"
