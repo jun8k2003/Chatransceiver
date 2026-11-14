@@ -186,7 +186,7 @@ public class TransceiverForegroundService : Service
 
             if (result.WavBytes != null || !string.IsNullOrWhiteSpace(result.Transcript))
             {
-                await SupabaseClientService.Instance.SendMessageAsync(
+                var sent = await SupabaseClientService.Instance.SendMessageAsync(
                     roomId,
                     userId,
                     result.Transcript,
@@ -194,6 +194,11 @@ public class TransceiverForegroundService : Service
                     result.NeedsTranscription);
 
                 MainThread.BeginInvokeOnMainThread(() => PttMessageSentFromBackground?.Invoke());
+
+                if (AppConfig.EchoSentEnabled)
+                {
+                    AudioPlaybackQueue.Instance.EnqueueMessage(sent);
+                }
             }
 
             UpdateNotification($"🎧 PTT待機中 ({AppConfig.ActiveRoomTitle ?? "送信準備OK"})");
@@ -206,8 +211,8 @@ public class TransceiverForegroundService : Service
         }
         finally
         {
-            AudioPlaybackQueue.Instance.Resume();
             NativeAudioService.Instance.ReleaseWakeLock();
+            AudioPlaybackQueue.Instance.Resume();
         }
     }
 

@@ -64,6 +64,19 @@
 
                         <Grid ColumnDefinitions="*,Auto">
                             <VerticalStackLayout>
+                                <Label Text="送信メッセージの復唱再生"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                <Label Text="自分が送信した音声やテキストを自動再生します"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                            <Switch x:Name="EchoSentSwitch"
+                                    Grid.Column="1"
+                                    OnColor="{StaticResource PrimaryBlue}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout>
                                 <Label Text="疑似コールサイン音 (前後チャイム)"
                                        TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
                                 <Label Text="再生の前後にトランシーバー風効果音を鳴らします"

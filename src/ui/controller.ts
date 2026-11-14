@@ -20,6 +20,7 @@ export interface UIState {
   playingUserId?: string;
   playingGroupId?: string;
   autoplayEnabled: boolean;
+  echoSentEnabled: boolean;
   recordMode: 'both' | 'audio_only' | 'text_only';
   isRecording: boolean;
   mobileChatForceOpen: boolean;
@@ -36,6 +37,21 @@ export interface UIState {
   bgBlur?: boolean;
   isAutoplaying?: boolean;
   autoplaySenderName?: string;
+}
+
+export interface SaveSettingsInput {
+  nickname: string;
+  autoplay: boolean;
+  echoSent: boolean;
+  recordMode: 'both' | 'audio_only' | 'text_only';
+  theme: 'light' | 'dark';
+  callSignEnabled: boolean;
+  discordWebhookUrl?: string;
+  tttWakeWord?: string;
+  bgImageFile?: File | null;
+  bgImageClear?: boolean;
+  bgSize?: 'cover' | 'contain';
+  bgBlur?: boolean;
 }
 
 /**
@@ -57,6 +73,7 @@ export class UIController {
   private settingsModalEl: HTMLDivElement;
   private settingsNicknameInput: HTMLInputElement;
   private settingsAutoplayCheck: HTMLInputElement;
+  private settingsEchoSentCheck: HTMLInputElement;
   private settingsRecordModeSelect: HTMLSelectElement;
   private settingsCallSignCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
@@ -143,7 +160,7 @@ export class UIController {
     onSignInWithMagicLink: (email: string) => Promise<void>,
     onSignOut: () => Promise<void>,
     onBackToSidebar: () => void,
-    onSaveSettings: (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light'|'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string, bgImageFile?: File | null, bgImageClear?: boolean, bgSize?: 'cover'|'contain', bgBlur?: boolean) => void,
+    onSaveSettings: (settings: SaveSettingsInput) => void,
     onRegisterNotification: () => Promise<void>,
     onUnregisterNotification: () => Promise<void>,
     onToggleWakeLock: () => Promise<boolean>,
@@ -278,6 +295,7 @@ export class UIController {
     this.settingsModalEl = document.getElementById('settingsModal') as HTMLDivElement;
     this.settingsNicknameInput = document.getElementById('settingsNickname') as HTMLInputElement;
     this.settingsAutoplayCheck = document.getElementById('settingsAutoplay') as HTMLInputElement;
+    this.settingsEchoSentCheck = document.getElementById('settingsEchoSent') as HTMLInputElement;
     this.settingsRecordModeSelect = document.getElementById('settingsRecordMode') as HTMLSelectElement;
     this.settingsCallSignCheck = document.getElementById('settingsCallSign') as HTMLInputElement;
     this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
@@ -369,6 +387,7 @@ export class UIController {
     settingsSaveBtn.addEventListener('click', () => {
       const newNickname = this.settingsNicknameInput.value.trim();
       const autoplay = this.settingsAutoplayCheck.checked;
+      const echoSent = this.settingsEchoSentCheck.checked;
       const recordMode = this.settingsRecordModeSelect.value as 'both' | 'audio_only' | 'text_only';
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
       const callSignEnabled = this.settingsCallSignCheck.checked;
@@ -395,7 +414,20 @@ export class UIController {
       const bgSize = this.settingsBgSizeSelect.value as 'cover' | 'contain';
       const bgBlur = this.settingsBgBlurCheck.checked;
 
-      onSaveSettings(newNickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, wakeWord, bgImageFile, this.bgImageClearRequested, bgSize, bgBlur);
+      onSaveSettings({
+        nickname: newNickname,
+        autoplay,
+        echoSent,
+        recordMode,
+        theme,
+        callSignEnabled,
+        discordWebhookUrl,
+        tttWakeWord: wakeWord,
+        bgImageFile,
+        bgImageClear: this.bgImageClearRequested,
+        bgSize,
+        bgBlur
+      });
       
       // 保存後に入力状態をリセット
       this.settingsBgImageInput.value = '';
@@ -726,6 +758,7 @@ export class UIController {
         this.settingsNicknameInput.value = state.currentUser?.name || '';
       }
       this.settingsAutoplayCheck.checked = state.autoplayEnabled;
+      this.settingsEchoSentCheck.checked = state.echoSentEnabled;
       this.settingsRecordModeSelect.value = state.recordMode;
       this.settingsCallSignCheck.checked = state.callSignEnabled;
       this.settingsThemeSelect.value = state.theme;

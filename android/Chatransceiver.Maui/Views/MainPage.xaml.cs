@@ -701,6 +701,10 @@ public partial class MainPage : ContentPage
                         result.NeedsTranscription);
                     RoomMessages.Add(sent);
                     ScrollMessagesToBottom(animate: true);
+                    if (AppConfig.EchoSentEnabled)
+                    {
+                        AudioPlaybackQueue.Instance.EnqueueMessage(sent);
+                    }
                 });
             }
         }
@@ -763,12 +767,17 @@ public partial class MainPage : ContentPage
         try
         {
             TextMessageEntry.Text = string.Empty;
+            SupabaseMessage? sent = null;
             await RunWithBusyAsync("メッセージを送信中...", async () =>
             {
-                var sent = await SupabaseClientService.Instance.SendMessageAsync(_activeRoomId, _currentUser.Id, text);
+                sent = await SupabaseClientService.Instance.SendMessageAsync(_activeRoomId, _currentUser.Id, text);
                 RoomMessages.Add(sent);
                 ScrollMessagesToBottom(animate: true);
             });
+            if (sent != null && AppConfig.EchoSentEnabled)
+            {
+                AudioPlaybackQueue.Instance.EnqueueMessage(sent);
+            }
         }
         catch (Exception ex)
         {
@@ -1026,19 +1035,7 @@ public partial class MainPage : ContentPage
 
         if (!msg.IsMine && AppConfig.AutoPlayEnabled)
         {
-            var isAudio = !string.IsNullOrEmpty(msg.AudioUrl);
-            var content = isAudio ? msg.AudioUrl! : msg.TextContent;
-            if (!string.IsNullOrEmpty(content))
-            {
-                AudioPlaybackQueue.Instance.Enqueue(new QueueItem
-                {
-                    Id = msg.Id,
-                    Type = isAudio ? "audio" : "text",
-                    Content = content,
-                    SenderName = msg.SenderName,
-                    RoomId = msg.RoomId
-                });
-            }
+            AudioPlaybackQueue.Instance.EnqueueMessage(msg);
         }
     }
 

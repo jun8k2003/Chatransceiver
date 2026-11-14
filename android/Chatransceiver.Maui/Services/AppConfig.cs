@@ -96,6 +96,12 @@ public static partial class AppConfig
         set => Preferences.Default.Set("autoplay_enabled", value);
     }
 
+    public static bool EchoSentEnabled
+    {
+        get => Preferences.Default.Get("echo_sent_enabled", true);
+        set => Preferences.Default.Set("echo_sent_enabled", value);
+    }
+
     public static bool CallSignEnabled
     {
         get => Preferences.Default.Get("callsign_enabled", true);

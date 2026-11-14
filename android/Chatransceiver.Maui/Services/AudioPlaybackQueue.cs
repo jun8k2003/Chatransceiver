@@ -25,6 +25,25 @@ public class AudioPlaybackQueue
 
     public bool IsPlaying => _isPlaying;
 
+    /// <summary>
+    /// SupabaseMessage から再生可能コンテンツを判定して再生キューに追加する
+    /// </summary>
+    public void EnqueueMessage(SupabaseMessage msg)
+    {
+        var isAudio = !string.IsNullOrEmpty(msg.AudioUrl);
+        var content = isAudio ? msg.AudioUrl! : msg.TextContent;
+        if (string.IsNullOrEmpty(content)) return;
+
+        Enqueue(new QueueItem
+        {
+            Id = msg.Id,
+            Type = isAudio ? "audio" : "text",
+            Content = content,
+            SenderName = msg.SenderName,
+            RoomId = msg.RoomId
+        });
+    }
+
     public void Enqueue(QueueItem item)
     {
         lock (_lock)

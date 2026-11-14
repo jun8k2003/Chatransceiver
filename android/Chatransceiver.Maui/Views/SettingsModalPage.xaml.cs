@@ -21,6 +21,7 @@ public partial class SettingsModalPage : ContentPage
 
         NicknameEntry.Text = _currentUser?.Name ?? string.Empty;
         AutoPlaySwitch.IsToggled = AppConfig.AutoPlayEnabled;
+        EchoSentSwitch.IsToggled = AppConfig.EchoSentEnabled;
         CallSignSwitch.IsToggled = AppConfig.CallSignEnabled;
         LightThemeSwitch.IsToggled = AppConfig.Theme == "light";
         SupabaseUrlEntry.Text = AppConfig.SupabaseUrl;
@@ -53,6 +54,7 @@ public partial class SettingsModalPage : ContentPage
         try
         {
             AppConfig.AutoPlayEnabled = AutoPlaySwitch.IsToggled;
+            AppConfig.EchoSentEnabled = EchoSentSwitch.IsToggled;
             AppConfig.CallSignEnabled = CallSignSwitch.IsToggled;
             AppConfig.Theme = LightThemeSwitch.IsToggled ? "light" : "dark";
             App.ApplyTheme(AppConfig.Theme);

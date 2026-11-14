@@ -1,7 +1,7 @@
 import { AudioManager } from './audio/manager';
 import { AudioPlaybackQueue } from './audio/queue';
 import { UIController } from './ui/controller';
-import type { UIState } from './ui/controller';
+import type { SaveSettingsInput, UIState } from './ui/controller';
 import { supabase, SupabaseService } from './services/supabase';
 import type { SupabaseMessage, UserWebhookInput } from './services/supabase';
 import { FCMService } from './services/FCMService';
@@ -46,6 +46,7 @@ export class App {
     playingUserId: undefined,
     playingGroupId: undefined,
     autoplayEnabled: true,
+    echoSentEnabled: true,
     recordMode: 'both' as 'both' | 'audio_only' | 'text_only',
     isRecording: false,
     mobileChatForceOpen: false,
@@ -116,7 +117,7 @@ export class App {
       (email: string) => this.handleSignInWithMagicLink(email),
       () => this.handleSignOut(),
       () => this.handleBackToSidebar(),
-      (nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string, bgImageFile?: File | null, bgImageClear?: boolean, bgSize?: 'cover'|'contain', bgBlur?: boolean) => this.handleSaveSettings(nickname, autoplay, recordMode, theme, callSignEnabled, discordWebhookUrl, tttWakeWord, bgImageFile, bgImageClear, bgSize, bgBlur),
+      (settings: SaveSettingsInput) => this.handleSaveSettings(settings),
       async () => await this.handleRegisterNotification(),
       async () => await this.handleUnregisterNotification(),
       async () => await this.handleToggleWakeLock(),
@@ -145,6 +146,12 @@ export class App {
     const savedAutoplay = localStorage.getItem('chatransceiver_autoplay_enabled');
     if (savedAutoplay !== null) {
       this.state.autoplayEnabled = savedAutoplay === 'true';
+    }
+
+    // 送信メッセージの復唱再生設定の読み込み (デフォルトON)
+    const savedEchoSent = localStorage.getItem('chatransceiver_echo_sent_enabled');
+    if (savedEchoSent !== null) {
+      this.state.echoSentEnabled = savedEchoSent === 'true';
     }
 
     // 録音設定の読み込み
@@ -931,6 +938,7 @@ export class App {
 
       const sentMsg = await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, text);
       this.reflectSentMessage(roomId, sentMsg);
+      this.echoSentMessageIfEnabled(roomId, sentMsg);
     } catch (e) {
       console.error('Failed to send text message:', e);
     }
@@ -1248,6 +1256,7 @@ export class App {
 
       const sentMsg = await this.supabaseService.sendMessage(roomId, this.state.currentUser.id, this.recordedDictationText, this.recordedAudioBlob || undefined, this.recordedNeedsTranscription);
       this.reflectSentMessage(roomId, sentMsg);
+      this.echoSentMessageIfEnabled(roomId, sentMsg);
     } catch (e) {
       console.error('Failed to send audio message:', e);
     }
@@ -1291,39 +1300,79 @@ export class App {
   }
 
   /**
+   * 送信したメッセージを自分の端末で復唱再生する（設定がONの場合）
+   */
+  private echoSentMessageIfEnabled(roomId: string, sentMsg: SupabaseMessage): void {
+    if (!this.state.echoSentEnabled) return;
+    this.enqueuePlaybackItem({
+      id: sentMsg.id,
+      roomId,
+      senderId: sentMsg.senderId,
+      senderName: sentMsg.senderName || this.state.currentUser?.name || '',
+      audioUrl: sentMsg.audioUrl,
+      textContent: sentMsg.textContent
+    }, false);
+  }
+
+  /**
+   * 着信自動再生・送信復唱再生の共通キュー投入処理
+   */
+  private enqueuePlaybackItem(
+    item: {
+      id: string;
+      roomId: string;
+      senderId: string;
+      senderName: string;
+      audioUrl?: string;
+      textContent?: string;
+    },
+    highlightIndividualSender: boolean = true
+  ): void {
+    const content = item.audioUrl || item.textContent || '';
+    if (!content) return;
+
+    this.playbackQueue.enqueue({
+      id: item.id,
+      type: item.audioUrl ? 'audio' : 'text',
+      content,
+      senderName: item.senderName,
+      roomId: item.roomId,
+      onPlayStart: () => {
+        if (this.groupMembersMap[item.roomId] && this.groupMembersMap[item.roomId].length >= 2) {
+          this.state.playingGroupId = item.roomId;
+        } else if (highlightIndividualSender) {
+          this.state.playingUserId = item.senderId;
+        }
+        // 自動再生中の停止パネルを表示する (DEC-032)
+        this.state.isAutoplaying = true;
+        this.state.autoplaySenderName = item.senderName;
+        this.updateUI();
+      },
+      onPlayEnd: () => {
+        this.state.playingGroupId = undefined;
+        this.state.playingUserId = undefined;
+        // 自動再生の停止パネルを閉じる (DEC-032)
+        this.state.isAutoplaying = false;
+        this.state.autoplaySenderName = undefined;
+        this.updateUI();
+      }
+    });
+  }
+
+  /**
    * 自分宛の新着インボックスメッセージ検知時の自動再生処理 (Realtime)
    */
   private handleNewInboxItem(inboxItem: any): void {
-    const senderName = inboxItem.senderName;
     const roomId = inboxItem.roomId;
-    const senderId = inboxItem.senderId;
 
     if (this.state.autoplayEnabled) {
-      this.playbackQueue.enqueue({
+      this.enqueuePlaybackItem({
         id: inboxItem.id,
-        type: inboxItem.audioUrl ? 'audio' : 'text',
-        content: inboxItem.audioUrl || inboxItem.textContent,
-        senderName: senderName,
-        roomId: roomId,
-        onPlayStart: () => {
-          if (this.groupMembersMap[roomId] && this.groupMembersMap[roomId].length >= 2) {
-            this.state.playingGroupId = roomId;
-          } else {
-            this.state.playingUserId = senderId;
-          }
-          // 自動再生中の停止パネルを表示する (DEC-032)
-          this.state.isAutoplaying = true;
-          this.state.autoplaySenderName = senderName;
-          this.updateUI();
-        },
-        onPlayEnd: () => {
-          this.state.playingGroupId = undefined;
-          this.state.playingUserId = undefined;
-          // 自動再生の停止パネルを閉じる (DEC-032)
-          this.state.isAutoplaying = false;
-          this.state.autoplaySenderName = undefined;
-          this.updateUI();
-        }
+        roomId,
+        senderId: inboxItem.senderId,
+        senderName: inboxItem.senderName,
+        audioUrl: inboxItem.audioUrl,
+        textContent: inboxItem.textContent
       });
     }
 
@@ -1446,7 +1495,22 @@ export class App {
   /**
    * 環境設定の保存
    */
-  private async handleSaveSettings(nickname: string, autoplay: boolean, recordMode: 'both'|'audio_only'|'text_only', theme: 'light' | 'dark', callSignEnabled: boolean, discordWebhookUrl?: string, tttWakeWord?: string, bgImageFile?: File | null, bgImageClear?: boolean, bgSize?: 'cover'|'contain', bgBlur?: boolean): Promise<void> {
+  private async handleSaveSettings(settings: SaveSettingsInput): Promise<void> {
+    const {
+      nickname,
+      autoplay,
+      echoSent,
+      recordMode,
+      theme,
+      callSignEnabled,
+      discordWebhookUrl,
+      tttWakeWord,
+      bgImageFile,
+      bgImageClear,
+      bgSize,
+      bgBlur
+    } = settings;
+
     if (this.state.currentUser) {
       try {
         await this.supabaseService.updateNickname(this.state.currentUser.id, nickname);
@@ -1463,6 +1527,9 @@ export class App {
     
     this.state.autoplayEnabled = autoplay;
     localStorage.setItem('chatransceiver_autoplay_enabled', autoplay ? 'true' : 'false');
+
+    this.state.echoSentEnabled = echoSent;
+    localStorage.setItem('chatransceiver_echo_sent_enabled', echoSent ? 'true' : 'false');
 
     this.state.recordMode = recordMode;
     localStorage.setItem('chatransceiver_record_mode', recordMode);
