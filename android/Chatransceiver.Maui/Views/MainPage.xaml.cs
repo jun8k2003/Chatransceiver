@@ -369,12 +369,32 @@ public partial class MainPage : ContentPage
     private void OnFilterIndividualClicked(object? sender, EventArgs e) => SetFilter("individual");
     private void OnFilterGroupClicked(object? sender, EventArgs e) => SetFilter("group");
 
+    private static readonly Color ActiveBlueColor = Color.FromArgb("#3B82F6");
+    private static readonly Color DarkInactiveBgColor = Color.FromArgb("#334155");
+    private static readonly Color LightInactiveBgColor = Color.FromArgb("#E2E8F0");
+    private static readonly Color DarkTextColor = Color.FromArgb("#F8FAFC");
+    private static readonly Color LightTextColor = Color.FromArgb("#0F172A");
+
+    private static void ApplyToggleButtonTheme(Button button, bool isActive)
+    {
+        if (isActive)
+        {
+            button.BackgroundColor = ActiveBlueColor;
+            button.TextColor = Colors.White;
+        }
+        else
+        {
+            button.SetAppThemeColor(Button.BackgroundColorProperty, light: LightInactiveBgColor, dark: DarkInactiveBgColor);
+            button.SetAppThemeColor(Button.TextColorProperty, light: LightTextColor, dark: DarkTextColor);
+        }
+    }
+
     private void SetFilter(string filter)
     {
         _currentFilter = filter;
-        FilterAllBtn.BackgroundColor = filter == "all" ? Color.FromArgb("#3B82F6") : Color.FromArgb("#334155");
-        FilterIndividualBtn.BackgroundColor = filter == "individual" ? Color.FromArgb("#3B82F6") : Color.FromArgb("#334155");
-        FilterGroupBtn.BackgroundColor = filter == "group" ? Color.FromArgb("#3B82F6") : Color.FromArgb("#334155");
+        ApplyToggleButtonTheme(FilterAllBtn, filter == "all");
+        ApplyToggleButtonTheme(FilterIndividualBtn, filter == "individual");
+        ApplyToggleButtonTheme(FilterGroupBtn, filter == "group");
         RebuildUnifiedList();
     }
 
@@ -501,8 +521,8 @@ public partial class MainPage : ContentPage
     {
         ListPaneGrid.IsVisible = !showChat;
         ChatPaneGrid.IsVisible = showChat;
-        TabListButton.BackgroundColor = !showChat ? Color.FromArgb("#3B82F6") : Color.FromArgb("#334155");
-        TabChatButton.BackgroundColor = showChat ? Color.FromArgb("#3B82F6") : Color.FromArgb("#334155");
+        ApplyToggleButtonTheme(TabListButton, !showChat);
+        ApplyToggleButtonTheme(TabChatButton, showChat);
 
         if (showChat)
         {

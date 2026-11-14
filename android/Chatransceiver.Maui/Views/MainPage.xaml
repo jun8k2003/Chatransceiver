@@ -355,7 +355,7 @@
                                             Margin="{Binding BubbleMargin}"
                                             Padding="12,8"
                                             StrokeThickness="1"
-                                            StrokeShape="RoundRectangle 12"
+                                            StrokeShape="{Binding BubbleStrokeShape}"
                                             BackgroundColor="{AppThemeBinding Dark={StaticResource DarkBgSecondary}, Light={StaticResource LightBgSecondary}}"
                                             Stroke="{AppThemeBinding Dark={StaticResource DarkBorder}, Light={StaticResource LightBorder}}">
                                         <Border.Triggers>

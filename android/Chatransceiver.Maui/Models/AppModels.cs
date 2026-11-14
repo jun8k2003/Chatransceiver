@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Microsoft.Maui.Controls.Shapes;
 
 namespace Chatransceiver.Maui.Models;
 
@@ -106,9 +107,15 @@ public class SupabaseMessage : INotifyPropertyChanged
     public string TimeText => CreatedAt.ToLocalTime().ToString("HH:mm");
     public string PlayButtonLabel => HasAudio ? "▶ 音声再生" : "🔊 読み上げ";
 
-    // 自分の発言は右寄せ、相手の発言は左寄せ
+    // 自分の発言は右寄せ（右上角を直角）、相手の発言は左寄せ（左上角を直角）
     public LayoutOptions BubbleHorizontalOptions => IsMine ? LayoutOptions.End : LayoutOptions.Start;
     public Thickness BubbleMargin => IsMine ? new Thickness(56, 4, 0, 4) : new Thickness(0, 4, 56, 4);
+    public IShape BubbleStrokeShape => new RoundRectangle
+    {
+        CornerRadius = IsMine
+            ? new CornerRadius(12, 0, 12, 12)
+            : new CornerRadius(0, 12, 12, 12)
+    };
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public void NotifyChanged()
