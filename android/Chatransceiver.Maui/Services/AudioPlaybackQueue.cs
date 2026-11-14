@@ -23,7 +23,16 @@ public class AudioPlaybackQueue
     public event Action<QueueItem>? PlaybackStarted;
     public event Action? PlaybackEnded;
 
-    public bool IsPlaying => _isPlaying;
+    public bool IsPlaying
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _isPlaying;
+            }
+        }
+    }
 
     /// <summary>
     /// SupabaseMessage から再生可能コンテンツを判定して再生キューに追加する
@@ -46,6 +55,7 @@ public class AudioPlaybackQueue
 
     public void Enqueue(QueueItem item)
     {
+        bool shouldStart = false;
         lock (_lock)
         {
             if (!string.IsNullOrEmpty(item.Id))
@@ -64,9 +74,14 @@ public class AudioPlaybackQueue
             }
 
             _queue.Add(item);
+            if (!_isPlaying && !_isPaused)
+            {
+                _isPlaying = true;
+                shouldStart = true;
+            }
         }
 
-        if (!_isPlaying && !_isPaused)
+        if (shouldStart)
         {
             _ = PlayNextAsync();
         }
@@ -74,100 +89,128 @@ public class AudioPlaybackQueue
 
     private async Task PlayNextAsync()
     {
-        QueueItem? currentItem;
-        lock (_lock)
+        while (true)
         {
-            if (_queue.Count == 0 || _isPaused)
+            QueueItem? currentItem;
+            lock (_lock)
             {
-                _isPlaying = false;
-                NativeAudioService.Instance.ReleaseWakeLock();
-                return;
-            }
-
-            _stopRequested = false;
-            _isPlaying = true;
-            currentItem = _queue[0];
-            _queue.RemoveAt(0);
-        }
-
-        // DeepSleep中でも再生途中でCPUが寝ないよう一時WakeLockを取得
-        NativeAudioService.Instance.AcquireWakeLock(45000);
-
-        try
-        {
-            currentItem.OnPlayStart?.Invoke();
-            PlaybackStarted?.Invoke(currentItem);
-
-            // 1. 再生前チャイム (疑似コールサイン音)
-            if (AppConfig.CallSignEnabled && !_stopRequested)
-            {
-                try
+                if (_queue.Count == 0 || _isPaused)
                 {
-                    await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
+                    _isPlaying = false;
+                    NativeAudioService.Instance.ReleaseWakeLock();
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"CallSign before error: {ex.Message}");
-                }
-            }
 
-            // 2. メッセージ本体 (音声ファイル または ネイティブTTS)
-            if (!_stopRequested)
-            {
-                if (currentItem.Type == "audio" && !string.IsNullOrEmpty(currentItem.Content))
-                {
-                    await NativeAudioService.Instance.PlayRemoteAudioAsync(currentItem.Content);
-                }
-                else if (!string.IsNullOrEmpty(currentItem.Content))
-                {
-                    await NativeAudioService.Instance.SpeakTextAsync(currentItem.Content);
-                }
-            }
-
-            // 3. 再生後チャイム
-            if (AppConfig.CallSignEnabled && !_stopRequested)
-            {
-                try
-                {
-                    await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"CallSign after error: {ex.Message}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"AudioPlaybackQueue error: {ex.Message}");
-        }
-        finally
-        {
-            currentItem.OnPlayEnd?.Invoke();
-            PlaybackEnded?.Invoke();
-
-            if (_stopRequested)
-            {
                 _stopRequested = false;
-                _isPlaying = false;
-                NativeAudioService.Instance.ReleaseWakeLock();
+                _isPlaying = true;
+                currentItem = _queue[0];
+                _queue.RemoveAt(0);
             }
-            else
+
+            // DeepSleep中でも再生途中でCPUが寝ないよう一時WakeLockを取得
+            NativeAudioService.Instance.AcquireWakeLock(45000);
+
+            try
             {
-                await PlayNextAsync();
+                currentItem.OnPlayStart?.Invoke();
+                PlaybackStarted?.Invoke(currentItem);
+
+                // 1. 再生前チャイム (疑似コールサイン音)
+                if (AppConfig.CallSignEnabled && !_stopRequested)
+                {
+                    try
+                    {
+                        await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"CallSign before error: {ex.Message}");
+                    }
+                }
+
+                // 2. メッセージ本体 (音声ファイル または ネイティブTTS)
+                if (!_stopRequested)
+                {
+                    if (currentItem.Type == "audio" && !string.IsNullOrEmpty(currentItem.Content))
+                    {
+                        await NativeAudioService.Instance.PlayRemoteAudioAsync(currentItem.Content);
+                    }
+                    else if (!string.IsNullOrEmpty(currentItem.Content))
+                    {
+                        await NativeAudioService.Instance.SpeakTextAsync(currentItem.Content);
+                    }
+                }
+
+                // 3. 再生後チャイム
+                if (AppConfig.CallSignEnabled && !_stopRequested)
+                {
+                    try
+                    {
+                        await NativeAudioService.Instance.PlayCallSignAssetAsync(0.3f);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"CallSign after error: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"AudioPlaybackQueue error: {ex.Message}");
+            }
+            finally
+            {
+                currentItem.OnPlayEnd?.Invoke();
+            }
+
+            bool shouldContinue;
+            lock (_lock)
+            {
+                if (_stopRequested || _queue.Count == 0 || _isPaused)
+                {
+                    _stopRequested = false;
+                    _isPlaying = false;
+                    shouldContinue = false;
+                }
+                else
+                {
+                    shouldContinue = true;
+                }
+            }
+
+            if (!shouldContinue)
+            {
+                // IsPlaying を false に確定させてから PlaybackEnded を通知する
+                // (UI側が IsPlaying == false を確認してオーバーレイを即座に閉じるため)
+                NativeAudioService.Instance.ReleaseWakeLock();
+                PlaybackEnded?.Invoke();
+                return;
             }
         }
     }
 
     public void Pause()
     {
-        _isPaused = true;
+        lock (_lock)
+        {
+            _isPaused = true;
+        }
     }
 
     public void Resume()
     {
-        _isPaused = false;
-        if (!_isPlaying)
+        bool shouldStart = false;
+        lock (_lock)
+        {
+            _isPaused = false;
+            if (!_isPlaying && _queue.Count > 0)
+            {
+                _isPlaying = true;
+                shouldStart = true;
+            }
+        }
+
+        if (shouldStart)
         {
             _ = PlayNextAsync();
         }

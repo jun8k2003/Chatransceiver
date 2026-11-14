@@ -369,6 +369,11 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
             if (utteranceId == _targetId) _onFinish();
         }
 
+        public override void OnStop(string? utteranceId, bool interrupted)
+        {
+            if (utteranceId == _targetId) _onFinish();
+        }
+
         [Obsolete]
         public override void OnError(string? utteranceId)
         {

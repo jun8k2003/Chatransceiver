@@ -229,8 +229,10 @@ export class AudioManager {
       // 既存の再生・読み上げがあれば停止
       this.stopAllPlayback();
 
-      if (!('speechSynthesis' in window)) {
-        console.warn('このブラウザは音声合成 (SpeechSynthesis) をサポートしていません。');
+      if (!('speechSynthesis' in window) || !text.trim()) {
+        if (!('speechSynthesis' in window)) {
+          console.warn('このブラウザは音声合成 (SpeechSynthesis) をサポートしていません。');
+        }
         resolve();
         return;
       }
@@ -238,25 +240,40 @@ export class AudioManager {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'ja-JP';
       utterance.rate = 1.0; // 読み上げ速度
+      this.activeUtterance = utterance;
 
       // stopAllPlayback() からも強制解決できるよう resolve を保持する (DEC-032)
-      this.activeSpeechResolve = resolve;
+      let timeoutId: number | null = null;
       const done = () => {
-        if (this.activeSpeechResolve === resolve) {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (this.activeUtterance === utterance) {
+          this.activeUtterance = null;
+        }
+        if (this.activeSpeechResolve === done) {
           this.activeSpeechResolve = null;
         }
         resolve(); // Promise の resolve は冪等なので二重呼び出しは無害
       };
+      this.activeSpeechResolve = done;
 
       utterance.onend = done;
       utterance.onerror = done; // エラー時もキューを停滞させないため解決する
+      // TTS の onend が発火しないブラウザ/端末でも再生パネルが残らないよう安全タイムアウトを設定
+      timeoutId = window.setTimeout(done, 25000);
 
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
       window.speechSynthesis.speak(utterance);
     });
   }
 
   private activeAudioResolve: (() => void) | null = null;
   private activeSpeechResolve: (() => void) | null = null;
+  private activeUtterance: SpeechSynthesisUtterance | null = null;
 
   /**
    * 現在実行中のすべての再生・音声読み上げを即座に停止する
