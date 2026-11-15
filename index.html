@@ -388,10 +388,12 @@
 
     <!-- 5a-2. Incoming Webhook 管理モーダル -->
     <div id="incomingWebhookModal" class="modal-overlay">
-      <div class="modal-content settings-modal-content incoming-webhook-modal-content">
-        <h3>🔗 Incoming Webhook 管理</h3>
-        <p class="modal-subtitle">外部のボットや通知ツールから、このチャットルームへメッセージをPOST投稿できるURLを発行・失効します（1ルーム最大5件）。ルームメンバーなら誰でも作成・停止・削除できます。</p>
+      <div class="settings-modal incoming-webhook-modal">
+        <div class="settings-header">
+          <span class="settings-title">🔗 Incoming Webhook 管理</span>
+        </div>
         <div class="settings-body">
+          <div class="setting-desc incoming-webhook-lead">外部のボットや通知ツールから、このチャットルームへメッセージをPOST投稿できるURLを発行・失効します（1ルームにつきURL最大5個）。ルームメンバーなら誰でも作成・停止・削除できます。</div>
           <div id="incomingWebhookList" class="webhook-list"></div>
           <div class="incoming-webhook-create-row">
             <input type="text" id="incomingWebhookLabel" class="setting-input" maxlength="30" placeholder="既定の送信者名 / ラベル（例: 監視Bot、GitHub通知）" />
