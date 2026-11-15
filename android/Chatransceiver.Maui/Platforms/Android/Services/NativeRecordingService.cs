@@ -52,6 +52,10 @@ public class NativeRecordingService
         int bufferSize = Math.Max(minBuf * 2, SampleRate); // 約0.5秒分バッファ
 
         var preferredIn = AudioDeviceService.FindPreferredInputDevice();
+        if (AudioDeviceService.IsBluetoothInputDevice(preferredIn))
+        {
+            await PttConnectionService.StartPttCallAsync();
+        }
         AudioDeviceService.BeginInputRouting(preferredIn);
 
         try
@@ -68,6 +72,7 @@ public class NativeRecordingService
                 _audioRecord.Release();
                 _audioRecord = null;
                 AudioDeviceService.EndInputRouting();
+                PttConnectionService.EndPttCall();
                 return false;
             }
 
@@ -80,6 +85,7 @@ public class NativeRecordingService
         {
             System.Diagnostics.Debug.WriteLine($"AudioRecord init failed: {ex.Message}");
             AudioDeviceService.EndInputRouting();
+            PttConnectionService.EndPttCall();
             return false;
         }
 
@@ -269,6 +275,7 @@ public class NativeRecordingService
         catch { }
         _audioRecord = null;
         AudioDeviceService.EndInputRouting();
+        PttConnectionService.EndPttCall();
 
         string transcript = _latestPartialTranscript;
         if (_speechResultTcs != null)
