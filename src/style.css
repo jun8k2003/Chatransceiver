@@ -2427,29 +2427,50 @@ textarea.webhook-body-input {
   opacity: 1;
   background: var(--bg-hover, rgba(128, 128, 128, 0.15));
 }
+.incoming-webhook-modal {
+  width: 520px;
+  max-width: 100%;
+}
+.incoming-webhook-lead {
+  margin-top: 12px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
 .incoming-webhook-create-row {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .incoming-webhook-create-row .setting-input {
   flex: 1;
   min-width: 0;
 }
+.incoming-webhook-create-row .btn-sm {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .incoming-webhook-help {
   margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
   font-size: 12px;
 }
 .incoming-webhook-help summary {
   cursor: pointer;
   font-weight: 600;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
+  user-select: none;
+}
+.incoming-webhook-help summary:hover {
+  color: var(--color-text-primary);
 }
 .incoming-webhook-sample {
   margin: 6px 0 0;
   padding: 8px 10px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.25);
   font-size: 11px;
   overflow-x: auto;
   white-space: pre-wrap;
