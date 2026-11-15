@@ -153,6 +153,7 @@
             <div class="chat-room-title-row">
               <h3 class="chat-room-title">-</h3>
               <button class="btn-rename-group" title="グループ名を編集">✏️</button>
+              <button id="btnRoomWebhooks" class="btn-room-webhooks" title="Incoming Webhook（外部からの投稿URL）を管理" style="display: none;">🔗</button>
             </div>
             <span class="chat-room-members-text">-</span>
           </div>
@@ -381,6 +382,30 @@
         <div class="settings-footer">
           <button class="btn-sm ghost btn-settings-cancel">閉じる</button>
           <button class="btn-sm primary btn-settings-save">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5a-2. Incoming Webhook 管理モーダル -->
+    <div id="incomingWebhookModal" class="modal-overlay">
+      <div class="modal-content settings-modal-content incoming-webhook-modal-content">
+        <h3>🔗 Incoming Webhook 管理</h3>
+        <p class="modal-subtitle">外部のボットや通知ツールから、このチャットルームへメッセージをPOST投稿できるURLを発行・失効します（1ルーム最大5件）。ルームメンバーなら誰でも作成・停止・削除できます。</p>
+        <div class="settings-body">
+          <div id="incomingWebhookList" class="webhook-list"></div>
+          <div class="incoming-webhook-create-row">
+            <input type="text" id="incomingWebhookLabel" class="setting-input" maxlength="30" placeholder="既定の送信者名 / ラベル（例: 監視Bot、GitHub通知）" />
+            <button id="btnCreateIncomingWebhook" class="btn-sm primary">＋ URLを発行</button>
+          </div>
+          <div id="incomingWebhookError" class="setting-error-msg"></div>
+          <details class="incoming-webhook-help">
+            <summary>📖 POSTリクエストの送り方（サンプル）</summary>
+            <div class="setting-desc">発行されたURLへ <code>Content-Type: application/json</code> で POST してください（Discord Webhook 形式とも互換があります）。</div>
+            <pre class="incoming-webhook-sample">{"content": "サーバーのバックアップが完了しました", "username": "Backup Bot"}</pre>
+          </details>
+        </div>
+        <div class="settings-footer">
+          <button id="btnIncomingWebhookClose" class="btn-sm ghost">閉じる</button>
         </div>
       </div>
     </div>

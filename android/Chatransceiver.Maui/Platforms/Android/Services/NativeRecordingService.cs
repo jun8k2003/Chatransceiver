@@ -90,6 +90,7 @@ public class NativeRecordingService
         }
 
         IsRecording = true;
+        NativeAudioService.Instance.StartSilentRecordingKeeper();
         _recordCts = new CancellationTokenSource();
         var token = _recordCts.Token;
 
@@ -229,9 +230,11 @@ public class NativeRecordingService
     {
         if (!IsRecording)
         {
+            NativeAudioService.Instance.StopSilentRecordingKeeper();
             return new RecordingResult();
         }
         IsRecording = false;
+        NativeAudioService.Instance.StopSilentRecordingKeeper();
 
         try
         {

@@ -3,8 +3,10 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Views;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
+using Chatransceiver.Maui.Platforms.Android.Services;
 using Chatransceiver.Maui.Services;
 
 namespace Chatransceiver.Maui;
@@ -17,6 +19,22 @@ namespace Chatransceiver.Maui;
 public class MainActivity : MauiAppCompatActivity
 {
     public static MainActivity? Instance { get; private set; }
+
+    public override bool DispatchKeyEvent(KeyEvent? e)
+    {
+        if (e != null && TransceiverForegroundService.IsPttKey(e.KeyCode, NativeRecordingService.Instance.IsRecording))
+        {
+            if (TransceiverForegroundService.IsRunning || NativeRecordingService.Instance.IsRecording)
+            {
+                if (e.Action == KeyEventActions.Down && e.RepeatCount == 0)
+                {
+                    TransceiverForegroundService.TryHandleMediaButtonToggle();
+                }
+                return true;
+            }
+        }
+        return base.DispatchKeyEvent(e);
+    }
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {

@@ -2,6 +2,14 @@
 
 このファイルは、議論の末に決定した事項とその理由を記録します。
 
+## DEC-039: Incoming Webhook（外部からのメッセージ投稿）機能の導入 (2026-11-15)
+* **背景**: 外部の監視ツール・CI/CD・GAS・IoT機器などからHTTP POSTでチャットルームへメッセージを流し込み、Web版およびAndroidネイティブ版のTTS自動読み上げで音声通知として受け取れるようにしたい（仕様書: [incoming_webhook_spec.md](./incoming_webhook_spec.md)）。
+* **決定1（URLと権限・失効モデル）**: エンドポイントは `POST .../functions/v1/incoming-webhook/<secret_token>`（`verify_jwt = false`）とし、管理用の主キー `id` とURLパス用の `secret_token` を分離する。対象チャットルーム（`chat_room_members`）のメンバーなら誰でも作成・一時停止（`is_active`）・物理削除（完全失効）できるフラットな権限モデル（`DEC-023` と一貫）を採用する。
+* **決定2（Discord Webhook簡易互換のPOSTエンティティ）**: 送信者名は `username`、本文は `content` / `text` / `message`（および `embeds[0]` の `title`+`description` フォールバック）を受け付け、未知のフィールドは無視する。500文字を超える本文は通知ロストとTTS長時間占有の両方を防ぐため先頭500文字＋`…`に自動切り詰めする。
+* **決定3（`sender_type` による元メンバーとの明確な分離）**: `messages.sender_id = NULL` は既に「退会した元メンバー」の意味を持つため、`messages` に `sender_type ('user' | 'webhook')`・`incoming_webhook_id`・`webhook_sender_name` を追加して構造的に分離する。ファンアウトトリガー `handle_new_message_fanout` は `new.sender_type = 'webhook'` の場合に作成者自身を含むルーム全員の `user_inboxes` へ配信する。
+* **決定4（セキュリティ・不具合対策）**: (1) `send-push-notification` で `sender_type === 'webhook'` のメッセージは既存の Outgoing カスタムWebhook（`user_webhooks`）へ転送しないことで無限ループを遮断する。(2) チャットバブル描画時の HTML エスケープを徹底し Stored XSS とタグ崩れを防止する。(3) 個別チャットでの Webhook 未読（`sender_id = null`）は相手メンバーIDに帰属させ、PWAバッジとの不整合（ゴースト未読）を防ぐ。
+* **決定5（無料枠保護の3層レートリミット）**: DB行数が増えない `ON CONFLICT DO UPDATE` 方式のカウンタテーブルと1トランザクションRPC (`post_via_incoming_webhook`) により、Webhook単位の分次上限（6回/分）・日次上限（200回/日）およびファンアウト人数を加味したプロジェクト月間上限（30,000ユニット/月）を制御する。
+
 ## DEC-038: Androidネイティブアプリ (.NET MAUI) の併存開発とアーキテクチャ方針 (2026-11-13)
 * **背景**: 現行のWeb (PWA) 版では、モバイルブラウザのサンドボックス・OS制約により、(1) 画面ロック（DeepSleep）中のテキストTTS自動読み上げが不可能 (`DEC-025`)、(2) メディアボタンPTTの捕捉に可聴レベル（-60dBFS）の微小ノイズ連続再生と画面常時表示 (`DEC-026`, `DEC-027`) が必要でバッテリー消費が激しい、(3) スマホでの音声録音とクライアント側文字起こしの同時実行がマイク競合により不可能 (`DEC-036`) という3つの壁があった。
 * **決定1（モノレポ併存と技術選定）**: 同一リポジトリの `android/` フォルダ配下に **C# / .NET MAUI (XAML)** でAndroidネイティブアプリを構築し、Web版と同一のSupabase・Firebaseバックエンドを共有する。仕様書は [specifications.md §8](./specifications.md#8-androidネイティブアプリ版-net-maui-仕様-dec-038) に章を分けて一元管理し、今後の仕様拡張の取りこぼしを防ぐ。

@@ -90,6 +90,7 @@ public class SupabaseMessage : INotifyPropertyChanged
     public string RoomId { get; set; } = string.Empty;
     public string SenderId { get; set; } = string.Empty;
     public string SenderName { get; set; } = string.Empty;
+    public bool IsWebhook { get; set; }
     public string? AudioUrl { get; set; }
     public string TextContent { get; set; } = string.Empty;
     public bool IsRevoked { get; set; }

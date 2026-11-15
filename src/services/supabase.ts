@@ -61,11 +61,27 @@ export interface SupabaseGroup {
 
 export interface SupabaseMessage {
   id: string;
-  senderId: string;
+  senderId: string | null;
   senderName: string;
+  isWebhook?: boolean;
   audioUrl?: string;
   textContent: string;
   isRevoked?: boolean;
+  createdAt: Date;
+}
+
+/** Incoming Webhook: 外部からチャットルームへPOST投稿するための設定 */
+export interface IncomingWebhook {
+  id: string;
+  communityId: string;
+  roomId: string;
+  createdBy: string | null;
+  creatorName: string;
+  label: string;
+  secretToken: string;
+  url: string;
+  isActive: boolean;
+  lastUsedAt?: Date;
   createdAt: Date;
 }
 
@@ -453,7 +469,7 @@ export class SupabaseService {
   async getUnreadIndividualCounts(userId: string, communityId: string): Promise<Record<string, { count: number; latestTime: number }>> {
     const { data, error } = await supabase
       .from('user_inboxes')
-      .select('messages!inner(sender_id, created_at), chat_rooms!inner(type, community_id)')
+      .select('messages!inner(sender_id, created_at), chat_rooms!inner(type, community_id, chat_room_members(user_id))')
       .eq('user_id', userId)
       .eq('is_read', false)
       .eq('chat_rooms.type', 'individual')
@@ -466,14 +482,20 @@ export class SupabaseService {
 
     const result: Record<string, { count: number; latestTime: number }> = {};
     (data || []).forEach((item: any) => {
-      const senderId = item.messages?.sender_id;
+      let targetUserId: string | undefined = item.messages?.sender_id || undefined;
+      if (!targetUserId) {
+        // Webhook投稿 (sender_id = null) の場合は個別ルームの相手メンバーに帰属させる (docs/incoming_webhook_spec.md §5.3.2)
+        const roomMembers: any[] = item.chat_rooms?.chat_room_members || [];
+        const partner = roomMembers.find((m: any) => m.user_id && m.user_id !== userId);
+        targetUserId = partner?.user_id;
+      }
       const createdAt = new Date(item.messages?.created_at).getTime();
-      if (senderId) {
-        if (!result[senderId]) {
-          result[senderId] = { count: 0, latestTime: 0 };
+      if (targetUserId) {
+        if (!result[targetUserId]) {
+          result[targetUserId] = { count: 0, latestTime: 0 };
         }
-        result[senderId].count++;
-        result[senderId].latestTime = Math.max(result[senderId].latestTime, createdAt);
+        result[targetUserId].count++;
+        result[targetUserId].latestTime = Math.max(result[targetUserId].latestTime, createdAt);
       }
     });
 
@@ -570,21 +592,28 @@ export class SupabaseService {
   async getRoomMessages(roomId: string): Promise<SupabaseMessage[]> {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, sender_id, audio_url, text_content, is_revoked, created_at, users(name)')
+      .select('id, sender_id, sender_type, webhook_sender_name, audio_url, text_content, is_revoked, created_at, users(name)')
       .eq('room_id', roomId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
 
-    return (data || []).map((item: any) => ({
-      id: item.id,
-      senderId: item.sender_id,
-      senderName: item.users?.name || 'No Name',
-      audioUrl: item.audio_url || undefined,
-      textContent: item.text_content || '',
-      isRevoked: item.is_revoked || false,
-      createdAt: new Date(item.created_at)
-    }));
+    return (data || []).map((item: any) => {
+      const isWebhook = item.sender_type === 'webhook';
+      const senderName = isWebhook
+        ? `🔗 ${item.webhook_sender_name || 'Webhook'}`
+        : (item.users?.name || 'No Name');
+      return {
+        id: item.id,
+        senderId: item.sender_id ?? null,
+        senderName,
+        isWebhook,
+        audioUrl: item.audio_url || undefined,
+        textContent: item.text_content || '',
+        isRevoked: item.is_revoked || false,
+        createdAt: new Date(item.created_at)
+      };
+    });
   }
 
   /**
@@ -727,16 +756,21 @@ export class SupabaseService {
           // メッセージ詳細を取得する
           const { data: msg, error } = await supabase
             .from('messages')
-            .select('id, room_id, sender_id, audio_url, text_content, users(name)')
+            .select('id, room_id, sender_id, sender_type, webhook_sender_name, audio_url, text_content, users(name)')
             .eq('id', payload.new.message_id)
             .single();
 
           if (!error && msg) {
+            const isWebhook = (msg as any).sender_type === 'webhook';
+            const senderName = isWebhook
+              ? `🔗 ${(msg as any).webhook_sender_name || 'Webhook'}`
+              : ((msg.users as any)?.name || 'No Name');
             onNewInboxItem({
               id: msg.id,
               roomId: msg.room_id,
-              senderId: msg.sender_id,
-              senderName: (msg.users as any)?.name || 'No Name',
+              senderId: msg.sender_id ?? null,
+              senderName,
+              isWebhook,
               audioUrl: msg.audio_url,
               textContent: msg.text_content
             });
@@ -776,15 +810,20 @@ export class SupabaseService {
           // 送信者名を含むメッセージ詳細を取得
           const { data: msg, error } = await supabase
             .from('messages')
-            .select('id, sender_id, audio_url, text_content, is_revoked, created_at, users(name)')
+            .select('id, sender_id, sender_type, webhook_sender_name, audio_url, text_content, is_revoked, created_at, users(name)')
             .eq('id', recordId)
             .single();
 
           if (!error && msg) {
-            const transformedMsg = {
+            const isWebhook = (msg as any).sender_type === 'webhook';
+            const senderName = isWebhook
+              ? `🔗 ${(msg as any).webhook_sender_name || 'Webhook'}`
+              : ((msg.users as any)?.name || 'No Name');
+            const transformedMsg: SupabaseMessage = {
               id: msg.id,
-              senderId: msg.sender_id,
-              senderName: (msg.users as any)?.name || 'No Name',
+              senderId: msg.sender_id ?? null,
+              senderName,
+              isWebhook,
               audioUrl: msg.audio_url || undefined,
               textContent: msg.text_content || '',
               isRevoked: msg.is_revoked || false,
@@ -910,5 +949,115 @@ export class SupabaseService {
       console.error('Failed to delete messages:', error);
       throw error;
     }
+  }
+
+  /**
+   * Incoming Webhook のエンドポイントURLを組み立てる
+   */
+  getIncomingWebhookUrl(secretToken: string): string {
+    const base = supabaseUrl.replace(/\/+$/, '');
+    return `${base}/functions/v1/incoming-webhook/${secretToken}`;
+  }
+
+  /**
+   * 推測困難な Incoming Webhook 用トークンを生成する (ctw_ + 24バイト乱数のBase64url = 36文字)
+   */
+  private generateWebhookToken(): string {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64url = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `ctw_${base64url}`;
+  }
+
+  /**
+   * 指定したチャットルームの Incoming Webhook 一覧を取得
+   */
+  async getIncomingWebhooks(roomId: string): Promise<IncomingWebhook[]> {
+    const { data, error } = await supabase
+      .from('incoming_webhooks')
+      .select('id, community_id, room_id, created_by, label, secret_token, is_active, last_used_at, created_at, users(name)')
+      .eq('room_id', roomId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      communityId: row.community_id,
+      roomId: row.room_id,
+      createdBy: row.created_by ?? null,
+      creatorName: row.users?.name || '元メンバー',
+      label: row.label || 'Webhook',
+      secretToken: row.secret_token,
+      url: this.getIncomingWebhookUrl(row.secret_token),
+      isActive: Boolean(row.is_active),
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
+      createdAt: new Date(row.created_at)
+    }));
+  }
+
+  /**
+   * Incoming Webhook を新規作成する
+   */
+  async createIncomingWebhook(communityId: string, roomId: string, createdBy: string, label: string): Promise<IncomingWebhook> {
+    const secretToken = this.generateWebhookToken();
+    const normalizedLabel = label.trim().slice(0, 30) || 'Webhook';
+
+    const { data, error } = await supabase
+      .from('incoming_webhooks')
+      .insert({
+        community_id: communityId,
+        room_id: roomId,
+        created_by: createdBy,
+        label: normalizedLabel,
+        secret_token: secretToken,
+        is_active: true
+      })
+      .select('id, community_id, room_id, created_by, label, secret_token, is_active, last_used_at, created_at, users(name)')
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      communityId: data.community_id,
+      roomId: data.room_id,
+      createdBy: data.created_by ?? null,
+      creatorName: (data.users as any)?.name || '自分',
+      label: data.label || 'Webhook',
+      secretToken: data.secret_token,
+      url: this.getIncomingWebhookUrl(data.secret_token),
+      isActive: Boolean(data.is_active),
+      lastUsedAt: data.last_used_at ? new Date(data.last_used_at) : undefined,
+      createdAt: new Date(data.created_at)
+    };
+  }
+
+  /**
+   * Incoming Webhook の有効/無効を切り替える（一時停止・再開）
+   */
+  async toggleIncomingWebhook(webhookId: string, isActive: boolean): Promise<void> {
+    const { error } = await supabase
+      .from('incoming_webhooks')
+      .update({ is_active: isActive })
+      .eq('id', webhookId);
+
+    if (error) throw error;
+  }
+
+  /**
+   * Incoming Webhook を物理削除する（URLの完全失効）
+   */
+  async deleteIncomingWebhook(webhookId: string): Promise<void> {
+    const { error } = await supabase
+      .from('incoming_webhooks')
+      .delete()
+      .eq('id', webhookId);
+
+    if (error) throw error;
   }
 }

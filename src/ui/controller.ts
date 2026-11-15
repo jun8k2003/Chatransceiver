@@ -6,7 +6,7 @@ import { ChatListUI } from './list';
 import type { MemberItem, GroupItem } from './list';
 import { ChatWindowUI } from './chat';
 import type { MessageItem } from './chat';
-import type { UserWebhook, UserWebhookInput, WebhookMethod } from '../services/supabase';
+import type { IncomingWebhook, UserWebhook, UserWebhookInput, WebhookMethod } from '../services/supabase';
 
 export interface UIState {
   currentUser: { id: string; name: string; discord_webhook_url?: string } | null;
@@ -138,6 +138,17 @@ export class UIController {
   private onSaveWebhook: (webhook: UserWebhookInput) => Promise<void>;
   private onDeleteWebhook: (webhookId: string) => Promise<void>;
 
+  // Incoming Webhook 管理モーダル
+  private incomingWebhookModalEl: HTMLDivElement | null = null;
+  private incomingWebhookListEl: HTMLDivElement | null = null;
+  private incomingWebhookLabelInput: HTMLInputElement | null = null;
+  private btnCreateIncomingWebhook: HTMLButtonElement | null = null;
+  private incomingWebhookErrorEl: HTMLDivElement | null = null;
+  private onOpenIncomingWebhooks: () => Promise<IncomingWebhook[]>;
+  private onCreateIncomingWebhook: (label: string) => Promise<IncomingWebhook[]>;
+  private onToggleIncomingWebhook: (webhookId: string, isActive: boolean) => Promise<IncomingWebhook[]>;
+  private onDeleteIncomingWebhook: (webhookId: string) => Promise<IncomingWebhook[]>;
+
   private static readonly MAX_WEBHOOKS = 5;
 
   constructor(
@@ -171,10 +182,18 @@ export class UIController {
     onToggleTTT: () => void,
     onStopAutoplay: () => void,
     onSaveWebhook: (webhook: UserWebhookInput) => Promise<void>,
-    onDeleteWebhook: (webhookId: string) => Promise<void>
+    onDeleteWebhook: (webhookId: string) => Promise<void>,
+    onOpenIncomingWebhooks: () => Promise<IncomingWebhook[]>,
+    onCreateIncomingWebhook: (label: string) => Promise<IncomingWebhook[]>,
+    onToggleIncomingWebhook: (webhookId: string, isActive: boolean) => Promise<IncomingWebhook[]>,
+    onDeleteIncomingWebhook: (webhookId: string) => Promise<IncomingWebhook[]>
   ) {
     this.onSaveWebhook = onSaveWebhook;
     this.onDeleteWebhook = onDeleteWebhook;
+    this.onOpenIncomingWebhooks = onOpenIncomingWebhooks;
+    this.onCreateIncomingWebhook = onCreateIncomingWebhook;
+    this.onToggleIncomingWebhook = onToggleIncomingWebhook;
+    this.onDeleteIncomingWebhook = onDeleteIncomingWebhook;
     // ログインUI
     this.loginScreenEl = document.getElementById('loginScreen') as HTMLDivElement;
     this.authErrorMessageEl = document.getElementById('authErrorMessage') as HTMLDivElement;
@@ -588,6 +607,174 @@ export class UIController {
     this.autoplaySenderNameEl = document.getElementById('autoplaySenderName') as HTMLSpanElement | null;
     if (this.autoplayStopOverlayEl) {
       this.autoplayStopOverlayEl.addEventListener('click', () => onStopAutoplay());
+    }
+
+    // Incoming Webhook 管理モーダル
+    this.incomingWebhookModalEl = document.getElementById('incomingWebhookModal') as HTMLDivElement | null;
+    this.incomingWebhookListEl = document.getElementById('incomingWebhookList') as HTMLDivElement | null;
+    this.incomingWebhookLabelInput = document.getElementById('incomingWebhookLabel') as HTMLInputElement | null;
+    this.btnCreateIncomingWebhook = document.getElementById('btnCreateIncomingWebhook') as HTMLButtonElement | null;
+    this.incomingWebhookErrorEl = document.getElementById('incomingWebhookError') as HTMLDivElement | null;
+
+    const btnRoomWebhooks = document.getElementById('btnRoomWebhooks') as HTMLButtonElement | null;
+    if (btnRoomWebhooks) {
+      btnRoomWebhooks.addEventListener('click', () => void this.openIncomingWebhookModal());
+    }
+    const btnIncomingWebhookClose = document.getElementById('btnIncomingWebhookClose') as HTMLButtonElement | null;
+    if (btnIncomingWebhookClose && this.incomingWebhookModalEl) {
+      btnIncomingWebhookClose.addEventListener('click', () => {
+        this.incomingWebhookModalEl?.classList.remove('show');
+      });
+    }
+    if (this.incomingWebhookModalEl) {
+      this.incomingWebhookModalEl.addEventListener('click', (e) => {
+        if (e.target === this.incomingWebhookModalEl) {
+          this.incomingWebhookModalEl?.classList.remove('show');
+        }
+      });
+    }
+    if (this.btnCreateIncomingWebhook) {
+      this.btnCreateIncomingWebhook.addEventListener('click', async () => {
+        const label = this.incomingWebhookLabelInput?.value.trim() || '';
+        if (this.incomingWebhookErrorEl) this.incomingWebhookErrorEl.textContent = '';
+        if (this.btnCreateIncomingWebhook) this.btnCreateIncomingWebhook.disabled = true;
+        try {
+          const list = await this.onCreateIncomingWebhook(label);
+          if (this.incomingWebhookLabelInput) this.incomingWebhookLabelInput.value = '';
+          this.renderIncomingWebhookList(list);
+        } catch (e: any) {
+          if (this.incomingWebhookErrorEl) {
+            this.incomingWebhookErrorEl.textContent = e?.message || 'Webhookの作成に失敗しました。';
+          }
+          if (this.btnCreateIncomingWebhook) this.btnCreateIncomingWebhook.disabled = false;
+        }
+      });
+    }
+  }
+
+  /**
+   * Incoming Webhook 管理モーダルを開き、最新の一覧を取得して描画する
+   */
+  private async openIncomingWebhookModal(): Promise<void> {
+    if (!this.incomingWebhookModalEl) return;
+    if (this.incomingWebhookErrorEl) this.incomingWebhookErrorEl.textContent = '';
+    if (this.incomingWebhookListEl) this.incomingWebhookListEl.textContent = '読み込み中...';
+    this.incomingWebhookModalEl.classList.add('show');
+
+    try {
+      const list = await this.onOpenIncomingWebhooks();
+      this.renderIncomingWebhookList(list);
+    } catch (e: any) {
+      if (this.incomingWebhookListEl) this.incomingWebhookListEl.textContent = '';
+      if (this.incomingWebhookErrorEl) {
+        this.incomingWebhookErrorEl.textContent = '一覧の取得に失敗しました（DBマイグレーション未適用の可能性があります）。';
+      }
+    }
+  }
+
+  /**
+   * ルームの Incoming Webhook 一覧を描画する
+   */
+  private renderIncomingWebhookList(webhooks: IncomingWebhook[]): void {
+    if (!this.incomingWebhookListEl) return;
+    this.incomingWebhookListEl.innerHTML = '';
+
+    const reachedMax = webhooks.length >= UIController.MAX_WEBHOOKS;
+    if (this.btnCreateIncomingWebhook) {
+      this.btnCreateIncomingWebhook.disabled = reachedMax;
+      this.btnCreateIncomingWebhook.textContent = reachedMax
+        ? `上限 (${UIController.MAX_WEBHOOKS}件)`
+        : '＋ URLを発行';
+    }
+    if (this.incomingWebhookLabelInput) {
+      this.incomingWebhookLabelInput.disabled = reachedMax;
+    }
+
+    if (webhooks.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'setting-desc';
+      emptyEl.textContent = 'このルームにはまだ Incoming Webhook がありません。';
+      this.incomingWebhookListEl.appendChild(emptyEl);
+      return;
+    }
+
+    for (const w of webhooks) {
+      const item = document.createElement('div');
+      item.className = 'webhook-item' + (w.isActive ? '' : ' disabled');
+
+      // 有効/無効トグル
+      const toggle = document.createElement('label');
+      toggle.className = 'toggle';
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.checked = w.isActive;
+      check.addEventListener('change', async () => {
+        check.disabled = true;
+        try {
+          const updated = await this.onToggleIncomingWebhook(w.id, check.checked);
+          this.renderIncomingWebhookList(updated);
+        } catch {
+          check.checked = !check.checked;
+          if (this.incomingWebhookErrorEl) this.incomingWebhookErrorEl.textContent = '状態の更新に失敗しました。';
+        } finally {
+          check.disabled = false;
+        }
+      });
+      const track = document.createElement('span');
+      track.className = 'toggle-track';
+      toggle.appendChild(check);
+      toggle.appendChild(track);
+
+      // ラベル・作成者・最終利用・URL
+      const labelArea = document.createElement('span');
+      labelArea.className = 'webhook-item-label';
+      const lastUsedStr = w.lastUsedAt
+        ? ` / 最終利用: ${w.lastUsedAt.toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+        : ' / 未使用';
+      labelArea.textContent = `🔗 ${w.label}（作成: ${w.creatorName}${lastUsedStr}）`;
+
+      const urlEl = document.createElement('span');
+      urlEl.className = 'webhook-item-url';
+      urlEl.textContent = w.url;
+      labelArea.appendChild(urlEl);
+
+      // URLコピーボタン
+      const btnCopy = document.createElement('button');
+      btnCopy.className = 'btn-copy';
+      btnCopy.title = 'Webhook URLをコピー';
+      btnCopy.textContent = '📋';
+      btnCopy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(w.url);
+          btnCopy.textContent = '✓';
+          setTimeout(() => { btnCopy.textContent = '📋'; }, 1500);
+        } catch {
+          prompt('以下のWebhook URLをコピーしてください:', w.url);
+        }
+      });
+
+      // 削除（完全失効）ボタン
+      const btnDelete = document.createElement('button');
+      btnDelete.className = 'btn-copy';
+      btnDelete.title = '削除してURLを失効させる';
+      btnDelete.textContent = '🗑️';
+      btnDelete.addEventListener('click', async () => {
+        if (!confirm(`Webhook「${w.label}」を削除してURLを完全に失効させますか？\n（削除すると同じURLは二度と使えなくなります）`)) return;
+        btnDelete.disabled = true;
+        try {
+          const updated = await this.onDeleteIncomingWebhook(w.id);
+          this.renderIncomingWebhookList(updated);
+        } catch {
+          if (this.incomingWebhookErrorEl) this.incomingWebhookErrorEl.textContent = '削除に失敗しました。';
+          btnDelete.disabled = false;
+        }
+      });
+
+      item.appendChild(toggle);
+      item.appendChild(labelArea);
+      item.appendChild(btnCopy);
+      item.appendChild(btnDelete);
+      this.incomingWebhookListEl.appendChild(item);
     }
   }
 

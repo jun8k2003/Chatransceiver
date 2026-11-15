@@ -480,7 +480,7 @@ public class SupabaseClientService
     public async Task<Dictionary<string, (int Count, long LatestTime)>> GetUnreadIndividualCountsAsync(string userId, string communityId)
     {
         var result = new Dictionary<string, (int Count, long LatestTime)>();
-        var url = $"/rest/v1/user_inboxes?user_id=eq.{userId}&is_read=eq.false&select=messages!inner(sender_id,created_at),chat_rooms!inner(type,community_id)&chat_rooms.type=eq.individual&chat_rooms.community_id=eq.{communityId}";
+        var url = $"/rest/v1/user_inboxes?user_id=eq.{userId}&is_read=eq.false&select=messages!inner(sender_id,created_at),chat_rooms!inner(type,community_id,chat_room_members(user_id))&chat_rooms.type=eq.individual&chat_rooms.community_id=eq.{communityId}";
 
         using var req = CreateRequest(HttpMethod.Get, url);
         using var res = await _http.SendAsync(req);
@@ -490,8 +490,30 @@ public class SupabaseClientService
         foreach (var item in doc.RootElement.EnumerateArray())
         {
             if (!item.TryGetProperty("messages", out var msg) || msg.ValueKind != JsonValueKind.Object) continue;
-            var senderId = msg.TryGetProperty("sender_id", out var sid) ? sid.GetString() : null;
-            if (string.IsNullOrEmpty(senderId)) continue;
+            var targetUserId = msg.TryGetProperty("sender_id", out var sid) && sid.ValueKind == JsonValueKind.String
+                ? sid.GetString()
+                : null;
+
+            if (string.IsNullOrEmpty(targetUserId) &&
+                item.TryGetProperty("chat_rooms", out var cr) &&
+                cr.ValueKind == JsonValueKind.Object &&
+                cr.TryGetProperty("chat_room_members", out var crmArr) &&
+                crmArr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var mem in crmArr.EnumerateArray())
+                {
+                    var uid = mem.TryGetProperty("user_id", out var uProp) && uProp.ValueKind == JsonValueKind.String
+                        ? uProp.GetString()
+                        : null;
+                    if (!string.IsNullOrEmpty(uid) && uid != userId)
+                    {
+                        targetUserId = uid;
+                        break;
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(targetUserId)) continue;
 
             long createdMs = 0;
             if (msg.TryGetProperty("created_at", out var ca) && DateTimeOffset.TryParse(ca.GetString(), out var dto))
@@ -499,13 +521,13 @@ public class SupabaseClientService
                 createdMs = dto.ToUnixTimeMilliseconds();
             }
 
-            if (result.TryGetValue(senderId!, out var prev))
+            if (result.TryGetValue(targetUserId!, out var prev))
             {
-                result[senderId!] = (prev.Count + 1, Math.Max(prev.LatestTime, createdMs));
+                result[targetUserId!] = (prev.Count + 1, Math.Max(prev.LatestTime, createdMs));
             }
             else
             {
-                result[senderId!] = (1, createdMs);
+                result[targetUserId!] = (1, createdMs);
             }
         }
         return result;
@@ -733,7 +755,7 @@ public class SupabaseClientService
     /// </summary>
     public async Task<List<SupabaseMessage>> GetRoomMessagesAsync(string roomId, string currentUserId)
     {
-        var url = $"/rest/v1/messages?room_id=eq.{roomId}&select=id,room_id,sender_id,audio_url,text_content,is_revoked,created_at,users(name)&order=created_at.asc";
+        var url = $"/rest/v1/messages?room_id=eq.{roomId}&select=id,room_id,sender_id,sender_type,webhook_sender_name,audio_url,text_content,is_revoked,created_at,users(name)&order=created_at.asc";
         using var req = CreateRequest(HttpMethod.Get, url);
         using var res = await _http.SendAsync(req);
         res.EnsureSuccessStatusCode();
@@ -752,8 +774,16 @@ public class SupabaseClientService
         var senderId = el.TryGetProperty("sender_id", out var sid) && sid.ValueKind == JsonValueKind.String
             ? sid.GetString()!
             : "";
+        var isWebhook = el.TryGetProperty("sender_type", out var st) && st.ValueKind == JsonValueKind.String && st.GetString() == "webhook";
         var senderName = "No Name";
-        if (el.TryGetProperty("users", out var u) && u.ValueKind == JsonValueKind.Object && u.TryGetProperty("name", out var n))
+        if (isWebhook)
+        {
+            var whName = el.TryGetProperty("webhook_sender_name", out var wsn) && wsn.ValueKind == JsonValueKind.String
+                ? wsn.GetString()
+                : null;
+            senderName = $"🔗 {(string.IsNullOrWhiteSpace(whName) ? "Webhook" : whName)}";
+        }
+        else if (el.TryGetProperty("users", out var u) && u.ValueKind == JsonValueKind.Object && u.TryGetProperty("name", out var n))
         {
             senderName = n.GetString() ?? "No Name";
         }
@@ -770,11 +800,12 @@ public class SupabaseClientService
             RoomId = el.TryGetProperty("room_id", out var rid) ? (rid.GetString() ?? "") : "",
             SenderId = senderId,
             SenderName = senderName,
+            IsWebhook = isWebhook,
             AudioUrl = el.TryGetProperty("audio_url", out var au) && au.ValueKind == JsonValueKind.String ? au.GetString() : null,
             TextContent = el.TryGetProperty("text_content", out var tc) && tc.ValueKind == JsonValueKind.String ? (tc.GetString() ?? "") : "",
             IsRevoked = el.TryGetProperty("is_revoked", out var ir) && ir.ValueKind == JsonValueKind.True,
             CreatedAt = createdAt,
-            IsMine = senderId == currentUserId
+            IsMine = !isWebhook && !string.IsNullOrEmpty(senderId) && senderId == currentUserId
         };
     }
 

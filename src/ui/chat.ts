@@ -1,11 +1,21 @@
 export interface MessageItem {
   id: string;
   senderName: string;
-  senderId: string;
+  senderId: string | null;
+  isWebhook?: boolean;
   audioUrl?: string;     // 音声データパス（存在しない場合はテキストのみ）
   textContent: string;   // 文字起こし、または直接入力テキスト
   isRevoked?: boolean;
   createdAt: Date;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /**
@@ -35,6 +45,7 @@ export class ChatWindowUI {
   private cancelRecBtnEl: HTMLButtonElement;
 
   private renameBtnEl: HTMLButtonElement;
+  private roomWebhooksBtnEl: HTMLButtonElement | null;
   private isRenaming: boolean = false;
 
   private onSendText: (text: string) => void;
@@ -86,6 +97,7 @@ export class ChatWindowUI {
     this.roomMembersEl = container.querySelector('.chat-room-members-text') as HTMLSpanElement;
     this.backBtnEl = container.querySelector('.btn-back-to-sidebar') as HTMLButtonElement;
     this.renameBtnEl = container.querySelector('.btn-rename-group') as HTMLButtonElement;
+    this.roomWebhooksBtnEl = container.querySelector('.btn-room-webhooks') as HTMLButtonElement | null;
 
     // 録音モーダルのバインド
     this.modalEl = document.getElementById('recordingModal') as HTMLDivElement;
@@ -246,6 +258,10 @@ export class ChatWindowUI {
 
     // グループ名編集ボタンはグループチャット表示時のみ (DEC-023)
     this.renameBtnEl.style.display = (state === 'chat' && canRename) ? 'block' : 'none';
+    // Incoming Webhook 管理ボタンはDB上に存在するルーム表示時のみ
+    if (this.roomWebhooksBtnEl) {
+      this.roomWebhooksBtnEl.style.display = state === 'chat' ? 'block' : 'none';
+    }
 
     // 1. 未接続プレースホルダー
     if (state === 'unconnected') {
@@ -302,16 +318,17 @@ export class ChatWindowUI {
     }
 
     messages.forEach((msg) => {
-      const isOutgoing = msg.senderId === currentUserId;
+      const isOutgoing = !msg.isWebhook && msg.senderId !== null && msg.senderId === currentUserId;
       const bubbleEl = document.createElement('div');
       bubbleEl.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'} ${msg.isRevoked ? 'message-revoked' : ''}`;
       bubbleEl.dataset.msgId = msg.id;
       
       const timeStr = msg.createdAt.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const safeSender = isOutgoing ? 'あなた' : escapeHtml(msg.senderName);
 
       if (msg.isRevoked) {
         bubbleEl.innerHTML = `
-          <span class="message-sender">${isOutgoing ? 'あなた' : msg.senderName}</span>
+          <span class="message-sender">${safeSender}</span>
           <div class="message-body">
             <span class="message-text">この発言は取り消しされました。</span>
           </div>
@@ -321,12 +338,13 @@ export class ChatWindowUI {
         // 音声再生ボタン (▶) の表示判定。音声URLが空のテキストメッセージでもTTS再生用として表示 (DEC-018)
         const playBtnHtml = `<button class="btn-play-msg" data-msg-id="${msg.id}">▶</button>`;
         const deleteBtnHtml = isOutgoing ? `<button class="btn-delete-msg" data-msg-id="${msg.id}" title="発言を取り消す">🗑️</button>` : '';
+        const safeText = escapeHtml(msg.textContent);
 
         bubbleEl.innerHTML = `
-          <span class="message-sender">${isOutgoing ? 'あなた' : msg.senderName}</span>
+          <span class="message-sender">${safeSender}</span>
           <div class="message-body">
             ${playBtnHtml}
-            <span class="message-text">${msg.textContent}</span>
+            <span class="message-text">${safeText}</span>
             ${deleteBtnHtml}
           </div>
           <span class="message-time">${timeStr}</span>
