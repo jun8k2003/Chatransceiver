@@ -56,6 +56,9 @@ public class ChatFcmService : FirebaseMessagingService
 
         bool autoPlay = AppConfig.AutoPlayEnabled;
 
+        // 0. 着信・プッシュ通知バイブレーション (環境設定がONの場合)
+        NativeAudioService.Instance.VibrateIncomingIfEnabled(messageId);
+
         // 1. システム通知を表示 (自動再生ON時は通知音を消してコールサイン音との被り・音量低下を防止、OFF時は通知音を鳴らす)
         ShowSystemNotification(
             $"[新着] {senderName} ({communityName})",
@@ -122,10 +125,11 @@ public class ChatFcmService : FirebaseMessagingService
 
         var channel = new NotificationChannel(channelId, channelName, importance);
         channel.SetShowBadge(showBadge);
+        // バイブレーションは AppConfig.VibrationEnabled に従い NativeAudioService 側で統一制御する
+        channel.EnableVibration(false);
         if (silent)
         {
             channel.SetSound(null, null);
-            channel.EnableVibration(false);
         }
         nm.CreateNotificationChannel(channel);
     }

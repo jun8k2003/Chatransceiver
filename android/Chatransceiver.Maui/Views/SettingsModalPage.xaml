@@ -128,6 +128,19 @@
                                        TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
                             </VerticalStackLayout>
                             <Switch x:Name="CallSignSwitch"
+                                     Grid.Column="1"
+                                     OnColor="{StaticResource PrimaryBlue}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout>
+                                <Label Text="着信・通知時のバイブレーション"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                <Label Text="メッセージ着信やプッシュ通知の受信時に端末を振動させます"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                            <Switch x:Name="VibrationSwitch"
                                     Grid.Column="1"
                                     OnColor="{StaticResource PrimaryBlue}" />
                         </Grid>

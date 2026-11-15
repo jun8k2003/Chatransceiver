@@ -2,6 +2,7 @@ using Android.Content;
 using Android.Media;
 using Android.OS;
 using Android.Speech.Tts;
+using Chatransceiver.Maui.Services;
 using Java.Util;
 using Locale = Java.Util.Locale;
 using TextToSpeech = Android.Speech.Tts.TextToSpeech;
@@ -31,6 +32,10 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
 
     private readonly object _silentKeeperLock = new();
     private AudioTrack? _silentKeeperTrack;
+
+    private readonly object _vibrateLock = new();
+    private readonly HashSet<string> _vibratedMessageIds = new(StringComparer.Ordinal);
+    private long _lastVibrateMs;
 
     /// <summary>
     /// 再生中・録音中のみCPUをスリープさせない一時WakeLockを取得する（安全タイムアウト付き）
@@ -524,6 +529,87 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
                 track.Dispose();
             }
             catch { }
+        }
+    }
+
+    /// <summary>
+    /// メッセージ着信時・プッシュ通知受信時にバイブレーション設定がONであれば端末を振動させる。
+    /// FCM とフォアグラウンド Realtime の双方で同一メッセージを受信した際の二重振動を防止する。
+    /// </summary>
+    public void VibrateIncomingIfEnabled(string? messageId = null)
+    {
+        if (!AppConfig.VibrationEnabled) return;
+
+        lock (_vibrateLock)
+        {
+            if (!string.IsNullOrEmpty(messageId))
+            {
+                if (!_vibratedMessageIds.Add(messageId))
+                {
+                    return;
+                }
+                if (_vibratedMessageIds.Count > 200)
+                {
+                    _vibratedMessageIds.Clear();
+                    _vibratedMessageIds.Add(messageId);
+                }
+            }
+
+            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if (now - _lastVibrateMs < 1200) return;
+            _lastVibrateMs = now;
+        }
+
+        try
+        {
+            var context = global::Android.App.Application.Context;
+            Vibrator? vibrator;
+            if (OperatingSystem.IsAndroidVersionAtLeast(31))
+            {
+                var vm = (VibratorManager?)context.GetSystemService(Context.VibratorManagerService);
+                vibrator = vm?.DefaultVibrator;
+            }
+            else
+            {
+#pragma warning disable CS0618, CA1422
+                vibrator = (Vibrator?)context.GetSystemService(Context.VibratorService);
+#pragma warning restore CS0618, CA1422
+            }
+
+            if (vibrator == null || !vibrator.HasVibrator) return;
+
+            long[] pattern = { 0, 180, 100, 180 };
+            if (OperatingSystem.IsAndroidVersionAtLeast(26))
+            {
+                var effect = VibrationEffect.CreateWaveform(pattern, -1);
+                var attrs = new AudioAttributes.Builder()
+                    ?.SetUsage(AudioUsageKind.Notification)
+                    ?.SetContentType(AudioContentType.Sonification)
+                    ?.Build();
+                if (effect != null)
+                {
+                    if (attrs != null)
+                    {
+#pragma warning disable CA1422
+                        vibrator.Vibrate(effect, attrs);
+#pragma warning restore CA1422
+                    }
+                    else
+                    {
+                        vibrator.Vibrate(effect);
+                    }
+                }
+            }
+            else
+            {
+#pragma warning disable CS0618, CA1422
+                vibrator.Vibrate(pattern, -1);
+#pragma warning restore CS0618, CA1422
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"VibrateIncomingIfEnabled error: {ex.Message}");
         }
     }
 

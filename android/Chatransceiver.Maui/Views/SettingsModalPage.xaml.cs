@@ -26,6 +26,7 @@ public partial class SettingsModalPage : ContentPage
         AutoPlaySwitch.IsToggled = AppConfig.AutoPlayEnabled;
         EchoSentSwitch.IsToggled = AppConfig.EchoSentEnabled;
         CallSignSwitch.IsToggled = AppConfig.CallSignEnabled;
+        VibrationSwitch.IsToggled = AppConfig.VibrationEnabled;
         UnreadBadgeSwitch.IsToggled = AppConfig.UnreadBadgeEnabled;
         LightThemeSwitch.IsToggled = AppConfig.Theme == "light";
         SupabaseUrlEntry.Text = AppConfig.SupabaseUrl;
@@ -128,6 +129,7 @@ public partial class SettingsModalPage : ContentPage
             AppConfig.AutoPlayEnabled = AutoPlaySwitch.IsToggled;
             AppConfig.EchoSentEnabled = EchoSentSwitch.IsToggled;
             AppConfig.CallSignEnabled = CallSignSwitch.IsToggled;
+            AppConfig.VibrationEnabled = VibrationSwitch.IsToggled;
             AppConfig.UnreadBadgeEnabled = UnreadBadgeSwitch.IsToggled;
 #if ANDROID
             if (!AppConfig.UnreadBadgeEnabled)
