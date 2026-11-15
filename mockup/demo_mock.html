@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chatransceiver Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+      background: #0b0d17;
+      color: #f1f5f9;
+      width: 1280px;
+      height: 640px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 14px;
+    }
+
+    .web-frame-wrap {
+      width: 916px;
+      height: 612px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+      background: #11131f;
+      flex-shrink: 0;
+    }
+
+    .web-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+
+    /* Android .NET MAUI (MainPage.xaml 準拠) */
+    .phone-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .phone-caption {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .maui-pill {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(59, 130, 246, 0.18);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+
+    .android-phone {
+      width: 320px;
+      height: 586px;
+      background: #0f172a;
+      border: 5px solid #2b3248;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .maui-header {
+      background: #181b29;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .maui-logo {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+    }
+
+    .maui-comm-pill {
+      flex: 1;
+      height: 30px;
+      border-radius: 15px;
+      background: #1f2333;
+      color: #f1f5f9;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    .maui-icon-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      background: #1f2333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+
+    .maui-icon-btn.on {
+      background: rgba(59, 130, 246, 0.28);
+      border: 1px solid rgba(59, 130, 246, 0.6);
+    }
+
+    .maui-tabs {
+      background: #181b29;
+      padding: 6px 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .maui-tab {
+      height: 30px;
+      border-radius: 10px;
+      background: #1f2333;
+      color: #f1f5f9;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .maui-tab.active {
+      background: #3b82f6;
+      color: #ffffff;
+    }
+
+    .maui-chat-list {
+      flex: 1;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+    }
+
+    .maui-msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 86%;
+    }
+
+    .maui-msg.in { align-self: flex-start; }
+    .maui-msg.out { align-self: flex-end; align-items: flex-end; }
+
+    .maui-bubble {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 8px 10px;
+      font-size: 11.5px;
+      line-height: 1.4;
+      color: #f1f5f9;
+    }
+
+    .maui-msg.out .maui-bubble {
+      background: #1e3a8a;
+      border-color: rgba(59, 130, 246, 0.45);
+    }
+
+    .maui-sender {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-bottom: 2px;
+    }
+
+    .maui-time {
+      font-size: 9.5px;
+      color: #94a3b8;
+      margin-top: 2px;
+      padding: 0 4px;
+    }
+
+    .maui-footer {
+      background: #181b29;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 9px 10px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .maui-ptt-btn {
+      height: 42px;
+      border-radius: 21px;
+      background: #f97316;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .maui-text-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .maui-entry {
+      flex: 1;
+      height: 34px;
+      border-radius: 12px;
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #64748b;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+    }
+
+    .maui-send {
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 12px;
+      background: #3b82f6;
+      color: #fff;
+      font-size: 11.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Android RecordingModalOverlay (MainPage.xaml 準拠) */
+    .maui-rec-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      padding: 16px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    .maui-rec-overlay.show { display: flex; }
+
+    .maui-rec-card {
+      width: 100%;
+      background: #181b29;
+      border: 2px solid #f97316;
+      border-radius: 20px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .maui-rec-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #f97316;
+    }
+
+    .maui-rec-progress {
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .maui-rec-progress-bar {
+      width: 82%;
+      height: 100%;
+      background: #f97316;
+    }
+
+    .maui-rec-transcript {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 10px;
+      min-height: 52px;
+      font-size: 12px;
+      color: #f1f5f9;
+    }
+
+    .maui-rec-btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .maui-rec-btn {
+      height: 36px;
+      border-radius: 12px;
+      background: #1f2333;
+      color: #f1f5f9;
+      font-size: 11.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .maui-rec-btn.send {
+      background: #3b82f6;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="web-frame-wrap">
+    <iframe id="webFrame" class="web-frame" src="./web_app_mock.html"></iframe>
+  </div>
+
+  <div class="phone-col">
+    <div class="phone-caption">
+      <span>📱 Androidネイティブ版</span>
+      <span class="maui-pill">.NET MAUI</span>
+    </div>
+    <div class="android-phone">
+      <div class="maui-header">
+        <img src="../public/chatora.png" class="maui-logo" alt="logo" />
+        <div class="maui-comm-pill">🌐 ops-team</div>
+        <div class="maui-icon-btn on">🔔</div>
+        <div class="maui-icon-btn on">🎧</div>
+        <div class="maui-icon-btn">⚙️</div>
+      </div>
+
+      <div class="maui-tabs">
+        <div class="maui-tab">👥 メンバー・グループ</div>
+        <div class="maui-tab active">💬 チャット・PTT発話</div>
+      </div>
+
+      <div class="maui-chat-list" id="mauiChatList">
+        <div class="maui-msg in">
+          <div class="maui-bubble">
+            <div class="maui-sender">#2 佐藤</div>
+            <div>▶ 資材の搬入が完了しました。ゲート前でお待ちしてます！</div>
+          </div>
+          <div class="maui-time">2026/11/15 15:04</div>
+        </div>
+
+        <div class="maui-msg in">
+          <div class="maui-bubble">
+            <div class="maui-sender">🔗 搬入管理Webhook</div>
+            <div>【自動通知】第2ゲートのトラック受付が完了しました。</div>
+          </div>
+          <div class="maui-time">2026/11/15 15:05</div>
+        </div>
+      </div>
+
+      <div class="maui-footer">
+        <div class="maui-ptt-btn">🎙️ TALK（タップして録音開始）</div>
+        <div class="maui-text-row">
+          <div class="maui-entry">メッセージを入力... (TTS)</div>
+          <div class="maui-send">➤ 送信</div>
+        </div>
+      </div>
+
+      <div class="maui-rec-overlay" id="mauiRecOverlay">
+        <div class="maui-rec-card">
+          <div class="maui-rec-head">
+            <span>🔴 音声録音中...</span>
+            <span style="color:#f1f5f9;">00:13</span>
+          </div>
+          <div class="maui-rec-progress"><div class="maui-rec-progress-bar"></div></div>
+          <div style="font-size:11px; color:#94a3b8; text-align:center;">話しかけてください（最大15秒）</div>
+          <div class="maui-rec-transcript">承知です！気をつけてお越しください！</div>
+          <div class="maui-rec-btns">
+            <div class="maui-rec-btn">⏹️ 停止して確認</div>
+            <div class="maui-rec-btn send">📤 送信する</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const webFrame = document.getElementById('webFrame');
+    const mauiChatList = document.getElementById('mauiChatList');
+    const mauiRecOverlay = document.getElementById('mauiRecOverlay');
+
+    window.runDemoStep = function(step) {
+      const sendToWeb = (s) => webFrame.contentWindow.postMessage(s, '*');
+      if (step === 'start_web_ptt') {
+        sendToWeb('open_recording');
+      } else if (step === 'web_ptt_mid') {
+        sendToWeb('recording_mid');
+      } else if (step === 'send_web_ptt') {
+        sendToWeb('send_recording');
+        const msg = document.createElement('div');
+        msg.className = 'maui-msg in';
+        msg.innerHTML = `
+          <div class="maui-bubble">
+            <div class="maui-sender">田中</div>
+            <div>■ 了解しました！今すぐゲートへ向かいます！</div>
+          </div>
+          <div class="maui-time">2026/11/15 15:06</div>
+        `;
+        mauiChatList.appendChild(msg);
+        mauiChatList.scrollTop = mauiChatList.scrollHeight;
+      } else if (step === 'android_bt_ptt') {
+        mauiRecOverlay.classList.add('show');
+      } else if (step === 'android_send') {
+        mauiRecOverlay.classList.remove('show');
+        const msg = document.createElement('div');
+        msg.className = 'maui-msg out';
+        msg.innerHTML = `
+          <div class="maui-bubble">
+            <div class="maui-sender">鈴木 (自分)</div>
+            <div>▶ 承知です！気をつけてお越しください！</div>
+          </div>
+          <div class="maui-time">2026/11/15 15:06</div>
+        `;
+        mauiChatList.appendChild(msg);
+        mauiChatList.scrollTop = mauiChatList.scrollHeight;
+        sendToWeb('receive_android');
+      } else if (step === 'show_settings') {
+        sendToWeb('open_settings');
+      } else if (step === 'hide_settings') {
+        sendToWeb('close_settings');
+      }
+    };
+  </script>
+</body>
+</html>

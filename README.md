@@ -1,96 +1,98 @@
 # Chatransceiver
 
-> **15秒トランシーバー！文字起こし付きチャット**
+> **15秒トランシーバー！文字起こし付き・半二重ボイスチャット（Web / PWA & Androidネイティブ対応）**
 
-![Chatransceiver Screenshot](./README_img/Chatransceiver.gif_1280x546.gif)
+![Chatransceiver Demo](./README_img/Chatransceiver_demo.gif)
+
+---
 
 ## 📖 概要 (What is this?)
 
-トランシーバーアプリ<br>
-Google Chromeで動作（PWA対応）<br>
-１メッセージあたり最大15秒の音声録音<br>
-音声は文字おこししてチャットテキスト化<br>
-文字入力は音声読み上げ（TTS）<br>
-アプリを閉じても通知（PC,Android）<br>
-チャット履歴から何度もリプレイ可<br>
-DiscordのWebhookに通知機能あり（上級者向け）<br>
+Chatransceiver は、チャットUIの視認性とトランシーバーの即時性・操作性を融合した **半二重通信グループボイスチャットアプリ** です。  
+Web / PWA 版（Chrome・iOS・Androidブラウザ）に加え、**Androidネイティブ版（.NET MAUI）** をモノレポで提供しており、同一の Supabase バックエンドおよび Firebase Cloud Messaging (FCM) を共有してリアルタイムに連携します。
 
-### ✨ 主な機能 (Features)
+* １メッセージあたり **最大15秒の音声PTT録音**
+* 音声は **リアルタイム文字起こし**（PC Web Speech API）＆ **事後文字起こし**（スマホ・録音のみ向け Google Speech-to-Text）で自動テキスト化
+* テキスト入力は受信側で **音声合成（TTS）による自動読み上げ**
+* アプリを閉じていても **バックグラウンド通知・再生**（PC / Android）
+* チャット履歴からいつでもリプレイ可能
+* **Discord / カスタムWebhook / Incoming Webhook** による外部システム連携対応
 
-* **音声PTT送信**: 最大15秒の音声録音。発話内容は自動で文字おこし（Web Speech API）。
-* **テキスト送信＆読み上げ**: テキスト入力での送信も可能。受信側では音声合成（TTS）で自動読み上げ。
-* **録音モードの選択**: 「両方（音声＋文字おこし）」「録音のみ」「文字おこしのみ」から選択可能。
-* **グローバル自動再生**: 表示中・未接続を問わず、着信メッセージを再生キューで順次自動再生。
-* **TTT (Trigger word To Talk) ハンズフリー**: ウェイクワード（合言葉）を音声検知して自動で録音・送信するハンズフリーモード。
-* **常時表示 (Screen Wake Lock)**: 画面の自動ロック・消灯を抑止し、受信待ち中もアプリを動かし続ける。
-* **メディアボタンPTT**: イヤフォン等の再生/停止ボタンで録音開始・停止＋送信を操作。
-* **発言の取り消し**: 自分が送ったメッセージを取り消し（音声ファイル削除＋テキストクリア）。
-* **グループチャット**: 複数人選択でグループを自動作成。グループ名（あだ名）はメンバーなら誰でも編集可能。
-* **疑似コールサイン音**: 再生の前後に効果音を鳴らすトランシーバー風の演出（ON/OFF可）。
-* **外観カスタマイズ**: ダーク／ライトテーマ、背景画像（ぼかし対応）の設定。
-* **バックグラウンド通知**: Webプッシュ（FCM）／Discord Webhook 通知／カスタムWebhook（任意URLへのHTTP送信。GAS経由のメール転送等が可能・上級者向け）。
-* **PWA未読バッジ**: 対応環境（iOS 16.4以降のホーム画面PWAなど）では、全コミュニティの未読合計をアイコンに表示。起動・画面復帰・着信・既読時に更新し、未読ゼロやログアウト時に解除します。通知の許可とOS側のバッジ設定が必要です。Androidは通知に連動した端末側の表示になります。
-* **2種類のログイン**: Googleログイン、または Magic Link（メールリンク）認証。
+---
+
+## ✨ 主な機能 (Features)
+
+### 🎙 音声・トランシーバー機能
+* **音声PTT送信**: 最大15秒の音声録音。録音モードは「両方（音声＋文字おこし）」「録音のみ」「文字おこしのみ」から選択可能（スマホWebはデフォルト「音声のみ」）。
+* **事後文字起こし (Google STT)**: スマホや「録音のみ」設定で送信された音声メッセージも、Edge Function (`transcribe-audio-message`) 経由で後から自動文字起こししてタイムラインに反映。
+* **テキスト送信＆TTS読み上げ**: テキスト送信したメッセージも、受信側では音声合成（TTS）で自動読み上げ。
+* **グローバル自動再生＆コールサイン音**: 表示中・未接続を問わず、着信メッセージを再生キューで順次自動再生。再生前後の疑似コールサイン音（ON/OFF可）と待機時間を最適化し、テンポよく聞き取れます。
+* **送信メッセージの復唱再生**: 自分が送信したメッセージを手元で確認再生できる復唱機能を Web / Android 両方に搭載。
+* **マイクのノイズ抑制 ON/OFF**: 周囲の雑音を低減するノイズ抑制スイッチを Web / Android 両方に搭載（声や語尾が途切れる環境では OFF に切替可能）。
+* **TTT (Trigger word To Talk) ハンズフリー**: ウェイクワード（正規表現）を音声検知して自動で録音・送信するハンズフリーモード。
+* **常時表示 (Screen Wake Lock)**: 画面の自動ロック・消灯を抑止し、受信待ち中もアプリを動かし続けます。
+
+### 📱 Androidネイティブ版 (.NET MAUI) 特化機能
+* **DeepSleep / バックグラウンド再生**: Android Foreground Service により、画面オフやスリープ状態でも着信音声を自動再生。
+* **Bluetoothイヤフォン PTT＆自動音声モード切替**: 待機時は高音質な音楽再生モードを維持し、発話開始時に通話モードへ自動で切り替え。イヤフォン等の再生/停止ボタンでのPTT操作にも対応。
+* **スピーカー・マイク切り替え**: 接続中の Bluetooth / 有線 / 本体の各デバイスに、音声出力（スピーカー）と入力（マイク）を個別に切り替え可能（初期値：システム規定に従う）。
+* **バイブレーションフィードバック**: 発話開始・終了や操作時に端末のバイブレーションでフィードバック。
+* **ネイティブUI調整**: チャットバブル下への年月日時刻（`yyyy/MM/dd HH:mm`）表示、ソフトな角丸UI、テーマに追従するヘッダースイッチ。
+
+### 💬 チャット・通知・外部連携
+* **グループチャット＆統合リスト**: メンバー／グループを1つの統合リストに表示し、フィルタチップ（すべて／個別／グループ）で絞り込み可能。グループ名はメンバーなら誰でも編集可能。
+* **発言の取り消し**: 自分が送ったメッセージを取り消し（Storage の音声ファイル削除＋テキストクリア）。
+* **バックグラウンド通知 & 未読バッジ**:
+  * Webプッシュ通知（FCM）および Androidネイティブ FCM通知。
+  * **PWA未読バッジ**: 対応環境で全コミュニティの未読合計をアプリアイコンに表示（Web / Android ともに環境設定で表示 ON/OFF 切替可能）。
+* **Webhook 連携**:
+  * **Discord Webhook**: 新着メッセージを Discord チャンネルへ自動通知。
+  * **カスタムWebhook**: 任意の URL へ HTTP POST 送信（GAS 経由のメール転送などに対応）。
+  * **Incoming Webhook**: 外部システムから Chatransceiver のトークルームへメッセージを投稿（`incoming-webhook` Edge Function）。
+* **外観カスタマイズ & 認証**:
+  * ダーク／ライトテーマ、カスタム背景画像（ぼかし対応、IndexedDB ローカル保存）。
+  * Googleログイン、または Magic Link（メールリンク）認証。
 
 ---
 
 ## 🚀 使い方 (How to Use)
 
-**1. ログインとコミュニティ参加**
-* アプリのURLにアクセスし、「Googleでログイン」または「Magic Link（メールリンク）」でログインします。<br>
-  ※案内される権限は与えてください
-* 招待リンクからアクセスするか、コミュニティ名ピルのメニューからコミュニティIDを入力して参加します。
-* メンバー／グループは1つの統合リストに表示され、フィルタチップ（すべて／個別／グループ）で絞り込めます。
-* 行をタップ／クリックすると、その相手とのチャットがすぐ開きます。
-* 「＋新規グループ」ボタンから複数人を選択すると、グループが作成されます。
-
-**2. 音声の送信 (PTT)**
-* 画面下部の大きなマイクボタンをクリックして話し始めます（PCではフッター左端の控えめなボタン）。
-* 停止ボタンクリックか15秒経過すると録音が止まります。
-* 発話内容は文字おこしされます。（現状はPCのみ）
-* 送信クリックで音声とテキストが送信されます。
-* 停止ボタンを使わずに送信クリックでも音声と文字起こしデータが送信されます。
-* テキスト入力欄からのテキスト送信も可能です（受信側はTTSで自動読み上げ）。
-
-**3. ハンズフリー操作（任意）**
-* **TTT (Trigger word To Talk)**: 環境設定でウェイクワード（正規表現）を登録し、チャット画面下部のTTTスイッチをONにすると、合言葉の発話で録音が自動起動します。
-* **常時表示 (☀️)**: ヘッダーの☀️ボタンで画面の自動ロックを抑止します（受信待ち向け、電池消耗に注意）。
-* **メディアボタンPTT (🎧)**: ヘッダーの🎧ボタンをONにすると、イヤフォン等の再生/停止ボタンで録音開始・停止＋送信を操作できます。
-
-**4. 音声の再生と確認**
-* 新着メッセージは自動的に再生されます（複数同時着信は順次再生）。
-* 再生されなかった過去のメッセージも、チャット画面の再生ボタンを押すことで聞き直すことができます。
-
-**5. 設定（環境設定 ⚙️）**
-* ニックネーム変更、自動再生／疑似コールサイン音のON/OFF、録音モード、ウェイクワード設定。
-* カラーテーマ（ダーク／ライト）、背景画像・ぼかしの設定。
-* Discord Webhook URL の登録。
-* プッシュ通知（FCM）の許可は、ヘッダーの🔔ボタンから行います（非対応環境ではグレーアウト）。
-* バッジの件数は別端末での既読や通知の到着順によって一時的にずれることがあります。次回起動・画面復帰時に補正します。
-
-**6. 注意点**
-* グループやチャット履歴は誰でも削除できます。
-* あくまでトランシーバのような半二重非同期通信を実現することで連絡のきっかけツールとして使うことが想定されています。
-* 重要な情報や永続化必要な情報の保存には向いていません。
+1. **ログインとコミュニティ参加**
+   * アプリにアクセスし、「Google でログイン」または「Magic Link（メールリンク）」でログインします。
+   * 招待リンクからアクセスするか、コミュニティ名ピルのメニューからコミュニティIDを入力して接続します。
+2. **音声の送信 (PTT) / テキスト送信**
+   * 画面下部のマイク（PTT）ボタンを押して話し始めます（最大15秒）。停止または送信クリックで音声と文字起こしが送信されます。
+   * テキスト入力欄からの送信も可能です（受信側は TTS で自動読み上げ）。
+3. **ハンズフリー / Bluetooth 操作（任意）**
+   * **TTT**: 環境設定でウェイクワードを登録し、TTT スイッチを ON にすると合言葉の発話で録音が自動起動します。
+   * **常時表示 (☀️)** / **メディアボタンPTT (🎧)**: ヘッダーのスイッチからワンタップで有効化できます。
+4. **環境設定 (⚙️)**
+   * ニックネーム、自動再生、送信メッセージの復唱再生、疑似コールサイン音、録音モード、マイクノイズ抑制、未読バッジ表示、スピーカー・マイクデバイス切替（Android）、各種 Webhook URL を設定できます。
+5. **注意点**
+   * グループやチャット履歴はメンバー間で削除可能です。半二重非同期通信による連絡のきっかけツールとしての利用を想定しており、機密情報や永続化が必要な情報の保存には向いていません。
 
 ---
 
-## 🛠 開発者向け：技術スタック (Tech Stack)
+## 🛠 技術スタック (Tech Stack)
 
-* **Frontend**: HTML / Vanilla CSS / TypeScript (Vite) / PWA (Service Worker, Web App Manifest)
+* **Frontend (Web / PWA)**: HTML / Vanilla CSS / TypeScript (Vite 8) / PWA (Service Worker, Web App Manifest)
+* **Mobile (Android Native)**: C# / .NET 9 / .NET MAUI (`net9.0-android`, Android 8.0 / API 26 以上, `android/Chatransceiver.Maui`)
 * **Backend**: Supabase (Auth, PostgreSQL, Storage, Realtime, Edge Functions)
-* **Web標準API**: Web Speech API (音声認識/合成) / Screen Wake Lock API / Media Session API / IndexedDB (背景画像のローカル保存)
-* **通知**: Firebase Cloud Messaging (FCM) / Discord Webhook
-* **Hosting**: Firebase Hosting
+* **Web標準API**: Web Speech API / Screen Wake Lock API / Media Session API / IndexedDB
+* **通知・音声認識**: Firebase Cloud Messaging (FCM) / Google Speech-to-Text API / Discord & Custom & Incoming Webhooks
+* **Hosting / CI**: Firebase Hosting / GitHub Actions (`firebase-hosting-merge.yml`, `android-build.yml`)
+
+---
 
 ## 💻 開発者向け：ローカル環境の構築手順 (Getting Started)
 
 ### 前提条件
-* Node.js (v20以上推奨)
-* npm または yarn
-* Supabase CLI (任意: Edge Functionのローカルテストやデプロイ用)
+* Node.js (v20 以上推奨)
+* npm
+* Supabase CLI (Edge Functions のローカルテスト・デプロイ用)
+* .NET 9 SDK + MAUI Android ワークロード (Androidネイティブ版をビルドする場合)
 
-### セットアップ
+### Web / PWA セットアップ
 1. リポジトリのクローン
    ```bash
    git clone <repository-url>
@@ -101,26 +103,29 @@ DiscordのWebhookに通知機能あり（上級者向け）<br>
    npm install
    ```
 3. 環境変数の設定
-   * リポジトリ直下に `.env` ファイルを作成し、Supabaseの接続情報を記載します（`.env.example` を参照してください）。
+   * リポジトリ直下に `.env` ファイルを作成し、Supabase の接続情報を記載します（`.env.example` を参照）。
 4. ローカル開発サーバーの起動
    ```bash
    npm run dev
    ```
 
-### 未読バッジの検証
-* `npm run test:badge`: バッジ更新・解除、古い取得結果の抑制、非対応環境、通知とバッジの失敗分離を外部接続なしで検証します。
-* `npm run build`: TypeScriptチェックと本番ビルド。
-* 実機ではホーム画面から起動して🔔で通知を許可し、新着受信・チャットを開いて既読・未読ゼロ・ログアウトを確認します。
+### ビルドと検証
+* `npm run test:badge`: 未読バッジの更新・解除・非対応環境・失敗分離を外部接続なしで自動検証します。
+* `npm run build`: TypeScript 型チェックと本番ビルドを実行します。
+* `npm run build:android` / `npm run publish:android`: Androidネイティブ版 (.NET MAUI) を Release ビルドします。
+  * ルートの `.env` がある場合、MSBuild ターゲットが `Services/AppConfig.Defaults.cs` を自動生成して `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` を注入します。
+  * FCM を有効にする場合は、`android/Chatransceiver.Maui/google-services.json` を配置してください。
 
 ### デプロイ
-* フロントエンド: `npm run deploy` (Firebase Hosting)
-* バックエンド (Edge Functions): 以下の3つの関数をデプロイします。
+* **フロントエンド**: `npm run deploy` (Firebase Hosting)
+* **バックエンド (Supabase Edge Functions)**: 以下の5つの関数をデプロイします。
   ```bash
-  supabase functions deploy send-push-notification        # 新着メッセージのFCM/Discord通知
-  supabase functions deploy register-fcm-token            # FCMデバイストークン登録
+  supabase functions deploy send-push-notification         # 新着メッセージのFCM/Discord/カスタムWebhook通知
+  supabase functions deploy register-fcm-token             # FCMデバイストークン登録
   supabase functions deploy delete-audio-on-message-delete # メッセージ削除時の音声ファイル削除
+  supabase functions deploy transcribe-audio-message       # Google Speech-to-Text 事後文字起こし
+  supabase functions deploy incoming-webhook               # 外部システムからのIncoming Webhook受信
   ```
-* バックグラウンドの数字バッジには、フロントエンドと `send-push-notification` の両方の反映が必要です。DB変更や新しい環境変数は不要です。旧関数から件数なしの通知を受けた場合は、新着ありの印だけを表示し、次回起動・画面復帰時に件数を補正します。
 
 ---
 
@@ -131,13 +136,18 @@ DiscordのWebhookに通知機能あり（上級者向け）<br>
 * [機能仕様書 (specifications.md)](./docs/specifications.md)
 * [データベース設計 (database_design.md)](./docs/database_design.md)
 * [意思決定ログ (decisions.md)](./docs/decisions.md)
+* [議論・未解決事項 (discussion.md)](./docs/discussion.md)
 * [Androidネイティブ版 (.NET MAUI) 実装ブループリント (android_implementation_plan.md)](./docs/android_implementation_plan.md)
+* [バックエンド構築手順 (setup_backend.md)](./docs/setup_backend.md) / [フロントエンド構築手順 (setup_frontend.md)](./docs/setup_frontend.md)
+* [事後文字起こし仕様 (stt_transcription_spec.md)](./docs/stt_transcription_spec.md)
+* [Incoming Webhook 仕様 (incoming_webhook_spec.md)](./docs/incoming_webhook_spec.md) / [カスタムWebhook 仕様 (custom_webhook_spec.md)](./docs/custom_webhook_spec.md)
+* [ボット機能仕様ドラフト (bot_function_spec.md)](./docs/bot_function_spec.md)
 
 ---
 
 ## 🤖 AI Assistant Guidelines (AIへの指示)
 
-このプロジェクトでは、AIアシスタントと共同で仕様を議論しながら開発を進めています。
+このプロジェクトでは、AIアシスタントと共同で仕様を議論しながら開発を進めています。  
 **セッションがリセットされた際や、新しく開発に参加したAIは、まず以下の手順でコンテキストを復元してください。**
 
 ### 1. 復元手順
@@ -152,4 +162,3 @@ DiscordのWebhookに通知機能あり（上級者向け）<br>
 * `docs/specifications.md`: 確定した仕様の追記・整理
 * `docs/decisions.md`: 決定した事項とその理由のログ追加
 * `docs/discussion.md`: 議論中・未解決事項のアップデート
-.
