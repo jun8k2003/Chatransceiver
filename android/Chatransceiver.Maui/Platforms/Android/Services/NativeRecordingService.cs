@@ -1,6 +1,7 @@
 using System.Text;
 using Android.Content;
 using Android.Media;
+using Android.Media.Audiofx;
 using Android.OS;
 using Android.Speech;
 using Chatransceiver.Maui.Models;
@@ -25,6 +26,7 @@ public class NativeRecordingService
     private const int MaxDurationSeconds = 15;
 
     private AudioRecord? _audioRecord;
+    private NoiseSuppressor? _noiseSuppressor;
     private CancellationTokenSource? _recordCts;
     private Task<byte[]>? _recordLoopTask;
 
@@ -61,12 +63,26 @@ public class NativeRecordingService
 
         try
         {
+            bool noiseSuppression = AppConfig.NoiseSuppressionEnabled;
+            var audioSource = noiseSuppression ? AudioSource.VoiceCommunication : AudioSource.Mic;
+
             _audioRecord = new AudioRecord(
-                AudioSource.Mic,
+                audioSource,
                 SampleRate,
                 ChannelIn.Mono,
                 Encoding.Pcm16bit,
                 bufferSize);
+
+            if (_audioRecord.State != State.Initialized && audioSource != AudioSource.Mic)
+            {
+                _audioRecord.Release();
+                _audioRecord = new AudioRecord(
+                    AudioSource.Mic,
+                    SampleRate,
+                    ChannelIn.Mono,
+                    Encoding.Pcm16bit,
+                    bufferSize);
+            }
 
             if (_audioRecord.State != State.Initialized)
             {
@@ -81,10 +97,13 @@ public class NativeRecordingService
             {
                 _audioRecord.SetPreferredDevice(preferredIn);
             }
+
+            ApplyNoiseSuppression(_audioRecord.AudioSessionId, noiseSuppression);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"AudioRecord init failed: {ex.Message}");
+            ReleaseNoiseSuppressor();
             AudioDeviceService.EndInputRouting();
             PttConnectionService.EndPttCall();
             return false;
@@ -335,6 +354,7 @@ public class NativeRecordingService
         }
         catch { }
         _audioRecord = null;
+        ReleaseNoiseSuppressor();
 
         // Bluetooth HFP通話モードを閉じる前に終了ビープを鳴らすことで、HFP->A2DP切替による終了音の消失を防ぐ
         if (playEndTone)
@@ -378,6 +398,34 @@ public class NativeRecordingService
             Transcript = finalText,
             NeedsTranscription = includeAudio && needsTranscription
         };
+    }
+
+    private void ApplyNoiseSuppression(int audioSessionId, bool enabled)
+    {
+        ReleaseNoiseSuppressor();
+        try
+        {
+            if (NoiseSuppressor.IsAvailable)
+            {
+                _noiseSuppressor = NoiseSuppressor.Create(audioSessionId);
+                _noiseSuppressor?.SetEnabled(enabled);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ApplyNoiseSuppression error: {ex.Message}");
+        }
+    }
+
+    private void ReleaseNoiseSuppressor()
+    {
+        var ns = _noiseSuppressor;
+        _noiseSuppressor = null;
+        if (ns != null)
+        {
+            try { ns.Release(); } catch { }
+            try { ns.Dispose(); } catch { }
+        }
     }
 
     private void ClosePipe()

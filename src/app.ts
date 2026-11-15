@@ -53,6 +53,7 @@ export class App {
     fcmSupported: false,
     fcmRegistered: false,
     callSignEnabled: true,
+    noiseSuppressionEnabled: true,
     unreadBadgeEnabled: true,
     isLoading: true,
     loadingMessage: '初期化中...',
@@ -182,6 +183,13 @@ export class App {
       this.state.callSignEnabled = savedCallSign === 'true';
     }
     this.playbackQueue.callSignEnabled = this.state.callSignEnabled;
+
+    // マイクのノイズ抑制設定の読み込み (デフォルトON)
+    const savedNoiseSuppression = localStorage.getItem('chatransceiver_noise_suppression_enabled');
+    if (savedNoiseSuppression !== null) {
+      this.state.noiseSuppressionEnabled = savedNoiseSuppression === 'true';
+    }
+    this.audioManager.noiseSuppressionEnabled = this.state.noiseSuppressionEnabled;
 
     // 未読バッジ表示設定の読み込み (デフォルトON)
     const savedUnreadBadge = localStorage.getItem('chatransceiver_unread_badge_enabled');
@@ -1548,6 +1556,7 @@ export class App {
       recordMode,
       theme,
       callSignEnabled,
+      noiseSuppression,
       unreadBadgeEnabled,
       discordWebhookUrl,
       tttWakeWord,
@@ -1583,6 +1592,10 @@ export class App {
     this.state.callSignEnabled = callSignEnabled;
     localStorage.setItem('chatransceiver_callsign_enabled', callSignEnabled ? 'true' : 'false');
     this.playbackQueue.callSignEnabled = callSignEnabled;
+
+    this.state.noiseSuppressionEnabled = noiseSuppression;
+    localStorage.setItem('chatransceiver_noise_suppression_enabled', noiseSuppression ? 'true' : 'false');
+    this.audioManager.noiseSuppressionEnabled = noiseSuppression;
 
     this.state.unreadBadgeEnabled = unreadBadgeEnabled;
     localStorage.setItem('chatransceiver_unread_badge_enabled', unreadBadgeEnabled ? 'true' : 'false');

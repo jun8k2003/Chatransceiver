@@ -29,6 +29,7 @@ export interface UIState {
   fcmSupported?: boolean;
   fcmRegistered?: boolean;
   callSignEnabled: boolean;
+  noiseSuppressionEnabled: boolean;
   isLoading: boolean;
   loadingMessage?: string;
   isTTTMode: boolean;
@@ -47,6 +48,7 @@ export interface SaveSettingsInput {
   recordMode: 'both' | 'audio_only' | 'text_only';
   theme: 'light' | 'dark';
   callSignEnabled: boolean;
+  noiseSuppression: boolean;
   unreadBadgeEnabled: boolean;
   discordWebhookUrl?: string;
   tttWakeWord?: string;
@@ -78,6 +80,7 @@ export class UIController {
   private settingsEchoSentCheck: HTMLInputElement;
   private settingsRecordModeSelect: HTMLSelectElement;
   private settingsCallSignCheck: HTMLInputElement;
+  private settingsNoiseSuppressionCheck: HTMLInputElement;
   private settingsThemeSelect: HTMLSelectElement;
   private settingsDiscordWebhookInput: HTMLInputElement;
 
@@ -320,6 +323,7 @@ export class UIController {
     this.settingsEchoSentCheck = document.getElementById('settingsEchoSent') as HTMLInputElement;
     this.settingsRecordModeSelect = document.getElementById('settingsRecordMode') as HTMLSelectElement;
     this.settingsCallSignCheck = document.getElementById('settingsCallSign') as HTMLInputElement;
+    this.settingsNoiseSuppressionCheck = document.getElementById('settingsNoiseSuppression') as HTMLInputElement;
     this.settingsThemeSelect = document.getElementById('settingsTheme') as HTMLSelectElement;
     this.settingsDiscordWebhookInput = document.getElementById('settingsDiscordWebhook') as HTMLInputElement;
 
@@ -414,6 +418,7 @@ export class UIController {
       const recordMode = this.settingsRecordModeSelect.value as 'both' | 'audio_only' | 'text_only';
       const theme = this.settingsThemeSelect.value as 'light' | 'dark';
       const callSignEnabled = this.settingsCallSignCheck.checked;
+      const noiseSuppression = this.settingsNoiseSuppressionCheck ? this.settingsNoiseSuppressionCheck.checked : true;
       const discordWebhookUrl = this.settingsDiscordWebhookInput.value.trim();
       const wakeWord = this.settingsWakeWordInput?.value.trim() || '';
 
@@ -445,6 +450,7 @@ export class UIController {
         recordMode,
         theme,
         callSignEnabled,
+        noiseSuppression,
         unreadBadgeEnabled,
         discordWebhookUrl,
         tttWakeWord: wakeWord,
@@ -954,6 +960,9 @@ export class UIController {
       this.settingsEchoSentCheck.checked = state.echoSentEnabled;
       this.settingsRecordModeSelect.value = state.recordMode;
       this.settingsCallSignCheck.checked = state.callSignEnabled;
+      if (this.settingsNoiseSuppressionCheck) {
+        this.settingsNoiseSuppressionCheck.checked = state.noiseSuppressionEnabled;
+      }
       this.settingsThemeSelect.value = state.theme;
 
       if (document.activeElement !== this.settingsDiscordWebhookInput) {

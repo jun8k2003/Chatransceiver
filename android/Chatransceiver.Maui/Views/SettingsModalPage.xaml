@@ -77,6 +77,19 @@
                                     TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
                         </VerticalStackLayout>
 
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                            <VerticalStackLayout>
+                                <Label Text="マイクのノイズ抑制"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
+                                <Label Text="周囲の雑音を低減します（声や語尾が途切れる場合はOFF）"
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
+                            </VerticalStackLayout>
+                            <Switch x:Name="NoiseSuppressionSwitch"
+                                    Grid.Column="1"
+                                    OnColor="{StaticResource PrimaryBlue}" />
+                        </Grid>
+
                         <Label Text="初期値は「システム規定に従う」です。接続中の Bluetooth / 有線 / 本体の各デバイスに任意で切り替えられます。"
                                FontSize="11"
                                TextColor="{AppThemeBinding Dark={StaticResource DarkTextSecondary}, Light={StaticResource LightTextSecondary}}" />
