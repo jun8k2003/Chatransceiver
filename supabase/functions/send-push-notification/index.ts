@@ -80,7 +80,7 @@ serve(async (req) => {
   // DBからメッセージ詳細、送信者情報、コミュニティ情報を取得
   const { data: msgData, error: msgError } = await supabaseAdmin
     .from('messages')
-    .select('audio_url, text_content, users(name), chat_rooms(type, communities(slug, name))')
+    .select('audio_url, text_content, sender_type, webhook_sender_name, users(name), chat_rooms(type, communities(slug, name))')
     .eq('id', record.message_id)
     .single()
 
@@ -89,7 +89,10 @@ serve(async (req) => {
     return new Response('Message details not found', { status: 400 })
   }
 
-  const senderName = (msgData.users as any)?.name || '不明なユーザー'
+  const isWebhookMessage = (msgData as any).sender_type === 'webhook'
+  const senderName = isWebhookMessage
+    ? `🔗 ${(msgData as any).webhook_sender_name || 'Webhook'}`
+    : ((msgData.users as any)?.name || '不明なユーザー')
   const textContent = msgData.text_content || ''
   const audioUrl = msgData.audio_url || ''
   
@@ -171,27 +174,33 @@ serve(async (req) => {
 
   const fullUrl = `https://chatransceiver13162.web.app/?c=${communitySlug}&m=${record.message_id || ''}`
   const messageText = audioUrl ? '🎤 音声メッセージ' : textContent;
+  const isSelfIncomingWebhookUrl = (url: string): boolean =>
+    url.includes('/functions/v1/incoming-webhook')
 
-  // Discord Webhookの送信
-  if (discordWebhookUrl && discordWebhookUrl.trim() !== '') {
-    const discordPromise = fetch(discordWebhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: `【新着】**${senderName}**さんからメッセージ:\n> ${messageText}\n\n👉 アプリで開く: ${fullUrl}`
+  // Discord Webhookの送信 (Incoming Webhook由来または自己参照URLの場合は無限ループ防止のためスキップ)
+  if (discordWebhookUrl && discordWebhookUrl.trim() !== '' && !isWebhookMessage) {
+    const trimmedDiscordUrl = discordWebhookUrl.trim()
+    if (trimmedDiscordUrl.startsWith('https://') && !isSelfIncomingWebhookUrl(trimmedDiscordUrl)) {
+      const discordPromise = fetch(trimmedDiscordUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `【新着】**${senderName}**さんからメッセージ:\n> ${messageText}\n\n👉 アプリで開く: ${fullUrl}`
+        })
+      }).then(res => {
+        if (!res.ok) {
+          console.error('Discord Webhook error:', res.status, res.statusText)
+        }
+      }).catch(e => {
+        console.error('Failed to send Discord webhook:', e)
       })
-    }).then(res => {
-      if (!res.ok) {
-        console.error('Discord Webhook error:', res.status, res.statusText)
-      }
-    }).catch(e => {
-      console.error('Failed to send Discord webhook:', e)
-    })
-    sendPromises.push(discordPromise)
+      sendPromises.push(discordPromise)
+    }
   }
 
   // カスタムWebhookの送信 (DEC-033): 投げっぱなし (リトライ・ユーザー通知なし)
-  if (customWebhooks.length > 0) {
+  // ※ Incoming Webhook 由来のメッセージは無限ループ防止のため転送対象外とする (docs/incoming_webhook_spec.md §5.2)
+  if (customWebhooks.length > 0 && !isWebhookMessage) {
     // 置換変数 (docs/custom_webhook_spec.md §3)
     const webhookVars: Record<string, string> = {
       message: messageText || '新しいメッセージが届きました',
@@ -212,7 +221,7 @@ serve(async (req) => {
     for (const w of customWebhooks) {
       try {
         const targetUrl = substituteVars(w.url || '', encodeURIComponent)
-        if (!targetUrl.startsWith('https://')) continue
+        if (!targetUrl.startsWith('https://') || isSelfIncomingWebhookUrl(targetUrl)) continue
 
         const method = (w.method || 'POST').toUpperCase()
         const init: RequestInit = { method, signal: AbortSignal.timeout(5000) }

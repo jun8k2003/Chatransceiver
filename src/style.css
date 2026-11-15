@@ -2411,3 +2411,48 @@ textarea.webhook-body-input {
   .autoplay-eq { height: 42px; }
   .autoplay-eq span { width: 7px; }
 }
+
+/* Incoming Webhook 管理ボタン・モーダル */
+.btn-room-webhooks {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s, background-color 0.15s;
+}
+.btn-room-webhooks:hover {
+  opacity: 1;
+  background: var(--bg-hover, rgba(128, 128, 128, 0.15));
+}
+.incoming-webhook-create-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.incoming-webhook-create-row .setting-input {
+  flex: 1;
+  min-width: 0;
+}
+.incoming-webhook-help {
+  margin-top: 14px;
+  font-size: 12px;
+}
+.incoming-webhook-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.incoming-webhook-sample {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 11px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+

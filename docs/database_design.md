@@ -47,11 +47,41 @@ erDiagram
         uuid id PK
         uuid room_id FK
         uuid sender_id FK
+        varchar sender_type
+        uuid incoming_webhook_id FK
+        varchar webhook_sender_name
         text audio_url
         text text_content
         boolean is_revoked
         boolean needs_transcription
         timestamptz created_at
+    }
+
+    incoming_webhooks {
+        uuid id PK
+        uuid community_id FK
+        uuid room_id FK
+        uuid created_by FK
+        varchar label
+        varchar secret_token UK
+        boolean is_active
+        timestamptz last_used_at
+        timestamptz created_at
+    }
+
+    incoming_webhook_rate_limits {
+        uuid webhook_id PK, FK
+        timestamptz minute_window
+        int minute_count
+        date day_window
+        int day_count
+    }
+
+    incoming_webhook_monthly_usage {
+        varchar month_key PK
+        int request_count
+        int fanout_units
+        timestamptz updated_at
     }
 
     stt_usage_log {
@@ -90,6 +120,9 @@ erDiagram
     chat_rooms ||--o{ user_inboxes : "related to"
     messages ||--o{ user_inboxes : "references"
     users ||--o{ user_webhooks : "configures"
+    chat_rooms ||--o{ incoming_webhooks : "accepts"
+    incoming_webhooks ||--o| incoming_webhook_rate_limits : "tracks"
+    incoming_webhooks ||--o{ messages : "posts"
 ```
 
 ---
@@ -138,7 +171,10 @@ Table chat_room_members {
 Table messages {
   id uuid [pk, default: `gen_random_uuid()`]
   room_id uuid [not null, ref: > chat_rooms.id]
-  sender_id uuid [ref: > users.id, note: '退出時はNULL許容（元メンバー扱い）']
+  sender_id uuid [ref: > users.id, note: '退出時はNULL許容（元メンバー扱い）。Webhook投稿時もNULL']
+  sender_type varchar [not null, default: 'user', note: 'user | webhook (DEC-039)']
+  incoming_webhook_id uuid [ref: > incoming_webhooks.id, note: 'on delete set null (DEC-039)']
+  webhook_sender_name varchar [note: 'Webhook投稿時の送信者表示名スナップショット (DEC-039)']
   audio_url text [note: '音声ファイルパス。テキストメッセージ時はNULL']
   text_content text [note: 'ディクテーションまたは直接入力のテキスト']
   is_revoked boolean [default: false]
@@ -378,6 +414,7 @@ create trigger on_message_created
 | `register-fcm-token` | クライアントの FCM デバイストークンの登録（`register`）／解除（`unregister`）。ログアウト時に解除を呼ぶ。 |
 | `delete-audio-on-message-delete` | `messages` の **DELETE** をトリガーに、`audio_url` に対応する `voice-messages` バケットの音声ファイルを削除。Database Webhook 経由で起動。 |
 | `transcribe-audio-message` | `messages` の **INSERT** をトリガーに、`needs_transcription = true` のメッセージをGoogle Speech-to-Textで事後文字起こしし、`text_content` を書き換える（[stt_transcription_spec.md](./stt_transcription_spec.md)）。Database Webhook 経由で起動。対象外メッセージ・APIキー未設定・月間上限到達時は何もせず正常終了する。 |
+| `incoming-webhook` | 外部システムからの `POST /functions/v1/incoming-webhook/<secret_token>` を受け付け、`post_via_incoming_webhook` RPC を介してレートリミット判定および `messages` へのWebhook投稿（`sender_type = 'webhook'`）を行う（[incoming_webhook_spec.md](./incoming_webhook_spec.md) / DEC-039）。 |
 
 > **メッセージ削除と音声ファイル**: メッセージ行が削除されると、`user_inboxes` はカスケード削除され（FK）、Storage の音声ファイルは `delete-audio-on-message-delete` Edge Function により削除されます。退出時の一括削除（`leave_community_and_cleanup`）では `chat_rooms` 削除に伴い `messages` が **FK CASCADE** で削除され、その各行の DELETE が同 Edge Function を発火させて音声も消去されます（specifications.md 3.5）。
 >

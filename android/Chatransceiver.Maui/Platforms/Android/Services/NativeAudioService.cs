@@ -29,6 +29,9 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
     private TaskCompletionSource<bool>? _activeSpeechTcs;
     private bool _ttsReady;
 
+    private readonly object _silentKeeperLock = new();
+    private AudioTrack? _silentKeeperTrack;
+
     /// <summary>
     /// 再生中・録音中のみCPUをスリープさせない一時WakeLockを取得する（安全タイムアウト付き）
     /// </summary>
@@ -447,6 +450,84 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
     }
 
     /// <summary>
+    /// PTT録音中（最大15秒間）、SpeechRecognizer起動後もAndroid OSのAudioPlaybackMonitorに
+    /// 当アプリをアクティブなメディア再生プロセスとして維持させるための無音(±1 LSB) AudioTrackを開始する。
+    /// </summary>
+    public void StartSilentRecordingKeeper()
+    {
+        lock (_silentKeeperLock)
+        {
+            StopSilentRecordingKeeperLocked();
+            try
+            {
+                const int sampleRate = 16000;
+                const int sampleCount = 4000; // 0.25秒ループ (StaticモードのためCPU負荷ゼロ)
+                short[] pcm = new short[sampleCount];
+                for (int i = 0; i < sampleCount; i++)
+                {
+                    pcm[i] = (short)((i & 1) == 0 ? 1 : -1); // -90dBFS (不可聴・無音圧縮回避)
+                }
+
+                var attrs = new AudioAttributes.Builder()
+                    ?.SetUsage(AudioUsageKind.Media)
+                    ?.SetContentType(AudioContentType.Music)
+                    ?.Build();
+                var format = new AudioFormat.Builder()
+                    ?.SetEncoding(Encoding.Pcm16bit)
+                    ?.SetSampleRate(sampleRate)
+                    ?.SetChannelMask(ChannelOut.Mono)
+                    ?.Build();
+
+                if (attrs == null || format == null) return;
+
+                var track = new AudioTrack(
+                    attrs,
+                    format,
+                    pcm.Length * 2,
+                    AudioTrackMode.Static,
+                    0);
+                track.Write(pcm, 0, pcm.Length);
+                track.SetLoopPoints(0, sampleCount, -1);
+                track.SetVolume(0.01f);
+                track.Play();
+                _silentKeeperTrack = track;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"StartSilentRecordingKeeper error: {ex.Message}");
+            }
+        }
+    }
+
+    public void StopSilentRecordingKeeper()
+    {
+        lock (_silentKeeperLock)
+        {
+            StopSilentRecordingKeeperLocked();
+        }
+    }
+
+    private void StopSilentRecordingKeeperLocked()
+    {
+        var track = _silentKeeperTrack;
+        _silentKeeperTrack = null;
+        if (track != null)
+        {
+            try
+            {
+                if (track.PlayState == PlayState.Playing) track.Stop();
+            }
+            catch { }
+            try
+            {
+                track.Release();
+                track.Dispose();
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
     /// PTT録音開始ビープ (800Hz -> 1200Hz)
     /// </summary>
     public void BeepStart() => PlayTones(new[] { (800, 80), (1200, 80) });
@@ -500,7 +581,7 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
 
                 var attrs = new AudioAttributes.Builder()
                     ?.SetUsage(useCommRoute ? AudioUsageKind.VoiceCommunication : AudioUsageKind.Media)
-                    ?.SetContentType(AudioContentType.Sonification)
+                    ?.SetContentType(AudioContentType.Speech)
                     ?.Build();
                 var format = new AudioFormat.Builder()
                     ?.SetEncoding(Encoding.Pcm16bit)

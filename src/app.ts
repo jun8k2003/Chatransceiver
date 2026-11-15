@@ -125,7 +125,11 @@ export class App {
       () => this.handleToggleTTT(),
       () => this.handleStopAutoplay(),
       async (webhook: UserWebhookInput) => await this.handleSaveWebhook(webhook),
-      async (webhookId: string) => await this.handleDeleteWebhook(webhookId)
+      async (webhookId: string) => await this.handleDeleteWebhook(webhookId),
+      async () => await this.handleOpenIncomingWebhooks(),
+      async (label: string) => await this.handleCreateIncomingWebhook(label),
+      async (webhookId: string, isActive: boolean) => await this.handleToggleIncomingWebhook(webhookId, isActive),
+      async (webhookId: string) => await this.handleDeleteIncomingWebhook(webhookId)
     );
 
     // TTT: バックグラウンド復帰時にウェイクワード待機を再開する (DEC-028)
@@ -1331,7 +1335,7 @@ export class App {
     item: {
       id: string;
       roomId: string;
-      senderId: string;
+      senderId: string | null;
       senderName: string;
       audioUrl?: string;
       textContent?: string;
@@ -1351,7 +1355,7 @@ export class App {
         if (this.groupMembersMap[item.roomId] && this.groupMembersMap[item.roomId].length >= 2) {
           this.state.playingGroupId = item.roomId;
         } else if (highlightIndividualSender) {
-          this.state.playingUserId = item.senderId;
+          this.state.playingUserId = item.senderId || undefined;
         }
         // 自動再生中の停止パネルを表示する (DEC-032)
         this.state.isAutoplaying = true;
@@ -1484,6 +1488,53 @@ export class App {
     } finally {
       this.updateUI();
     }
+  }
+
+  /**
+   * 現在アクティブなルームの Incoming Webhook 一覧を取得する
+   */
+  private async handleOpenIncomingWebhooks() {
+    const roomId = this.state.activeChatHistoryId;
+    if (!roomId) return [];
+    return await this.supabaseService.getIncomingWebhooks(roomId);
+  }
+
+  /**
+   * 現在アクティブなルームに Incoming Webhook を新規作成する
+   */
+  private async handleCreateIncomingWebhook(label: string) {
+    const roomId = this.state.activeChatHistoryId;
+    const communityId = this.state.currentCommunity?.id;
+    const userId = this.state.currentUser?.id;
+    if (!roomId || !communityId || !userId) {
+      throw new Error('チャットルームが選択されていません。');
+    }
+    const current = await this.supabaseService.getIncomingWebhooks(roomId);
+    if (current.length >= 5) {
+      throw new Error('このルームのWebhook上限（5件）に達しています。');
+    }
+    await this.supabaseService.createIncomingWebhook(communityId, roomId, userId, label);
+    return await this.supabaseService.getIncomingWebhooks(roomId);
+  }
+
+  /**
+   * Incoming Webhook の一時停止・再開を切り替える
+   */
+  private async handleToggleIncomingWebhook(webhookId: string, isActive: boolean) {
+    const roomId = this.state.activeChatHistoryId;
+    if (!roomId) return [];
+    await this.supabaseService.toggleIncomingWebhook(webhookId, isActive);
+    return await this.supabaseService.getIncomingWebhooks(roomId);
+  }
+
+  /**
+   * Incoming Webhook を削除してURLを完全失効させる
+   */
+  private async handleDeleteIncomingWebhook(webhookId: string) {
+    const roomId = this.state.activeChatHistoryId;
+    if (!roomId) return [];
+    await this.supabaseService.deleteIncomingWebhook(webhookId);
+    return await this.supabaseService.getIncomingWebhooks(roomId);
   }
 
   /**

@@ -68,6 +68,7 @@ public partial class MainPage : ContentPage
 
         TransceiverForegroundService.ServiceStateChanged += OnForegroundServiceStateChanged;
         TransceiverForegroundService.PttMessageSentFromBackground += OnBackgroundPttMessageSent;
+        TransceiverForegroundService.ForegroundUiStopRecordingRequested += OnForegroundUiStopRecordingRequested;
 
         RealtimeService.Instance.NewRoomMessageArrived += OnRealtimeRoomMessageArrived;
         RealtimeService.Instance.CommunityUnreadUpdated += OnRealtimeUnreadUpdated;
@@ -670,6 +671,16 @@ public partial class MainPage : ContentPage
     private async void OnModalSendRecordingClicked(object? sender, EventArgs e)
     {
         await FinishForegroundRecordingAndSendAsync();
+    }
+
+    private async Task<bool> OnForegroundUiStopRecordingRequested()
+    {
+        if (!RecordingModalOverlay.IsVisible || !NativeRecordingService.Instance.IsRecording)
+        {
+            return false;
+        }
+        await FinishForegroundRecordingAndSendAsync();
+        return true;
     }
 
     private async void OnForegroundRecordingTimeout()

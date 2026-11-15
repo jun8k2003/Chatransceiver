@@ -527,3 +527,22 @@ npx supabase secrets set GOOGLE_STT_API_KEY=<取得したAPIキー>
 4. **「Save webhook」** をクリックして保存します。
 
 > **絞り込みについて**: このWebhookは `messages` への全INSERT（テキストのみのメッセージも含む）で発火しますが、Edge Function側の先頭で `audio_url` と `needs_transcription` をチェックして対象外なら即座に終了するため、DBトリガー側でのWHEN句による絞り込みは行っていません（サービスロールキー等の秘密情報をSQLトリガーに埋め込む必要がなく、既存の [delete-audio-on-message-delete](./setup_backend.md#72-database-webhook-の設定) と同じGUI手順で完結するための実装判断）。
+
+### 8.4. Incoming Webhook（外部からのメッセージ投稿）対応 (2026-11-15, 仕様: [incoming_webhook_spec.md](./incoming_webhook_spec.md))
+
+外部システムからHTTP POSTを受け取ってチャットルームへメッセージを投稿する「Incoming Webhook」機能のためのマイグレーションです。
+既存テーブルへのカラム追加（デフォルト `'user'`）＋新テーブル・RPC追加であり、**適用後も旧バージョンのフロントエンドはそのまま動作します**（後方互換あり）。
+
+#### 8.4.1. SQL Editor での実行
+詳細な一括実行用SQLは [incoming_webhook_spec.md §12.3 手順A](./incoming_webhook_spec.md#123-ユーザーが手作業で実行する-db-ddlデプロイコマンド一式) に記載されたSQLブロックをそのまま SQL Editor に貼り付けて実行してください（`incoming_webhooks`, `incoming_webhook_rate_limits`, `incoming_webhook_monthly_usage` 新設、RLS、`messages` カラム追加、`handle_new_message_fanout` 更新、`post_via_incoming_webhook` RPC 作成を一括で行います）。
+
+#### 8.4.2. Edge Function のデプロイ
+
+```bash
+# 新規 Incoming Webhook 受付関数のデプロイ (JWT検証なし)
+npx supabase functions deploy incoming-webhook --no-verify-jwt
+
+# 更新された通知送信関数の再デプロイ
+npx supabase functions deploy send-push-notification
+```
+
