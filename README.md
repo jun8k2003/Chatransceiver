@@ -73,6 +73,41 @@ Web / PWA 版（Chrome・iOS・Androidブラウザ）に加え、**Androidネイ
 
 ---
 
+## ⚙️ 環境設定項目 (Settings)
+
+Web版の環境設定モーダル（モック画面）と各項目の説明です。
+
+<p align="center">
+  <img src="./README_img/settings_1.png" alt="環境設定（プロフィール・再生と録音）" width="270" />
+  <img src="./README_img/settings_2.png" alt="環境設定（録音モード・外観）" width="270" />
+  <img src="./README_img/settings_3.png" alt="環境設定（通知・その他）" width="270" />
+</p>
+
+| セクション | 項目名 | 説明 | 対象 |
+| :--- | :--- | :--- | :--- |
+| **プロフィール** | ニックネーム | タイムラインやメンバー一覧に表示される表示名 | Web / Android |
+| **再生と録音** | 新着メッセージの自動再生 | 着信した音声・テキスト（TTS）メッセージを自動で順次再生する | Web / Android |
+| | 送信メッセージの復唱再生 | 自分が送信した音声やテキストを手元で自動再生して確認する | Web / Android |
+| | 疑似コールサイン音 | 再生の前後にトランシーバー風の効果音を鳴らす | Web / Android |
+| | マイクのノイズ抑制 | 周囲の雑音を低減する（声や語尾が途切れる場合は OFF に切替） | Web / Android |
+| | ウェイクワード（正規表現） | TTT（Trigger word To Talk）で録音を自動起動する合言葉を正規表現で指定 | Web |
+| | 録音モード | `両方 (音声＋文字おこし)` / `録音のみ` / `文字おこしのみ` を選択（※モバイルWebは録音と文字おこしの併用不可） | Web / Android |
+| **外観** | カラーテーマ | `ダークモード (標準)` / `ライトモード` を切り替え | Web / Android |
+| | 背景画像 | 任意の画像をチャット背景に設定（ブラウザの IndexedDB にローカル保存） | Web |
+| | 画像の表示方法 | 背景画像のフィット方法（`画面全体を埋める` / `画像全体を表示する`） | Web |
+| | 背景ぼかし | 背景画像にぼかし効果を適用する | Web |
+| | 未読バッジを表示する | 一覧の未読件数やアプリアイコンの未読バッジ表示の ON/OFF | Web / Android |
+| **通知** | Discord Webhook URL | 新着メッセージを個人用 Discord Webhook へ転送（iOS 等の通知代替） | Web / Android |
+| | カスタムWebhook | 新着メッセージを任意の URL へ HTTP 送信（最大5件・プレースホルダー置換対応） | Web |
+| **その他** | マイク・音声のトラブルシューティング | Chrome のマイク許可・音声自動再生設定画面の URL コピー（PC 向け） | Web |
+| | アプリを再読み込み（最新化） | キャッシュを更新して最新ビルドを再読み込みする | Web |
+| | アカウントからログアウトする | 現在のアカウントからサインアウトする | Web / Android |
+| **Android専用** | スピーカー・マイク切り替え | 接続中の Bluetooth / 有線 / 本体デバイスに出力・入力を個別に固定 | Android |
+| | 着信・通知時のバイブレーション | メッセージ着信やプッシュ通知時に端末を振動させる | Android |
+| | バッテリー制限解除を許可 | DeepSleep 中の自動再生を維持するためバッテリー最適化の除外を要求 | Android |
+
+---
+
 ## 🛠 技術スタック (Tech Stack)
 
 * **Frontend (Web / PWA)**: HTML / Vanilla CSS / TypeScript (Vite 8) / PWA (Service Worker, Web App Manifest)
@@ -142,6 +177,13 @@ Web / PWA 版（Chrome・iOS・Androidブラウザ）に加え、**Androidネイ
 * [事後文字起こし仕様 (stt_transcription_spec.md)](./docs/stt_transcription_spec.md)
 * [Incoming Webhook 仕様 (incoming_webhook_spec.md)](./docs/incoming_webhook_spec.md) / [カスタムWebhook 仕様 (custom_webhook_spec.md)](./docs/custom_webhook_spec.md)
 * [ボット機能仕様ドラフト (bot_function_spec.md)](./docs/bot_function_spec.md)
+
+---
+
+## ⚖️ ライセンス・免責事項 (License & Disclaimer)
+
+* 本プロジェクトは [MIT License](./LICENSE) のもとで公開されているオープンソースソフトウェアです。ライセンスの条件に従い、実装・運用・改変・再配布を自由に行えます。
+* 本ソフトウェアは現状有姿（AS IS）で提供されており、動作保証やサポート義務はありません。**本アプリを使用したこと、または使用できなかったことによって生じたいかなる損害（通信遅延・通知不達・データ消失などを含む）についても、作者は一切の責任を負いません。**自己責任にてご利用ください。
 
 ---
 

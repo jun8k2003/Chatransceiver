@@ -178,6 +178,14 @@
         </div>
         <div class="settings-body">
           <div class="settings-section">
+            <div class="section-label">プロフィール</div>
+            <div class="setting-row">
+              <label for="settingsNickname">ニックネーム</label>
+              <input type="text" id="settingsNickname" class="setting-input" value="田中" placeholder="ニックネームを入力..." />
+            </div>
+          </div>
+
+          <div class="settings-section">
             <div class="section-label">再生と録音</div>
             <div class="setting-row">
               <div class="setting-label-area">新着メッセージの自動再生</div>
@@ -195,14 +203,84 @@
               <div class="setting-label-area">マイクのノイズ抑制<div class="setting-desc">周囲の雑音を低減します（声や語尾が途切れる場合はOFFにしてください）</div></div>
               <label class="toggle"><input type="checkbox" checked /><span class="toggle-track"></span></label>
             </div>
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">ウェイクワード（正規表現）<div class="setting-desc">TTT (Trigger word To Talk): 音声（合言葉）で録音ダイアログを起動するハンズフリー機能です。チャット画面下部のTTTスイッチをONにすると合言葉の待ち受けを開始します。ここでは合言葉を正規表現で設定します。未設定時はTTTを有効化できません。</div></div>
+              <input type="text" class="setting-input wide" placeholder="例: (?:ちょっといいですか)" />
+            </div>
+            <div class="setting-row">
+              <div class="setting-label-area">録音モード<div class="setting-desc">※ モバイルでは録音と文字おこしの併用不可</div></div>
+              <select class="setting-input">
+                <option value="both" selected>両方 (音声 ＋ 文字おこし)</option>
+                <option value="audio_only">録音のみ</option>
+                <option value="text_only">文字おこしのみ</option>
+              </select>
+            </div>
           </div>
+
           <div class="settings-section">
             <div class="section-label">外観</div>
+            <div class="setting-row">
+              <label for="settingsTheme">カラーテーマ</label>
+              <select id="settingsTheme" class="setting-input">
+                <option value="dark" selected>ダークモード (標準)</option>
+                <option value="light">ライトモード</option>
+              </select>
+            </div>
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">背景画像<div class="setting-desc">任意の画像ファイルを設定します（IndexedDBに保存されます）</div></div>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <input type="file" accept="image/*" class="setting-input wide" style="flex: 1;" />
+                <button class="btn-sm ghost" style="flex-shrink: 0;">削除</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <label for="settingsBgSize">画像の表示方法</label>
+              <select id="settingsBgSize" class="setting-input">
+                <option value="cover" selected>画面全体を埋める（見切れあり）</option>
+                <option value="contain">画像全体を表示する（余白あり）</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-label-area">背景ぼかし<div class="setting-desc">背景画像にぼかし効果を適用します</div></div>
+              <label class="toggle"><input type="checkbox" /><span class="toggle-track"></span></label>
+            </div>
             <div class="setting-row">
               <div class="setting-label-area">未読バッジを表示する<div class="setting-desc">一覧の未読件数やアプリアイコンの未読バッジを表示します</div></div>
               <label class="toggle"><input type="checkbox" checked /><span class="toggle-track"></span></label>
             </div>
           </div>
+
+          <div class="settings-section">
+            <div class="section-label">通知</div>
+            <div class="setting-desc">プッシュ通知のON/OFFは、画面上部の🔔ボタンから行えます。</div>
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">Discord Webhook URL（オプション）<div class="setting-desc">iOS等のプッシュ通知代替。個人用Webhookを使用し、他人と共有しないでください</div></div>
+              <input type="text" class="setting-input wide" placeholder="https://discord.com/api/webhooks/..." />
+            </div>
+            <div class="setting-row setting-row-block">
+              <div class="setting-label-area">カスタムWebhook（オプション・上級者向け）<div class="setting-desc">新着メッセージを任意のURLへHTTP送信します（最大5件・即時保存）。URLとBodyテンプレート内の {message} {username} {community} {message_type} {url} は実値に置換されます。GET/DELETEはBodyを送信しません。送信は投げっぱなしで、失敗しても通知されません。</div></div>
+              <button class="btn-sm ghost webhook-add-btn">＋ Webhookを追加</button>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <details>
+              <summary>🔧 マイク・音声のトラブルシューティング（PC）</summary>
+            </details>
+          </div>
+
+          <div class="settings-footnote">
+            <p class="build-info">Build: <span>1.0.0</span></p>
+            <button class="btn-copy">🔄 アプリを再読み込み（最新化）</button>
+            <div class="logout-row">
+              <button class="link-danger">アカウントからログアウトする</button>
+            </div>
+            <img src="../public/chatora.png" alt="" class="settings-app-icon" aria-hidden="true" />
+          </div>
+        </div>
+        <div class="settings-footer">
+          <button class="btn-sm ghost btn-settings-cancel">閉じる</button>
+          <button class="btn-sm primary btn-settings-save">保存</button>
         </div>
       </div>
     </div>
