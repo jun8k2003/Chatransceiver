@@ -17,6 +17,7 @@ export class AudioManager {
   private recognition: any = null; // SpeechRecognition (録音時文字おこし用)
   private isRecognitionActive: boolean = false;
   private activeAudioElement: HTMLAudioElement | null = null;
+  public noiseSuppressionEnabled: boolean = true;
 
   // ウェイクワード監視用 SpeechRecognition (TTT モード専用)
   private wakeRecognition: any = null;
@@ -61,7 +62,7 @@ export class AudioManager {
       audio: {
         autoGainControl: true,
         echoCancellation: true,
-        noiseSuppression: true
+        noiseSuppression: this.noiseSuppressionEnabled
       }
     });
 

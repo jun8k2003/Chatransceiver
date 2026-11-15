@@ -114,6 +114,12 @@ public static partial class AppConfig
         set => Preferences.Default.Set("vibration_enabled", value);
     }
 
+    public static bool NoiseSuppressionEnabled
+    {
+        get => Preferences.Default.Get("noise_suppression_enabled", true);
+        set => Preferences.Default.Set("noise_suppression_enabled", value);
+    }
+
     public static bool UnreadBadgeEnabled
     {
         get => Preferences.Default.Get("unread_badge_enabled", true);

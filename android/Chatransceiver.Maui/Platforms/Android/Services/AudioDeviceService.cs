@@ -70,6 +70,17 @@ public static class AudioDeviceService
         return inputDevice.Type == AudioDeviceType.BluetoothSco || isBleHeadset;
     }
 
+    public static bool IsInputCommunicationActive
+    {
+        get
+        {
+            lock (RouteLock)
+            {
+                return _inputCommActive;
+            }
+        }
+    }
+
     public static void BeginInputRouting(AudioDeviceInfo? inputDevice)
     {
         if (!IsBluetoothInputDevice(inputDevice)) return;

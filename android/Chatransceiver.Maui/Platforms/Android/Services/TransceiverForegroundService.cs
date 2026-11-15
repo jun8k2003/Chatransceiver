@@ -302,10 +302,9 @@ public class TransceiverForegroundService : Service
 
         if (!NativeRecordingService.Instance.IsRecording)
         {
-            // 1回目押下: 録音開始
+            // 1回目押下: 録音開始（開始ビープは HFP 通話モード切替完了後に StartRecordingAsync 内で再生される）
             NativeAudioService.Instance.AcquireWakeLock(25000);
             AudioPlaybackQueue.Instance.Pause();
-            NativeAudioService.Instance.BeepStart();
             NativeAudioService.Instance.StartSilentRecordingKeeper();
 
             bool started = await NativeRecordingService.Instance.StartRecordingAsync();
@@ -371,7 +370,6 @@ public class TransceiverForegroundService : Service
         {
             NativeAudioService.Instance.StopSilentRecordingKeeper();
             var result = await NativeRecordingService.Instance.StopRecordingAsync();
-            NativeAudioService.Instance.BeepEnd();
             UpdateNotification("📤 メッセージ送信中...");
 
             if (result.WavBytes != null || !string.IsNullOrWhiteSpace(result.Transcript))

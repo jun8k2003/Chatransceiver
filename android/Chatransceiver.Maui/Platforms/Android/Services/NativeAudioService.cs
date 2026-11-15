@@ -616,29 +616,37 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
     /// <summary>
     /// PTT録音開始ビープ (800Hz -> 1200Hz)
     /// </summary>
-    public void BeepStart() => PlayTones(new[] { (800, 80), (1200, 80) });
+    public void BeepStart() => _ = PlayTonesAsync(new[] { (800, 90), (1200, 100) });
+
+    public Task BeepStartAsync() => PlayTonesAsync(new[] { (800, 90), (1200, 100) });
 
     /// <summary>
     /// PTT録音停止・送信ビープ (1200Hz -> 800Hz)
     /// </summary>
-    public void BeepEnd() => PlayTones(new[] { (1200, 80), (800, 80) });
+    public void BeepEnd() => _ = PlayTonesAsync(new[] { (1200, 90), (800, 100) });
+
+    public Task BeepEndAsync() => PlayTonesAsync(new[] { (1200, 90), (800, 100) });
 
     /// <summary>
     /// PTTエラービープ (400Hz x 2)
     /// </summary>
-    public void BeepError() => PlayTones(new[] { (400, 120), (0, 60), (400, 120) });
+    public void BeepError() => _ = PlayTonesAsync(new[] { (400, 120), (0, 60), (400, 120) });
 
-    private static void PlayTones((int FreqHz, int DurationMs)[] tones)
+    private static Task PlayTonesAsync((int FreqHz, int DurationMs)[] tones)
     {
-        _ = Task.Run(() =>
+        return Task.Run(async () =>
         {
             try
             {
                 const int sampleRate = 16000;
-                int totalSamples = tones.Sum(t => sampleRate * t.DurationMs / 1000);
-                short[] pcm = new short[totalSamples];
+                const int leadSilenceMs = 20;
+                const int tailSilenceMs = 60;
+                int leadSamples = sampleRate * leadSilenceMs / 1000;
+                int tailSamples = sampleRate * tailSilenceMs / 1000;
+                int toneSamples = tones.Sum(t => sampleRate * t.DurationMs / 1000);
+                short[] pcm = new short[leadSamples + toneSamples + tailSamples];
 
-                int offset = 0;
+                int offset = leadSamples;
                 foreach (var (freq, durMs) in tones)
                 {
                     int count = sampleRate * durMs / 1000;
@@ -656,17 +664,19 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
                             else if (i > count - fadeSamples) env = (double)(count - i) / fadeSamples;
 
                             double angle = 2.0 * Math.PI * freq * i / sampleRate;
-                            pcm[offset + i] = (short)(Math.Sin(angle) * short.MaxValue * 0.3 * env);
+                            pcm[offset + i] = (short)(Math.Sin(angle) * short.MaxValue * 0.4 * env);
                         }
                     }
                     offset += count;
                 }
 
+                bool inputCommActive = AudioDeviceService.IsInputCommunicationActive;
                 var preferredOut = AudioDeviceService.FindPreferredOutputDevice();
-                bool useCommRoute = AudioDeviceService.RequiresCommunicationUsage(preferredOut);
+                bool outputNeedsComm = !inputCommActive && AudioDeviceService.RequiresCommunicationUsage(preferredOut);
+                bool useCommUsage = inputCommActive || outputNeedsComm;
 
                 var attrs = new AudioAttributes.Builder()
-                    ?.SetUsage(useCommRoute ? AudioUsageKind.VoiceCommunication : AudioUsageKind.Media)
+                    ?.SetUsage(useCommUsage ? AudioUsageKind.VoiceCommunication : AudioUsageKind.Media)
                     ?.SetContentType(AudioContentType.Speech)
                     ?.Build();
                 var format = new AudioFormat.Builder()
@@ -677,7 +687,7 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
 
                 if (attrs == null || format == null) return;
 
-                if (useCommRoute)
+                if (outputNeedsComm)
                 {
                     AudioDeviceService.BeginOutputCommunicationRoute(preferredOut);
                 }
@@ -691,18 +701,21 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
                         byteLen,
                         AudioTrackMode.Static,
                         0);
-                    if (preferredOut != null)
+                    // HFP通話モード中にBluetooth A2DP出力先を強制指定すると無音になるため、
+                    // 入力HFPアクティブ時はアクティブなCommunicationDevice(HFP)へ自動ルーティングさせる
+                    if (preferredOut != null && !(inputCommActive && preferredOut.Type == AudioDeviceType.BluetoothA2dp))
                     {
                         track.SetPreferredDevice(preferredOut);
                     }
                     track.Write(pcm, 0, pcm.Length);
                     track.Play();
-                    Thread.Sleep(tones.Sum(t => t.DurationMs) + 50);
+                    int totalWaitMs = leadSilenceMs + tones.Sum(t => t.DurationMs) + tailSilenceMs + 40;
+                    await Task.Delay(totalWaitMs);
                     track.Stop();
                 }
                 finally
                 {
-                    if (useCommRoute)
+                    if (outputNeedsComm)
                     {
                         AudioDeviceService.EndOutputCommunicationRoute();
                     }
@@ -710,7 +723,7 @@ public class NativeAudioService : Java.Lang.Object, TextToSpeech.IOnInitListener
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"PlayTones error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"PlayTonesAsync error: {ex.Message}");
             }
         });
     }

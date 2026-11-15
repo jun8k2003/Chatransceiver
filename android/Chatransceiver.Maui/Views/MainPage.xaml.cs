@@ -635,7 +635,6 @@ public partial class MainPage : ContentPage
 
         _stoppedRecordingResult = null;
         AudioPlaybackQueue.Instance.Pause();
-        NativeAudioService.Instance.BeepStart();
 
         RecordingStatusTitleLabel.Text = "🔴 音声録音中...";
         RecordingTimerLabel.Text = "00:15";
@@ -661,7 +660,6 @@ public partial class MainPage : ContentPage
 
         ModalStopBtn.IsEnabled = false;
         _stoppedRecordingResult = await NativeRecordingService.Instance.StopRecordingAsync();
-        NativeAudioService.Instance.BeepEnd();
 
         RecordingStatusTitleLabel.Text = "⏸️ 録音完了（送信待ち）";
         TranscriptPreviewLabel.Text = _stoppedRecordingResult.Transcript;
@@ -691,7 +689,6 @@ public partial class MainPage : ContentPage
             // 15秒経過時は録音を止めて確認状態にする（または送信ボタンを押せるようにする）
             ModalStopBtn.IsEnabled = false;
             _stoppedRecordingResult = await NativeRecordingService.Instance.StopRecordingAsync();
-            NativeAudioService.Instance.BeepEnd();
             RecordingStatusTitleLabel.Text = "⏹️ 15秒録音完了（送信ボタンを押してください）";
             RecordingTimerLabel.Text = "00:00";
             RecordingProgressBar.Progress = 0.0;
@@ -713,7 +710,6 @@ public partial class MainPage : ContentPage
             if (NativeRecordingService.Instance.IsRecording)
             {
                 result = await NativeRecordingService.Instance.StopRecordingAsync();
-                NativeAudioService.Instance.BeepEnd();
             }
             else if (_stoppedRecordingResult != null)
             {
@@ -760,7 +756,7 @@ public partial class MainPage : ContentPage
     {
         if (NativeRecordingService.Instance.IsRecording)
         {
-            _ = await NativeRecordingService.Instance.StopRecordingAsync();
+            _ = await NativeRecordingService.Instance.StopRecordingAsync(playEndTone: false);
         }
         _stoppedRecordingResult = null;
         ResetRecordingUi();

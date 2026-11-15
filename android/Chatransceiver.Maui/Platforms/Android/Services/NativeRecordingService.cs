@@ -1,6 +1,7 @@
 using System.Text;
 using Android.Content;
 using Android.Media;
+using Android.Media.Audiofx;
 using Android.OS;
 using Android.Speech;
 using Chatransceiver.Maui.Models;
@@ -25,6 +26,7 @@ public class NativeRecordingService
     private const int MaxDurationSeconds = 15;
 
     private AudioRecord? _audioRecord;
+    private NoiseSuppressor? _noiseSuppressor;
     private CancellationTokenSource? _recordCts;
     private Task<byte[]>? _recordLoopTask;
 
@@ -52,7 +54,8 @@ public class NativeRecordingService
         int bufferSize = Math.Max(minBuf * 2, SampleRate); // 約0.5秒分バッファ
 
         var preferredIn = AudioDeviceService.FindPreferredInputDevice();
-        if (AudioDeviceService.IsBluetoothInputDevice(preferredIn))
+        bool isBtInput = AudioDeviceService.IsBluetoothInputDevice(preferredIn);
+        if (isBtInput)
         {
             await PttConnectionService.StartPttCallAsync();
         }
@@ -60,12 +63,26 @@ public class NativeRecordingService
 
         try
         {
+            bool noiseSuppression = AppConfig.NoiseSuppressionEnabled;
+            var audioSource = noiseSuppression ? AudioSource.VoiceCommunication : AudioSource.Mic;
+
             _audioRecord = new AudioRecord(
-                AudioSource.Mic,
+                audioSource,
                 SampleRate,
                 ChannelIn.Mono,
                 Encoding.Pcm16bit,
                 bufferSize);
+
+            if (_audioRecord.State != State.Initialized && audioSource != AudioSource.Mic)
+            {
+                _audioRecord.Release();
+                _audioRecord = new AudioRecord(
+                    AudioSource.Mic,
+                    SampleRate,
+                    ChannelIn.Mono,
+                    Encoding.Pcm16bit,
+                    bufferSize);
+            }
 
             if (_audioRecord.State != State.Initialized)
             {
@@ -80,10 +97,13 @@ public class NativeRecordingService
             {
                 _audioRecord.SetPreferredDevice(preferredIn);
             }
+
+            ApplyNoiseSuppression(_audioRecord.AudioSessionId, noiseSuppression);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"AudioRecord init failed: {ex.Message}");
+            ReleaseNoiseSuppressor();
             AudioDeviceService.EndInputRouting();
             PttConnectionService.EndPttCall();
             return false;
@@ -101,10 +121,70 @@ public class NativeRecordingService
         var token = _recordCts.Token;
 
         _audioRecord.StartRecording();
+
+        // Bluetooth HFP/SCO 通話モードへのハードウェア切替完了を待ってから開始ビープを鳴らし、
+        // ビープ再生終了直後から本録音を開始することで「音抜け」と「冒頭の頭切れ」を同時に解消する
+        await WarmupAndPlayStartToneAsync(isBtInput, preferredIn, token);
+        if (token.IsCancellationRequested || !IsRecording)
+        {
+            return false;
+        }
+
         _recordLoopTask = Task.Run(() => CapturePcmLoop(token), token);
         _ = RunCountdownLoopAsync(token);
 
         return true;
+    }
+
+    private async Task WarmupAndPlayStartToneAsync(
+        bool isBtInput,
+        AudioDeviceInfo? preferredIn,
+        CancellationToken token)
+    {
+        bool draining = true;
+        var drainTask = Task.Run(() =>
+        {
+            byte[] discard = new byte[1600]; // 50ms @ 16kHz 16bit mono
+            while (Volatile.Read(ref draining) && !token.IsCancellationRequested && _audioRecord != null)
+            {
+                try
+                {
+                    int r = _audioRecord.Read(discard, 0, discard.Length);
+                    if (r <= 0) break;
+                }
+                catch
+                {
+                    break;
+                }
+            }
+        });
+
+        try
+        {
+            if (isBtInput)
+            {
+                // AudioRecord.Read() により HAL の SCO 入力が開くのを促しつつ、
+                // Bluetoothイヤフォンの A2DP -> HFP 通話モード切替完了 (約500ms) を待機
+                await Task.Delay(150, token);
+                AudioDeviceService.BeginInputRouting(preferredIn);
+                await Task.Delay(350, token);
+            }
+
+            if (!token.IsCancellationRequested)
+            {
+                await NativeAudioService.Instance.BeepStartAsync();
+            }
+        }
+        catch (TaskCanceledException) { }
+        finally
+        {
+            Volatile.Write(ref draining, false);
+            try
+            {
+                await drainTask;
+            }
+            catch { }
+        }
     }
 
     private Task StartPipedSpeechRecognizerOnMainThreadAsync()
@@ -232,7 +312,7 @@ public class NativeRecordingService
     /// <summary>
     /// 録音を停止し、WAVバイト列と文字起こし結果を返却する
     /// </summary>
-    public async Task<RecordingResult> StopRecordingAsync()
+    public async Task<RecordingResult> StopRecordingAsync(bool playEndTone = true)
     {
         if (!IsRecording)
         {
@@ -274,6 +354,14 @@ public class NativeRecordingService
         }
         catch { }
         _audioRecord = null;
+        ReleaseNoiseSuppressor();
+
+        // Bluetooth HFP通話モードを閉じる前に終了ビープを鳴らすことで、HFP->A2DP切替による終了音の消失を防ぐ
+        if (playEndTone)
+        {
+            await NativeAudioService.Instance.BeepEndAsync();
+        }
+
         AudioDeviceService.EndInputRouting();
         PttConnectionService.EndPttCall();
 
@@ -310,6 +398,34 @@ public class NativeRecordingService
             Transcript = finalText,
             NeedsTranscription = includeAudio && needsTranscription
         };
+    }
+
+    private void ApplyNoiseSuppression(int audioSessionId, bool enabled)
+    {
+        ReleaseNoiseSuppressor();
+        try
+        {
+            if (NoiseSuppressor.IsAvailable)
+            {
+                _noiseSuppressor = NoiseSuppressor.Create(audioSessionId);
+                _noiseSuppressor?.SetEnabled(enabled);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ApplyNoiseSuppression error: {ex.Message}");
+        }
+    }
+
+    private void ReleaseNoiseSuppressor()
+    {
+        var ns = _noiseSuppressor;
+        _noiseSuppressor = null;
+        if (ns != null)
+        {
+            try { ns.Release(); } catch { }
+            try { ns.Dispose(); } catch { }
+        }
     }
 
     private void ClosePipe()
