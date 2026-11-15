@@ -181,24 +181,19 @@ public class PttConnectionService : ConnectionService
         long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         lock (SyncLock)
         {
-            // 接続直後の初期状態遷移ノイズを無視
-            if (now - _callStartedMs < 300) return;
-            if (ReferenceEquals(_activeConnection, source))
-            {
-                _activeConnection = null;
-            }
+            // 接続直後（HFP切替・開始トーン再生中）の初期状態遷移ノイズを無視
+            if (now - _callStartedMs < 500) return;
+            source.MarkLocalClosing();
         }
-
-        try
-        {
-            source.SetDisconnected(new DisconnectCause(Causes.Remote));
-            source.Destroy();
-        }
-        catch { }
 
         if (NativeRecordingService.Instance.IsRecording)
         {
+            // StopRecordingAsync 内で終了ビープ (BeepEndAsync) を再生した後に EndPttCall() で切断する
             TransceiverForegroundService.TryHandleMediaButtonToggle();
+        }
+        else
+        {
+            EndPttCall();
         }
     }
 
@@ -211,7 +206,6 @@ public class PttConnectionService : ConnectionService
         private void HandleRemoteButtonIfNotClosing()
         {
             if (_isLocalClosing) return;
-            _isLocalClosing = true;
             OnHeadsetCallButtonAction(this);
         }
 
