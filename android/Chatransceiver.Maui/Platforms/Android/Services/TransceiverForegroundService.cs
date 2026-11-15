@@ -121,6 +121,7 @@ public class TransceiverForegroundService : Service
     {
         base.OnCreate();
         _instance = this;
+        PttConnectionService.EnsurePhoneAccountRegistered(this);
         CreateNotificationChannel();
         SetupMediaSession();
         NativeRecordingService.Instance.AutoTimeoutReached += OnRecordingAutoTimeout;

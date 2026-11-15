@@ -63,15 +63,20 @@ public static class AudioDeviceService
         }
     }
 
+    public static bool IsBluetoothInputDevice(AudioDeviceInfo? inputDevice)
+    {
+        if (inputDevice == null) return false;
+        bool isBleHeadset = OperatingSystem.IsAndroidVersionAtLeast(31) && inputDevice.Type == AudioDeviceType.BleHeadset;
+        return inputDevice.Type == AudioDeviceType.BluetoothSco || isBleHeadset;
+    }
+
     public static void BeginInputRouting(AudioDeviceInfo? inputDevice)
     {
-        if (inputDevice == null) return;
-        bool isBleHeadset = OperatingSystem.IsAndroidVersionAtLeast(31) && inputDevice.Type == AudioDeviceType.BleHeadset;
-        if (inputDevice.Type != AudioDeviceType.BluetoothSco && !isBleHeadset) return;
+        if (!IsBluetoothInputDevice(inputDevice)) return;
 
         lock (RouteLock)
         {
-            ApplyCommunicationDeviceLocked(inputDevice, isInput: true);
+            ApplyCommunicationDeviceLocked(inputDevice!, isInput: true);
         }
     }
 
