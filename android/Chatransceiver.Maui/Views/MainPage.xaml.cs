@@ -1042,9 +1042,13 @@ public partial class MainPage : ContentPage
         RoomMessages.Add(msg);
         ScrollMessagesToBottom(animate: true);
 
-        if (!msg.IsMine && AppConfig.AutoPlayEnabled)
+        if (!msg.IsMine)
         {
-            AudioPlaybackQueue.Instance.EnqueueMessage(msg);
+            NativeAudioService.Instance.VibrateIncomingIfEnabled(msg.Id);
+            if (AppConfig.AutoPlayEnabled)
+            {
+                AudioPlaybackQueue.Instance.EnqueueMessage(msg);
+            }
         }
     }
 
@@ -1052,7 +1056,13 @@ public partial class MainPage : ContentPage
     {
         if (_currentUser != null && _currentCommunity != null)
         {
+            int prevUnread = _members.Sum(m => m.UnreadCount) + _groups.Sum(g => g.UnreadCount);
             await ReloadCommunityDataAsync();
+            int nextUnread = _members.Sum(m => m.UnreadCount) + _groups.Sum(g => g.UnreadCount);
+            if (nextUnread > prevUnread)
+            {
+                NativeAudioService.Instance.VibrateIncomingIfEnabled();
+            }
         }
     }
 }

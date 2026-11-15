@@ -108,6 +108,12 @@ public static partial class AppConfig
         set => Preferences.Default.Set("callsign_enabled", value);
     }
 
+    public static bool VibrationEnabled
+    {
+        get => Preferences.Default.Get("vibration_enabled", true);
+        set => Preferences.Default.Set("vibration_enabled", value);
+    }
+
     public static bool UnreadBadgeEnabled
     {
         get => Preferences.Default.Get("unread_badge_enabled", true);
