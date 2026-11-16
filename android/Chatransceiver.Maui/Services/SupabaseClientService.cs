@@ -1,3 +1,4 @@
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -14,10 +15,24 @@ public class SupabaseClientService
     public static SupabaseClientService Instance { get; } = new();
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(25) };
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+
+    private enum RefreshOutcome
+    {
+        Success,
+        InvalidSession,
+        TransientError
+    }
 
     public const string AuthCallbackScheme = "chatransceiver://auth-callback";
 
     public event Action<SupabaseUser>? AuthStateChanged;
+
+    /// <summary>
+    /// 直近のセッション確認／リフレッシュでサーバーから明確に無効（400/401/403）と判定されたか。
+    /// オフラインや一時的通信エラー時は false のまま維持し、不要な再ログイン要求を防ぐ。
+    /// </summary>
+    public bool LastAuthFailureWasInvalidSession { get; private set; }
 
     private HttpRequestMessage CreateRequest(HttpMethod method, string relativeOrAbsoluteUrl, HttpContent? content = null)
     {
@@ -49,6 +64,155 @@ public class SupabaseClientService
     {
         var json = JsonSerializer.Serialize(obj);
         return new StringContent(json, Encoding.UTF8, "application/json");
+    }
+
+    private static void SaveSessionTokens(string? accessToken, string? refreshToken, long? expiresAt = null, long? expiresIn = null)
+    {
+        if (!string.IsNullOrEmpty(accessToken))
+        {
+            AppConfig.AccessToken = accessToken;
+        }
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            AppConfig.RefreshToken = refreshToken;
+        }
+
+        if (expiresAt is > 0)
+        {
+            AppConfig.AccessTokenExpiresAt = expiresAt.Value;
+        }
+        else if (expiresIn is > 0)
+        {
+            AppConfig.AccessTokenExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + expiresIn.Value;
+        }
+        else if (!string.IsNullOrEmpty(accessToken))
+        {
+            var jwtExp = TryReadJwtExpiration(accessToken);
+            if (jwtExp > 0)
+            {
+                AppConfig.AccessTokenExpiresAt = jwtExp;
+            }
+        }
+    }
+
+    private static long TryReadJwtExpiration(string? jwt)
+    {
+        if (string.IsNullOrEmpty(jwt)) return 0;
+        try
+        {
+            var parts = jwt.Split('.');
+            if (parts.Length < 2) return 0;
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            switch (payload.Length % 4)
+            {
+                case 2: payload += "=="; break;
+                case 3: payload += "="; break;
+            }
+            var bytes = Convert.FromBase64String(payload);
+            using var doc = JsonDocument.Parse(bytes);
+            if (doc.RootElement.TryGetProperty("exp", out var expProp) && expProp.TryGetInt64(out var exp))
+            {
+                return exp;
+            }
+        }
+        catch
+        {
+            // JWT形式でない場合は無視
+        }
+        return 0;
+    }
+
+    private static bool IsAccessTokenExpiringSoon(int bufferSeconds = 300)
+    {
+        var accessToken = AppConfig.AccessToken;
+        if (string.IsNullOrEmpty(accessToken)) return !string.IsNullOrEmpty(AppConfig.RefreshToken);
+
+        var expiresAt = AppConfig.AccessTokenExpiresAt;
+        if (expiresAt <= 0)
+        {
+            expiresAt = TryReadJwtExpiration(accessToken);
+            if (expiresAt > 0)
+            {
+                AppConfig.AccessTokenExpiresAt = expiresAt;
+            }
+        }
+
+        if (expiresAt <= 0) return false;
+        return DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= expiresAt - bufferSeconds;
+    }
+
+    /// <summary>
+    /// 起動・フォアグラウンド復帰時に期限切れ（または期限間近）の AccessToken を先回りリフレッシュする
+    /// </summary>
+    public async Task<bool> EnsureFreshSessionAsync()
+    {
+        if (string.IsNullOrEmpty(AppConfig.RefreshToken)) return false;
+        if (!IsAccessTokenExpiringSoon()) return true;
+        return await RefreshSessionInternalAsync(AppConfig.AccessToken) == RefreshOutcome.Success;
+    }
+
+    private static async Task<byte[]?> SnapshotContentAsync(HttpContent? content)
+    {
+        if (content == null) return null;
+        return await content.ReadAsByteArrayAsync();
+    }
+
+    private static HttpRequestMessage CloneRequest(HttpRequestMessage original, byte[]? contentBytes, string? newBearerToken)
+    {
+        var clone = new HttpRequestMessage(original.Method, original.RequestUri);
+        foreach (var header in original.Headers)
+        {
+            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        if (!string.IsNullOrEmpty(newBearerToken))
+        {
+            clone.Headers.Authorization = new AuthenticationHeaderValue("Bearer", newBearerToken);
+        }
+
+        if (original.Content != null && contentBytes != null)
+        {
+            var body = new ByteArrayContent(contentBytes);
+            foreach (var header in original.Content.Headers)
+            {
+                body.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+            clone.Content = body;
+        }
+        return clone;
+    }
+
+    /// <summary>
+    /// 期限間近の先回りリフレッシュ + 401 Unauthorized 時の自動リフレッシュ＆1回リトライ付き送信
+    /// </summary>
+    private async Task<HttpResponseMessage> SendWithAuthAsync(HttpRequestMessage req, CancellationToken ct = default)
+    {
+        if (!string.IsNullOrEmpty(AppConfig.RefreshToken) && IsAccessTokenExpiringSoon())
+        {
+            var preOutcome = await RefreshSessionInternalAsync(AppConfig.AccessToken);
+            if (preOutcome == RefreshOutcome.Success && !string.IsNullOrEmpty(AppConfig.AccessToken))
+            {
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AppConfig.AccessToken);
+            }
+        }
+
+        var canRetry = !string.IsNullOrEmpty(AppConfig.RefreshToken);
+        byte[]? contentBytes = canRetry ? await SnapshotContentAsync(req.Content) : null;
+        var usedToken = req.Headers.Authorization?.Parameter;
+
+        var res = await _http.SendAsync(req, ct);
+        if (res.StatusCode == HttpStatusCode.Unauthorized && canRetry)
+        {
+            var outcome = await RefreshSessionInternalAsync(usedToken);
+            if (outcome == RefreshOutcome.Success && !string.IsNullOrEmpty(AppConfig.AccessToken))
+            {
+                res.Dispose();
+                using var retryReq = CloneRequest(req, contentBytes, AppConfig.AccessToken);
+                return await _http.SendAsync(retryReq, ct);
+            }
+        }
+
+        return res;
     }
 
     /// <summary>
@@ -92,11 +256,11 @@ public class SupabaseClientService
 
             if (result.Properties.TryGetValue("access_token", out var accessToken) && !string.IsNullOrEmpty(accessToken))
             {
-                AppConfig.AccessToken = accessToken;
-                if (result.Properties.TryGetValue("refresh_token", out var refreshToken))
-                {
-                    AppConfig.RefreshToken = refreshToken;
-                }
+                result.Properties.TryGetValue("refresh_token", out var refreshToken);
+                long? expiresAt = result.Properties.TryGetValue("expires_at", out var eaStr) && long.TryParse(eaStr, out var ea) ? ea : null;
+                long? expiresIn = result.Properties.TryGetValue("expires_in", out var eiStr) && long.TryParse(eiStr, out var ei) ? ei : null;
+                SaveSessionTokens(accessToken, refreshToken, expiresAt, expiresIn);
+
                 var user = await GetCurrentUserAsync();
                 if (user != null)
                 {
@@ -158,11 +322,10 @@ public class SupabaseClientService
 
             if (dict.TryGetValue("access_token", out var accessToken) && !string.IsNullOrEmpty(accessToken))
             {
-                AppConfig.AccessToken = accessToken;
-                if (dict.TryGetValue("refresh_token", out var refreshToken))
-                {
-                    AppConfig.RefreshToken = refreshToken;
-                }
+                dict.TryGetValue("refresh_token", out var refreshToken);
+                long? expiresAt = dict.TryGetValue("expires_at", out var eaStr) && long.TryParse(eaStr, out var ea) ? ea : null;
+                long? expiresIn = dict.TryGetValue("expires_in", out var eiStr) && long.TryParse(eiStr, out var ei) ? ei : null;
+                SaveSessionTokens(accessToken, refreshToken, expiresAt, expiresIn);
 
                 var user = await GetCurrentUserAsync();
                 if (user != null)
@@ -184,33 +347,67 @@ public class SupabaseClientService
     /// </summary>
     public async Task<bool> RefreshSessionAsync()
     {
-        var refresh = AppConfig.RefreshToken;
-        if (string.IsNullOrEmpty(refresh)) return false;
+        return await RefreshSessionInternalAsync(AppConfig.AccessToken) == RefreshOutcome.Success;
+    }
 
+    private async Task<RefreshOutcome> RefreshSessionInternalAsync(string? failedAccessToken)
+    {
+        await _refreshLock.WaitAsync();
         try
         {
+            // 待機中に別のリクエストが既にリフレッシュを完了していた場合は再送しない
+            if (!string.IsNullOrEmpty(failedAccessToken) &&
+                !string.IsNullOrEmpty(AppConfig.AccessToken) &&
+                AppConfig.AccessToken != failedAccessToken &&
+                !IsAccessTokenExpiringSoon(60))
+            {
+                LastAuthFailureWasInvalidSession = false;
+                return RefreshOutcome.Success;
+            }
+
+            var refresh = AppConfig.RefreshToken;
+            if (string.IsNullOrEmpty(refresh))
+            {
+                LastAuthFailureWasInvalidSession = true;
+                return RefreshOutcome.InvalidSession;
+            }
+
             using var req = CreateRequest(HttpMethod.Post, "/auth/v1/token?grant_type=refresh_token", JsonBody(new
             {
                 refresh_token = refresh
             }));
             using var res = await _http.SendAsync(req);
-            if (!res.IsSuccessStatusCode) return false;
+
+            if (res.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                LastAuthFailureWasInvalidSession = true;
+                return RefreshOutcome.InvalidSession;
+            }
+            if (!res.IsSuccessStatusCode)
+            {
+                LastAuthFailureWasInvalidSession = false;
+                return RefreshOutcome.TransientError;
+            }
 
             using var doc = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync());
             var root = doc.RootElement;
-            if (root.TryGetProperty("access_token", out var at))
-            {
-                AppConfig.AccessToken = at.GetString();
-            }
-            if (root.TryGetProperty("refresh_token", out var rt))
-            {
-                AppConfig.RefreshToken = rt.GetString();
-            }
-            return true;
+            var newAt = root.TryGetProperty("access_token", out var at) ? at.GetString() : null;
+            var newRt = root.TryGetProperty("refresh_token", out var rt) ? rt.GetString() : null;
+            long? expiresAt = root.TryGetProperty("expires_at", out var ea) && ea.TryGetInt64(out var eaVal) ? eaVal : null;
+            long? expiresIn = root.TryGetProperty("expires_in", out var ei) && ei.TryGetInt64(out var eiVal) ? eiVal : null;
+
+            SaveSessionTokens(newAt, newRt, expiresAt, expiresIn);
+            LastAuthFailureWasInvalidSession = false;
+            return RefreshOutcome.Success;
         }
         catch
         {
-            return false;
+            LastAuthFailureWasInvalidSession = false;
+            return RefreshOutcome.TransientError;
+        }
+        finally
+        {
+            _refreshLock.Release();
         }
     }
 
@@ -233,8 +430,10 @@ public class SupabaseClientService
         }
         finally
         {
+            LastAuthFailureWasInvalidSession = false;
             AppConfig.AccessToken = null;
             AppConfig.RefreshToken = null;
+            AppConfig.AccessTokenExpiresAt = 0;
             AppConfig.CurrentUserId = null;
             AppConfig.CurrentCommunitySlug = null;
             AppConfig.ActiveRoomId = null;
@@ -247,24 +446,43 @@ public class SupabaseClientService
     /// </summary>
     public async Task<SupabaseUser?> GetCurrentUserAsync()
     {
-        if (string.IsNullOrEmpty(AppConfig.AccessToken)) return null;
+        LastAuthFailureWasInvalidSession = false;
 
-        using var authReq = CreateRequest(HttpMethod.Get, "/auth/v1/user");
-        using var authRes = await _http.SendAsync(authReq);
-        if (authRes.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        if (string.IsNullOrEmpty(AppConfig.AccessToken) && string.IsNullOrEmpty(AppConfig.RefreshToken))
         {
-            if (await RefreshSessionAsync())
-            {
-                using var retryReq = CreateRequest(HttpMethod.Get, "/auth/v1/user");
-                using var retryRes = await _http.SendAsync(retryReq);
-                if (!retryRes.IsSuccessStatusCode) return null;
-                return await ParseAndEnsureUserProfileAsync(await retryRes.Content.ReadAsStringAsync());
-            }
+            LastAuthFailureWasInvalidSession = true;
             return null;
         }
-        if (!authRes.IsSuccessStatusCode) return null;
 
-        return await ParseAndEnsureUserProfileAsync(await authRes.Content.ReadAsStringAsync());
+        try
+        {
+            if (string.IsNullOrEmpty(AppConfig.AccessToken) && !string.IsNullOrEmpty(AppConfig.RefreshToken))
+            {
+                if (await RefreshSessionInternalAsync(null) != RefreshOutcome.Success)
+                {
+                    return null;
+                }
+            }
+
+            using var authReq = CreateRequest(HttpMethod.Get, "/auth/v1/user");
+            using var authRes = await SendWithAuthAsync(authReq);
+            if (authRes.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                LastAuthFailureWasInvalidSession = true;
+                return null;
+            }
+            if (!authRes.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            return await ParseAndEnsureUserProfileAsync(await authRes.Content.ReadAsStringAsync());
+        }
+        catch
+        {
+            // ネットワーク切断・タイムアウト等は一時的エラー扱い（セッションは破棄しない）
+            return null;
+        }
     }
 
     private async Task<SupabaseUser?> ParseAndEnsureUserProfileAsync(string authUserJson)
@@ -288,7 +506,7 @@ public class SupabaseClientService
 
         // users テーブルを検索
         using var profReq = CreateRequest(HttpMethod.Get, $"/rest/v1/users?id=eq.{uid}&select=name");
-        using var profRes = await _http.SendAsync(profReq);
+        using var profRes = await SendWithAuthAsync(profReq);
         if (profRes.IsSuccessStatusCode)
         {
             using var profDoc = JsonDocument.Parse(await profRes.Content.ReadAsStringAsync());
@@ -314,7 +532,7 @@ public class SupabaseClientService
             avatar_url = ""
         }));
         upsertReq.Headers.TryAddWithoutValidation("Prefer", "resolution=merge-duplicates,return=representation");
-        using var upsertRes = await _http.SendAsync(upsertReq);
+        using var upsertRes = await SendWithAuthAsync(upsertReq);
 
         return new SupabaseUser
         {
@@ -330,7 +548,7 @@ public class SupabaseClientService
         {
             name = newName.Trim()
         }));
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
     }
 
@@ -347,7 +565,7 @@ public class SupabaseClientService
 
         // 1. 既存コミュニティの検索
         using (var getReq = CreateRequest(HttpMethod.Get, $"/rest/v1/communities?slug=eq.{Uri.EscapeDataString(slug)}&select=*"))
-        using (var getRes = await _http.SendAsync(getReq))
+        using (var getRes = await SendWithAuthAsync(getReq))
         {
             if (getRes.IsSuccessStatusCode)
             {
@@ -375,7 +593,7 @@ public class SupabaseClientService
                 invite_code = "code_" + slug
             }));
             createReq.Headers.TryAddWithoutValidation("Prefer", "return=representation");
-            using var createRes = await _http.SendAsync(createReq);
+            using var createRes = await SendWithAuthAsync(createReq);
             createRes.EnsureSuccessStatusCode();
 
             using var doc = JsonDocument.Parse(await createRes.Content.ReadAsStringAsync());
@@ -391,7 +609,7 @@ public class SupabaseClientService
         // 2. 既に参加しているか確認
         bool isMember = false;
         using (var memReq = CreateRequest(HttpMethod.Get, $"/rest/v1/community_members?community_id=eq.{community.Id}&user_id=eq.{userId}&select=user_number"))
-        using (var memRes = await _http.SendAsync(memReq))
+        using (var memRes = await SendWithAuthAsync(memReq))
         {
             if (memRes.IsSuccessStatusCode)
             {
@@ -405,7 +623,7 @@ public class SupabaseClientService
             // 最大 user_number を取得して +1
             int nextNumber = 1;
             using (var maxReq = CreateRequest(HttpMethod.Get, $"/rest/v1/community_members?community_id=eq.{community.Id}&select=user_number&order=user_number.desc&limit=1"))
-            using (var maxRes = await _http.SendAsync(maxReq))
+            using (var maxRes = await SendWithAuthAsync(maxReq))
             {
                 if (maxRes.IsSuccessStatusCode)
                 {
@@ -424,7 +642,7 @@ public class SupabaseClientService
                 user_number = nextNumber
             }));
             joinReq.Headers.TryAddWithoutValidation("Prefer", "resolution=merge-duplicates");
-            using var joinRes = await _http.SendAsync(joinReq);
+            using var joinRes = await SendWithAuthAsync(joinReq);
             joinRes.EnsureSuccessStatusCode();
         }
 
@@ -443,7 +661,7 @@ public class SupabaseClientService
             p_user_id = userId,
             p_community_id = communityId
         }));
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
     }
 
@@ -453,7 +671,7 @@ public class SupabaseClientService
     public async Task<List<SupabaseMember>> GetCommunityMembersAsync(string communityId, string currentUserId)
     {
         using var req = CreateRequest(HttpMethod.Get, $"/rest/v1/community_members?community_id=eq.{communityId}&select=user_number,users(id,name)&order=user_number.asc");
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
 
         var list = new List<SupabaseMember>();
@@ -483,7 +701,7 @@ public class SupabaseClientService
         var url = $"/rest/v1/user_inboxes?user_id=eq.{userId}&is_read=eq.false&select=messages!inner(sender_id,created_at),chat_rooms!inner(type,community_id,chat_room_members(user_id))&chat_rooms.type=eq.individual&chat_rooms.community_id=eq.{communityId}";
 
         using var req = CreateRequest(HttpMethod.Get, url);
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         if (!res.IsSuccessStatusCode) return result;
 
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
@@ -540,7 +758,7 @@ public class SupabaseClientService
     {
         var result = new List<SupabaseGroup>();
         using var req = CreateRequest(HttpMethod.Get, $"/rest/v1/chat_room_members?user_id=eq.{userId}&select=room_id,chat_rooms(id,type,community_id,name)");
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         if (!res.IsSuccessStatusCode) return result;
 
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
@@ -561,7 +779,7 @@ public class SupabaseClientService
         foreach (var room in groupRooms)
         {
             using var mReq = CreateRequest(HttpMethod.Get, $"/rest/v1/chat_room_members?room_id=eq.{room.Id}&select=users(name)");
-            using var mRes = await _http.SendAsync(mReq);
+            using var mRes = await SendWithAuthAsync(mReq);
             if (!mRes.IsSuccessStatusCode) continue;
 
             using var mDoc = JsonDocument.Parse(await mRes.Content.ReadAsStringAsync());
@@ -582,7 +800,7 @@ public class SupabaseClientService
             // 未読件数
             int unreadCount = 0;
             using var uReq = CreateRequest(HttpMethod.Get, $"/rest/v1/user_inboxes?room_id=eq.{room.Id}&user_id=eq.{userId}&is_read=eq.false&select=id");
-            using var uRes = await _http.SendAsync(uReq);
+            using var uRes = await SendWithAuthAsync(uReq);
             if (uRes.IsSuccessStatusCode)
             {
                 using var uDoc = JsonDocument.Parse(await uRes.Content.ReadAsStringAsync());
@@ -616,7 +834,7 @@ public class SupabaseClientService
         {
             name = string.IsNullOrEmpty(trimmed) ? null : trimmed
         }));
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
     }
 
@@ -626,7 +844,7 @@ public class SupabaseClientService
     public async Task<string> GetOrCreateIndividualRoomAsync(string communityId, string currentUserId, string targetUserId)
     {
         using var myReq = CreateRequest(HttpMethod.Get, $"/rest/v1/chat_room_members?user_id=eq.{currentUserId}&select=room_id,chat_rooms(id,type,community_id)");
-        using var myRes = await _http.SendAsync(myReq);
+        using var myRes = await SendWithAuthAsync(myReq);
         myRes.EnsureSuccessStatusCode();
 
         var candidateRoomIds = new List<string>();
@@ -648,7 +866,7 @@ public class SupabaseClientService
         {
             var inList = string.Join(",", candidateRoomIds);
             using var matchReq = CreateRequest(HttpMethod.Get, $"/rest/v1/chat_room_members?room_id=in.({inList})&user_id=eq.{targetUserId}&select=room_id&limit=1");
-            using var matchRes = await _http.SendAsync(matchReq);
+            using var matchRes = await SendWithAuthAsync(matchReq);
             if (matchRes.IsSuccessStatusCode)
             {
                 using var doc = JsonDocument.Parse(await matchRes.Content.ReadAsStringAsync());
@@ -666,7 +884,7 @@ public class SupabaseClientService
             community_id = communityId
         }));
         createRoomReq.Headers.TryAddWithoutValidation("Prefer", "return=representation");
-        using var createRoomRes = await _http.SendAsync(createRoomReq);
+        using var createRoomRes = await SendWithAuthAsync(createRoomReq);
         createRoomRes.EnsureSuccessStatusCode();
 
         string newRoomId;
@@ -680,7 +898,7 @@ public class SupabaseClientService
             new { room_id = newRoomId, user_id = currentUserId },
             new { room_id = newRoomId, user_id = targetUserId }
         }));
-        using var addMemRes = await _http.SendAsync(addMemReq);
+        using var addMemRes = await SendWithAuthAsync(addMemReq);
         addMemRes.EnsureSuccessStatusCode();
 
         return newRoomId;
@@ -695,7 +913,7 @@ public class SupabaseClientService
 
         // 既存グループでメンバー構成が完全一致するものがあるかチェック
         using (var myReq = CreateRequest(HttpMethod.Get, $"/rest/v1/chat_room_members?user_id=eq.{currentUserId}&select=room_id,chat_rooms(id,type,community_id)"))
-        using (var myRes = await _http.SendAsync(myReq))
+        using (var myRes = await SendWithAuthAsync(myReq))
         {
             if (myRes.IsSuccessStatusCode)
             {
@@ -708,7 +926,7 @@ public class SupabaseClientService
                     {
                         var rid = r.GetProperty("room_id").GetString()!;
                         using var mReq = CreateRequest(HttpMethod.Get, $"/rest/v1/chat_room_members?room_id=eq.{rid}&select=user_id");
-                        using var mRes = await _http.SendAsync(mReq);
+                        using var mRes = await SendWithAuthAsync(mReq);
                         if (mRes.IsSuccessStatusCode)
                         {
                             using var mDoc = JsonDocument.Parse(await mRes.Content.ReadAsStringAsync());
@@ -733,7 +951,7 @@ public class SupabaseClientService
             community_id = communityId
         }));
         createReq.Headers.TryAddWithoutValidation("Prefer", "return=representation");
-        using var createRes = await _http.SendAsync(createReq);
+        using var createRes = await SendWithAuthAsync(createReq);
         createRes.EnsureSuccessStatusCode();
 
         string newRoomId;
@@ -744,7 +962,7 @@ public class SupabaseClientService
 
         var inserts = allUserIds.Select(uid => new { room_id = newRoomId, user_id = uid }).ToArray();
         using var memInsertReq = CreateRequest(HttpMethod.Post, "/rest/v1/chat_room_members", JsonBody(inserts));
-        using var memInsertRes = await _http.SendAsync(memInsertReq);
+        using var memInsertRes = await SendWithAuthAsync(memInsertReq);
         memInsertRes.EnsureSuccessStatusCode();
 
         return newRoomId;
@@ -757,7 +975,7 @@ public class SupabaseClientService
     {
         var url = $"/rest/v1/messages?room_id=eq.{roomId}&select=id,room_id,sender_id,sender_type,webhook_sender_name,audio_url,text_content,is_revoked,created_at,users(name)&order=created_at.asc";
         using var req = CreateRequest(HttpMethod.Get, url);
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
 
         var list = new List<SupabaseMessage>();
@@ -829,7 +1047,7 @@ public class SupabaseClientService
 
             using var uploadReq = CreateRequest(HttpMethod.Post, $"/storage/v1/object/voice-messages/{fileName}", uploadContent);
             uploadReq.Headers.TryAddWithoutValidation("cache-control", "3600");
-            using var uploadRes = await _http.SendAsync(uploadReq);
+            using var uploadRes = await SendWithAuthAsync(uploadReq);
             uploadRes.EnsureSuccessStatusCode();
 
             audioUrl = $"{AppConfig.SupabaseUrl}/storage/v1/object/public/voice-messages/{fileName}";
@@ -848,7 +1066,7 @@ public class SupabaseClientService
             }));
         insertReq.Headers.TryAddWithoutValidation("Prefer", "return=representation");
 
-        using var insertRes = await _http.SendAsync(insertReq);
+        using var insertRes = await SendWithAuthAsync(insertReq);
         insertRes.EnsureSuccessStatusCode();
 
         using var doc = JsonDocument.Parse(await insertRes.Content.ReadAsStringAsync());
@@ -861,7 +1079,7 @@ public class SupabaseClientService
     public async Task RevokeMessageAsync(string messageId, string currentUserId)
     {
         using var getReq = CreateRequest(HttpMethod.Get, $"/rest/v1/messages?id=eq.{messageId}&select=audio_url,sender_id");
-        using var getRes = await _http.SendAsync(getReq);
+        using var getRes = await SendWithAuthAsync(getReq);
         getRes.EnsureSuccessStatusCode();
 
         string? audioUrl = null;
@@ -888,7 +1106,7 @@ public class SupabaseClientService
                 {
                     prefixes = new[] { filePath }
                 }));
-                await _http.SendAsync(delStorageReq);
+                await SendWithAuthAsync(delStorageReq);
             }
         }
 
@@ -898,7 +1116,7 @@ public class SupabaseClientService
             text_content = (string?)null,
             audio_url = (string?)null
         }));
-        using var patchRes = await _http.SendAsync(patchReq);
+        using var patchRes = await SendWithAuthAsync(patchReq);
         patchRes.EnsureSuccessStatusCode();
     }
 
@@ -913,7 +1131,7 @@ public class SupabaseClientService
             {
                 is_read = true
             }));
-            await _http.SendAsync(req);
+            await SendWithAuthAsync(req);
         }
         catch (Exception ex)
         {
@@ -927,14 +1145,14 @@ public class SupabaseClientService
     public async Task DeleteGroupAsync(string roomId)
     {
         using var req = CreateRequest(HttpMethod.Delete, $"/rest/v1/chat_rooms?id=eq.{roomId}");
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
     }
 
     public async Task DeleteMessagesAsync(string roomId)
     {
         using var req = CreateRequest(HttpMethod.Delete, $"/rest/v1/messages?room_id=eq.{roomId}");
-        using var res = await _http.SendAsync(req);
+        using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
     }
 
@@ -953,7 +1171,7 @@ public class SupabaseClientService
                 device_uuid = AppConfig.GetDeviceUuid(),
                 fcm_token = fcmToken
             }));
-            using var res = await _http.SendAsync(req);
+            using var res = await SendWithAuthAsync(req);
             if (res.IsSuccessStatusCode)
             {
                 AppConfig.FcmRegistered = true;
@@ -981,7 +1199,7 @@ public class SupabaseClientService
                 action = "unregister",
                 device_uuid = AppConfig.GetDeviceUuid()
             }));
-            using var res = await _http.SendAsync(req);
+            using var res = await SendWithAuthAsync(req);
             if (res.IsSuccessStatusCode)
             {
                 AppConfig.FcmRegistered = false;

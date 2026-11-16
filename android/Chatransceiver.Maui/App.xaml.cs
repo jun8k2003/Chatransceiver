@@ -20,6 +20,15 @@ public partial class App : Application
         });
     }
 
+    protected override void OnResume()
+    {
+        base.OnResume();
+        if (Windows.Count > 0 && Windows[0].Page is NavigationPage nav && nav.CurrentPage is MainPage mainPage)
+        {
+            _ = mainPage.OnAppResumedAsync();
+        }
+    }
+
     public static void ApplyTheme(string theme)
     {
         if (Current == null) return;

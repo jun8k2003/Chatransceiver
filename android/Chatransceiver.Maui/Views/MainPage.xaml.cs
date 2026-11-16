@@ -87,11 +87,37 @@ public partial class MainPage : ContentPage
             {
                 await ApplyLoggedInUserAsync(user);
             }
-            else
+            else if (SupabaseClientService.Instance.LastAuthFailureWasInvalidSession ||
+                     string.IsNullOrEmpty(AppConfig.CurrentUserId))
             {
                 LoginOverlay.IsVisible = true;
             }
+            else
+            {
+                // オフライン等の一時的エラーではログイン画面へ落とさずトークンを保持する
+                LoginOverlay.IsVisible = false;
+                await DisplayAlert("接続待機中", "ネットワーク接続を確認できませんでした。オンライン復帰後に自動で再接続します。", "OK");
+            }
         });
+    }
+
+    public async Task OnAppResumedAsync()
+    {
+        try
+        {
+            if (_currentUser == null && !LoginOverlay.IsVisible)
+            {
+                await InitializeSessionAsync();
+            }
+            else if (_currentUser != null)
+            {
+                await SupabaseClientService.Instance.EnsureFreshSessionAsync();
+            }
+        }
+        catch
+        {
+            // 復帰時のバックグラウンド更新失敗は無視（次のAPI呼び出し時に401リトライされる）
+        }
     }
 
     private void OnAuthStateChanged(SupabaseUser user)
