@@ -50,6 +50,16 @@ public static partial class AppConfig
         }
     }
 
+    public static long AccessTokenExpiresAt
+    {
+        get => Preferences.Default.Get("auth_expires_at", 0L);
+        set
+        {
+            if (value <= 0) Preferences.Default.Remove("auth_expires_at");
+            else Preferences.Default.Set("auth_expires_at", value);
+        }
+    }
+
     public static string? CurrentUserId
     {
         get => Preferences.Default.Get<string?>("auth_user_id", null);
