@@ -46,9 +46,28 @@ public class UnifiedListItem : INotifyPropertyChanged
 {
     public string Id { get; set; } = string.Empty;
     public bool IsGroup { get; set; }
-    public string DisplayTitle { get; set; } = string.Empty;
-    public string Subtitle { get; set; } = string.Empty;
-    public bool IsOnline { get; set; }
+
+    private string _displayTitle = string.Empty;
+    public string DisplayTitle
+    {
+        get => _displayTitle;
+        set { if (_displayTitle == value) return; _displayTitle = value; OnPropertyChanged(); }
+    }
+
+    private string _subtitle = string.Empty;
+    public string Subtitle
+    {
+        get => _subtitle;
+        set { if (_subtitle == value) return; _subtitle = value; OnPropertyChanged(); }
+    }
+
+    private bool _isOnline;
+    public bool IsOnline
+    {
+        get => _isOnline;
+        set { if (_isOnline == value) return; _isOnline = value; OnPropertyChanged(); }
+    }
+
     private int _unreadCount;
     public int UnreadCount
     {
@@ -62,7 +81,19 @@ public class UnifiedListItem : INotifyPropertyChanged
             OnPropertyChanged(nameof(UnreadBadgeText));
         }
     }
-    public bool ShowUnreadBadge { get; set; } = true;
+
+    private bool _showUnreadBadge = true;
+    public bool ShowUnreadBadge
+    {
+        get => _showUnreadBadge;
+        set
+        {
+            if (_showUnreadBadge == value) return;
+            _showUnreadBadge = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasUnread));
+        }
+    }
     public bool HasUnread => ShowUnreadBadge && UnreadCount > 0;
     public string UnreadBadgeText => UnreadCount > 99 ? "99+" : UnreadCount.ToString();
 
@@ -70,21 +101,44 @@ public class UnifiedListItem : INotifyPropertyChanged
     public bool IsPlaying
     {
         get => _isPlaying;
-        set { _isPlaying = value; OnPropertyChanged(); }
+        set { if (_isPlaying == value) return; _isPlaying = value; OnPropertyChanged(); }
+    }
+
+    private bool _isGroupSelectMode;
+    public bool IsGroupSelectMode
+    {
+        get => _isGroupSelectMode;
+        set
+        {
+            if (_isGroupSelectMode == value) return;
+            _isGroupSelectMode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ShowGroupCheckbox));
+            OnPropertyChanged(nameof(GroupCheckboxText));
+        }
     }
 
     private bool _isSelectedForGroup;
     public bool IsSelectedForGroup
     {
         get => _isSelectedForGroup;
-        set { _isSelectedForGroup = value; OnPropertyChanged(); }
+        set
+        {
+            if (_isSelectedForGroup == value) return;
+            _isSelectedForGroup = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(GroupCheckboxText));
+        }
     }
+
+    public bool ShowGroupCheckbox => IsGroupSelectMode && !IsGroup;
+    public string GroupCheckboxText => IsSelectedForGroup ? "☑️" : "⬜";
 
     private bool _isActiveRoom;
     public bool IsActiveRoom
     {
         get => _isActiveRoom;
-        set { _isActiveRoom = value; OnPropertyChanged(); OnPropertyChanged(nameof(RowBackgroundColor)); }
+        set { if (_isActiveRoom == value) return; _isActiveRoom = value; OnPropertyChanged(); OnPropertyChanged(nameof(RowBackgroundColor)); }
     }
 
     public Color RowBackgroundColor => IsActiveRoom

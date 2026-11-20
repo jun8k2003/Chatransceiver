@@ -14,6 +14,7 @@ public partial class MainPage : ContentPage
     private List<SupabaseGroup> _groups = new();
     private string _currentFilter = "all"; // "all" | "individual" | "group"
     private bool _isGroupSelectMode;
+    private readonly HashSet<string> _selectedGroupMemberIds = new();
 
     private UnifiedListItem? _activeItem;
     private string? _activeRoomId;
@@ -153,7 +154,7 @@ public partial class MainPage : ContentPage
         {
             try
             {
-                await ConnectToCommunityInternalAsync(lastSlug);
+                await ConnectToCommunityInternalAsync(lastSlug, allowAutoJoin: false);
             }
             catch
             {
@@ -244,7 +245,7 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async Task ConnectToCommunityInternalAsync(string slugOrInviteUrl)
+    private async Task ConnectToCommunityInternalAsync(string slugOrInviteUrl, bool allowAutoJoin = true)
     {
         if (_currentUser == null) return;
 
@@ -252,11 +253,25 @@ public partial class MainPage : ContentPage
         {
             await RunWithBusyAsync("コミュニティに接続中...", async () =>
             {
-                var community = await SupabaseClientService.Instance.ConnectCommunityAsync(_currentUser.Id, slugOrInviteUrl);
+                var community = await SupabaseClientService.Instance.ConnectCommunityAsync(_currentUser.Id, slugOrInviteUrl, allowAutoJoin);
+                if (community == null)
+                {
+                    // 自動復元時に他端末で退会済みだった場合は再参加せず未接続状態へ戻す
+                    var parsedSlug = SupabaseClientService.ParseCommunitySlugFromInput(slugOrInviteUrl);
+                    if (!string.IsNullOrEmpty(parsedSlug))
+                    {
+                        AppConfig.RemoveCommunityHistory(parsedSlug);
+                    }
+                    DisconnectCommunityNonDestructive();
+                    return;
+                }
+
                 _currentCommunity = community;
                 CommunityPillButton.Text = $"🌐 {community.Name} ▾";
 
                 await ReloadCommunityDataAsync();
+
+                if (_currentCommunity == null) return;
 
                 RealtimeService.Instance.StartForegroundSync(
                     _currentUser.Id,
@@ -289,15 +304,25 @@ public partial class MainPage : ContentPage
         if (_currentUser == null || _currentCommunity == null) return;
         var userId = _currentUser.Id;
         var communityId = _currentCommunity.Id;
+        var communitySlug = _currentCommunity.Slug;
 
-        var membersTask = SupabaseClientService.Instance.GetCommunityMembersAsync(_currentCommunity.Id, _currentUser.Id);
+        var membersTask = SupabaseClientService.Instance.GetCommunityMembersWithStatusAsync(_currentCommunity.Id, _currentUser.Id);
         var unreadTask = SupabaseClientService.Instance.GetUnreadIndividualCountsAsync(_currentUser.Id, _currentCommunity.Id);
         var groupsTask = SupabaseClientService.Instance.GetCommunityGroupsAsync(_currentCommunity.Id, _currentUser.Id);
 
         await Task.WhenAll(membersTask, unreadTask, groupsTask);
         if (_currentUser?.Id != userId || _currentCommunity?.Id != communityId) return;
 
-        _members = membersTask.Result;
+        var (members, isCurrentUserMember) = membersTask.Result;
+        if (!isCurrentUserMember)
+        {
+            // 他端末（Web等）から退会済みのためローカルも切断する
+            AppConfig.RemoveCommunityHistory(communitySlug);
+            DisconnectCommunityNonDestructive();
+            return;
+        }
+
+        _members = members;
         var unreadMap = unreadTask.Result;
         foreach (var m in _members)
         {
@@ -309,20 +334,20 @@ public partial class MainPage : ContentPage
         }
 
         _groups = groupsTask.Result;
+        _selectedGroupMemberIds.IntersectWith(_members.Select(m => m.Id));
         RebuildUnifiedList();
     }
 
     private void RebuildUnifiedList()
     {
-        VisibleItems.Clear();
-
         bool showUnreadBadge = AppConfig.UnreadBadgeEnabled;
+        var desired = new List<UnifiedListItem>();
 
-        if (_currentFilter == "all" || _currentFilter == "group")
+        if (!_isGroupSelectMode && (_currentFilter == "all" || _currentFilter == "group"))
         {
             foreach (var g in _groups)
             {
-                VisibleItems.Add(new UnifiedListItem
+                desired.Add(new UnifiedListItem
                 {
                     Id = g.Id,
                     IsGroup = true,
@@ -330,16 +355,18 @@ public partial class MainPage : ContentPage
                     Subtitle = $"メンバー ({g.MemberCount}人): {g.MemberNames}",
                     UnreadCount = g.UnreadCount,
                     ShowUnreadBadge = showUnreadBadge,
-                    IsActiveRoom = _activeRoomId == g.Id
+                    IsActiveRoom = _activeRoomId == g.Id,
+                    IsGroupSelectMode = false,
+                    IsSelectedForGroup = false
                 });
             }
         }
 
-        if (_currentFilter == "all" || _currentFilter == "individual")
+        if (_isGroupSelectMode || _currentFilter == "all" || _currentFilter == "individual")
         {
             foreach (var m in _members)
             {
-                VisibleItems.Add(new UnifiedListItem
+                desired.Add(new UnifiedListItem
                 {
                     Id = m.Id,
                     IsGroup = false,
@@ -348,10 +375,64 @@ public partial class MainPage : ContentPage
                     IsOnline = m.IsOnline,
                     UnreadCount = m.UnreadCount,
                     ShowUnreadBadge = showUnreadBadge,
-                    IsActiveRoom = _activeItem != null && !_activeItem.IsGroup && _activeItem.Id == m.Id
+                    IsActiveRoom = _activeItem != null && !_activeItem.IsGroup && _activeItem.Id == m.Id,
+                    IsGroupSelectMode = _isGroupSelectMode,
+                    IsSelectedForGroup = _isGroupSelectMode && _selectedGroupMemberIds.Contains(m.Id)
                 });
             }
         }
+
+        // 構成（順序・ID・種別）が一致していればクリアせずインプレース更新して選択状態やスクロール位置を維持する
+        bool sameStructure = VisibleItems.Count == desired.Count;
+        if (sameStructure)
+        {
+            for (int i = 0; i < desired.Count; i++)
+            {
+                if (VisibleItems[i].Id != desired[i].Id || VisibleItems[i].IsGroup != desired[i].IsGroup)
+                {
+                    sameStructure = false;
+                    break;
+                }
+            }
+        }
+
+        if (sameStructure)
+        {
+            for (int i = 0; i < desired.Count; i++)
+            {
+                var existing = VisibleItems[i];
+                var next = desired[i];
+                existing.DisplayTitle = next.DisplayTitle;
+                existing.Subtitle = next.Subtitle;
+                existing.IsOnline = next.IsOnline;
+                existing.UnreadCount = next.UnreadCount;
+                existing.ShowUnreadBadge = next.ShowUnreadBadge;
+                existing.IsActiveRoom = next.IsActiveRoom;
+                existing.IsGroupSelectMode = next.IsGroupSelectMode;
+                existing.IsSelectedForGroup = next.IsSelectedForGroup;
+            }
+        }
+        else
+        {
+            VisibleItems.Clear();
+            foreach (var item in desired)
+            {
+                VisibleItems.Add(item);
+            }
+        }
+
+        UpdateGroupSelectBar();
+    }
+
+    private void UpdateGroupSelectBar()
+    {
+        if (!_isGroupSelectMode) return;
+        int count = _selectedGroupMemberIds.Count;
+        GroupSelectCountLabel.Text = count > 0
+            ? $"メンバー(2人以上)をタップして選択 ({count}人選択中)"
+            : "メンバー(2人以上)をタップして選択";
+        GroupCreateConfirmBtn.IsEnabled = count >= 2;
+        GroupCreateConfirmBtn.Opacity = count >= 2 ? 1.0 : 0.5;
     }
 
     private async void OnCopyInviteLinkClicked(object? sender, EventArgs e)
@@ -380,6 +461,9 @@ public partial class MainPage : ContentPage
         AppConfig.ActiveRoomTitle = null;
         _members.Clear();
         _groups.Clear();
+        _isGroupSelectMode = false;
+        _selectedGroupMemberIds.Clear();
+        GroupCreateConfirmBar.IsVisible = false;
         VisibleItems.Clear();
         RoomMessages.Clear();
         CommunityPillButton.Text = "🌐 未接続 (タップで接続)";
@@ -455,6 +539,7 @@ public partial class MainPage : ContentPage
     private void OnToggleGroupSelectModeClicked(object? sender, EventArgs e)
     {
         _isGroupSelectMode = !_isGroupSelectMode;
+        _selectedGroupMemberIds.Clear();
         GroupCreateConfirmBar.IsVisible = _isGroupSelectMode;
         if (_isGroupSelectMode)
         {
@@ -462,7 +547,7 @@ public partial class MainPage : ContentPage
         }
         else
         {
-            foreach (var item in VisibleItems) item.IsSelectedForGroup = false;
+            SetFilter("all");
         }
     }
 
@@ -470,9 +555,9 @@ public partial class MainPage : ContentPage
     {
         if (_currentUser == null || _currentCommunity == null) return;
 
-        var selectedIds = VisibleItems
-            .Where(i => !i.IsGroup && i.IsSelectedForGroup)
-            .Select(i => i.Id)
+        var activeMemberIds = _members.Select(m => m.Id).ToHashSet();
+        var selectedIds = _selectedGroupMemberIds
+            .Where(activeMemberIds.Contains)
             .ToList();
 
         if (selectedIds.Count < 2)
@@ -487,6 +572,7 @@ public partial class MainPage : ContentPage
             {
                 var roomId = await SupabaseClientService.Instance.CreateGroupRoomAsync(_currentCommunity.Id, _currentUser.Id, selectedIds);
                 _isGroupSelectMode = false;
+                _selectedGroupMemberIds.Clear();
                 GroupCreateConfirmBar.IsVisible = false;
                 SetFilter("all");
                 await ReloadCommunityDataAsync();
@@ -508,9 +594,21 @@ public partial class MainPage : ContentPage
     {
         if (e.Parameter is not UnifiedListItem item) return;
 
-        if (_isGroupSelectMode && !item.IsGroup)
+        if (_isGroupSelectMode)
         {
-            item.IsSelectedForGroup = !item.IsSelectedForGroup;
+            if (item.IsGroup) return;
+
+            if (_selectedGroupMemberIds.Contains(item.Id))
+            {
+                _selectedGroupMemberIds.Remove(item.Id);
+                item.IsSelectedForGroup = false;
+            }
+            else
+            {
+                _selectedGroupMemberIds.Add(item.Id);
+                item.IsSelectedForGroup = true;
+            }
+            UpdateGroupSelectBar();
             return;
         }
 

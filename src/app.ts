@@ -246,6 +246,7 @@ export class App {
       communitySlug = urlParams.get('c') || '';
     }
 
+    let isAutoRestoreCommunity = false;
     if (!communitySlug) {
       // URLパラメータがない場合は、ローカルストレージから直前の接続コミュニティを読み込む
       const savedCommunity = localStorage.getItem('chatransceiver_current_community');
@@ -255,10 +256,14 @@ export class App {
           const community = JSON.parse(savedCommunity);
           // slugがあれば優先し、無ければidを使用するフォールバック
           communitySlug = community?.slug || community?.id || null;
+          if (communitySlug) {
+            isAutoRestoreCommunity = true;
+          }
         } catch (e) {
           // JSONパースに失敗した場合、単一の文字列（IDやSlug）として保存されていた可能性を考慮
           if (typeof savedCommunity === 'string' && !savedCommunity.startsWith('{')) {
             communitySlug = savedCommunity;
+            isAutoRestoreCommunity = true;
           } else {
             console.error('Failed to parse current community from LocalStorage:', e);
           }
@@ -275,10 +280,10 @@ export class App {
         await this.loadUserWebhooks();
 
         if (communitySlug) {
-          await this.handleConnectCommunity(communitySlug);
+          await this.handleConnectCommunity(communitySlug, !isAutoRestoreCommunity);
           
           const targetMessageId = urlParams.get('m');
-          if (targetMessageId) {
+          if (targetMessageId && this.state.currentCommunity) {
             await this.handleDirectMessageLink(targetMessageId, communitySlug);
           }
         } else {
@@ -310,7 +315,7 @@ export class App {
             this.refreshAppBadge();
             await this.loadUserWebhooks();
             if (communitySlug && !this.state.currentCommunity) {
-              await this.handleConnectCommunity(communitySlug);
+              await this.handleConnectCommunity(communitySlug, !isAutoRestoreCommunity);
             } else {
               this.updateUI();
             }
@@ -439,7 +444,7 @@ export class App {
   /**
    * コミュニティ接続 (入室)
    */
-  private async handleConnectCommunity(slug: string): Promise<void> {
+  private async handleConnectCommunity(slug: string, allowAutoJoin: boolean = true): Promise<void> {
     if (!this.state.currentUser) return;
 
     // ブラウザの自動再生ロックを解除 (ユーザーインタラクションを契機にする)
@@ -450,7 +455,15 @@ export class App {
     this.updateUI();
 
     try {
-      const comm = await this.supabaseService.connectCommunity(this.state.currentUser.id, slug);
+      const comm = await this.supabaseService.connectCommunity(this.state.currentUser.id, slug, allowAutoJoin);
+      if (!comm) {
+        // 自動復元時に他端末で退会済みだった場合は再参加せず未接続状態へ戻す
+        localStorage.removeItem('chatransceiver_current_community');
+        this.uiController.handleCommunityLeave(slug);
+        this.updateUI();
+        return;
+      }
+
       this.state.currentCommunity = comm;
       localStorage.setItem('chatransceiver_current_community', JSON.stringify(comm));
 
@@ -522,9 +535,17 @@ export class App {
 
     try {
       const commId = this.state.currentCommunity.id;
+      const commSlug = this.state.currentCommunity.slug;
       const myId = this.state.currentUser.id;
 
-      const members = await this.supabaseService.getCommunityMembers(commId, myId);
+      const { members, isCurrentUserMember } = await this.supabaseService.getCommunityMembersWithStatus(commId, myId);
+      if (!isCurrentUserMember) {
+        // 他端末（Android等）から退会済みのためローカルも切断する
+        await this.handleDisconnectCommunity();
+        this.uiController.handleCommunityLeave(commSlug);
+        this.refreshAppBadge();
+        return;
+      }
       
       // 個別チャットの未読件数の取得と反映
       const unreadIndividual = await this.supabaseService.getUnreadIndividualCounts(myId, commId);

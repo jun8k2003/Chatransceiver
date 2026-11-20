@@ -553,9 +553,10 @@ public class SupabaseClientService
     }
 
     /// <summary>
-    /// コミュニティへの接続 (未存在時は作成、未所属時は user_number を自動採番して参加)
+    /// コミュニティへの接続 (allowAutoJoin=true のとき未存在時は作成、未所属時は user_number を自動採番して参加。
+    /// allowAutoJoin=false のときは自動復元用で、未存在または他端末で退会済みの場合は再参加せず null を返す)
     /// </summary>
-    public async Task<SupabaseCommunity> ConnectCommunityAsync(string userId, string slugOrInviteUrl)
+    public async Task<SupabaseCommunity?> ConnectCommunityAsync(string userId, string slugOrInviteUrl, bool allowAutoJoin = true)
     {
         var slug = ParseCommunitySlugFromInput(slugOrInviteUrl);
         if (string.IsNullOrWhiteSpace(slug))
@@ -583,9 +584,14 @@ public class SupabaseClientService
             }
         }
 
-        // 無ければ新規作成
+        // 無ければ新規作成（自動復元時は作成しない）
         if (community == null)
         {
+            if (!allowAutoJoin)
+            {
+                return null;
+            }
+
             using var createReq = CreateRequest(HttpMethod.Post, "/rest/v1/communities", JsonBody(new
             {
                 name = $"{slug.ToUpperInvariant()} コミュニティ",
@@ -620,6 +626,12 @@ public class SupabaseClientService
 
         if (!isMember)
         {
+            if (!allowAutoJoin)
+            {
+                // 他端末（Web等）で退会済みのコミュニティへ自動復元時に勝手に再参加しない
+                return null;
+            }
+
             // 最大 user_number を取得して +1
             int nextNumber = 1;
             using (var maxReq = CreateRequest(HttpMethod.Get, $"/rest/v1/community_members?community_id=eq.{community.Id}&select=user_number&order=user_number.desc&limit=1"))
@@ -670,17 +682,32 @@ public class SupabaseClientService
     /// </summary>
     public async Task<List<SupabaseMember>> GetCommunityMembersAsync(string communityId, string currentUserId)
     {
+        var (members, _) = await GetCommunityMembersWithStatusAsync(communityId, currentUserId);
+        return members;
+    }
+
+    /// <summary>
+    /// コミュニティ所属メンバー一覧取得と、現在ユーザーの所属有無を同時に返す
+    /// </summary>
+    public async Task<(List<SupabaseMember> Members, bool IsCurrentUserMember)> GetCommunityMembersWithStatusAsync(string communityId, string currentUserId)
+    {
         using var req = CreateRequest(HttpMethod.Get, $"/rest/v1/community_members?community_id=eq.{communityId}&select=user_number,users(id,name)&order=user_number.asc");
+        req.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true };
         using var res = await SendWithAuthAsync(req);
         res.EnsureSuccessStatusCode();
 
         var list = new List<SupabaseMember>();
+        bool isCurrentUserMember = false;
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
         foreach (var item in doc.RootElement.EnumerateArray())
         {
             if (!item.TryGetProperty("users", out var u) || u.ValueKind != JsonValueKind.Object) continue;
             var uid = u.GetProperty("id").GetString() ?? "";
-            if (uid == currentUserId) continue;
+            if (uid == currentUserId)
+            {
+                isCurrentUserMember = true;
+                continue;
+            }
 
             list.Add(new SupabaseMember
             {
@@ -689,7 +716,7 @@ public class SupabaseClientService
                 UserNumber = item.TryGetProperty("user_number", out var un) ? un.GetInt32() : 0
             });
         }
-        return list;
+        return (list, isCurrentUserMember);
     }
 
     /// <summary>

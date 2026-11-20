@@ -267,9 +267,11 @@ export class SupabaseService {
   }
 
   /**
-   * コミュニティへの接続（参加していない場合は所属メンバーに自動追加）
+   * コミュニティへの接続
+   * allowAutoJoin=true のときは未存在なら作成・未所属なら参加させる。
+   * allowAutoJoin=false のときは前回接続の自動復元用で、未存在または他端末で退会済みの場合は再参加せず null を返す。
    */
-  async connectCommunity(userId: string, slug: string): Promise<SupabaseCommunity> {
+  async connectCommunity(userId: string, slug: string, allowAutoJoin: boolean = true): Promise<SupabaseCommunity | null> {
     // 1. コミュニティが存在するか確認
     let { data: community, error: cError } = await supabase
       .from('communities')
@@ -278,6 +280,10 @@ export class SupabaseService {
       .single();
 
     if (cError || !community) {
+      if (!allowAutoJoin) {
+        return null;
+      }
+
       // 無ければ自動でモック用のコミュニティを自動作成（手軽にテストできるようにするため）
       const newCommunity = {
         name: `${slug.toUpperCase()} コミュニティ`,
@@ -308,6 +314,11 @@ export class SupabaseService {
     }
 
     if (!membership) {
+      if (!allowAutoJoin) {
+        // 他端末（Android等）で退会済みのコミュニティへ自動復元時に勝手に再参加しない
+        return null;
+      }
+
       // 3. 参加していない場合はメンバーに追加（user_number は自動採番または連番）
       // 退会者が出た場合の重複を防ぐため、現在の最大の user_number を取得して +1 する
       const { data: maxMember } = await supabase
@@ -362,6 +373,17 @@ export class SupabaseService {
    * コミュニティ所属メンバーの取得
    */
   async getCommunityMembers(communityId: string, currentUserId: string): Promise<SupabaseMember[]> {
+    const { members } = await this.getCommunityMembersWithStatus(communityId, currentUserId);
+    return members;
+  }
+
+  /**
+   * コミュニティ所属メンバー一覧取得と、現在ユーザーの所属有無を同時に返す
+   */
+  async getCommunityMembersWithStatus(
+    communityId: string,
+    currentUserId: string
+  ): Promise<{ members: SupabaseMember[]; isCurrentUserMember: boolean }> {
     const { data, error } = await supabase
       .from('community_members')
       .select('user_number, users(id, name)')
@@ -369,18 +391,23 @@ export class SupabaseService {
 
     if (error) throw error;
 
-    // 自分自身は個別チャット一覧に表示させない（DEC-021）
-    const others = (data || []).filter((item: any) => item.users.id !== currentUserId);
-
-    return others.map((item: any) => {
-      const u = item.users;
-      return {
-        id: u.id,
-        name: u.name,
+    let isCurrentUserMember = false;
+    const others: SupabaseMember[] = [];
+    for (const item of (data || []) as any[]) {
+      if (!item.users?.id) continue;
+      if (item.users.id === currentUserId) {
+        isCurrentUserMember = true;
+        continue;
+      }
+      others.push({
+        id: item.users.id,
+        name: item.users.name,
         userNumber: item.user_number,
         isOnline: false // Presenceで後から更新される
-      };
-    });
+      });
+    }
+
+    return { members: others, isCurrentUserMember };
   }
 
   /**

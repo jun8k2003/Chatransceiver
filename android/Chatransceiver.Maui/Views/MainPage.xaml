@@ -183,11 +183,13 @@
                             StrokeShape="RoundRectangle 16"
                             Padding="10">
                         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                            <Label Text="メンバー(2人以上)をタップして選択"
+                            <Label x:Name="GroupSelectCountLabel"
+                                   Text="メンバー(2人以上)をタップして選択"
                                    FontSize="12"
                                    VerticalOptions="Center"
                                    TextColor="{AppThemeBinding Dark={StaticResource DarkTextPrimary}, Light={StaticResource LightTextPrimary}}" />
-                            <Button Grid.Column="1"
+                            <Button x:Name="GroupCreateConfirmBtn"
+                                    Grid.Column="1"
                                     Text="作成"
                                     FontSize="12"
                                     HeightRequest="34"
@@ -258,10 +260,10 @@
 
                                         <!-- グループ選択中マーク -->
                                         <Label Grid.Column="2"
-                                               Text="☑️"
+                                               Text="{Binding GroupCheckboxText}"
                                                FontSize="18"
                                                VerticalOptions="Center"
-                                               IsVisible="{Binding IsSelectedForGroup}" />
+                                               IsVisible="{Binding ShowGroupCheckbox}" />
 
                                         <!-- 未読バッジ -->
                                         <Border Grid.Column="3"
