@@ -13,20 +13,16 @@ public partial class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        return new Window(new NavigationPage(new MainPage())
+        var mainPage = new MainPage();
+        var window = new Window(new NavigationPage(mainPage)
         {
             BarBackgroundColor = Color.FromArgb("#0F172A"),
             BarTextColor = Colors.White
         });
-    }
-
-    protected override void OnResume()
-    {
-        base.OnResume();
-        if (Windows.Count > 0 && Windows[0].Page is NavigationPage nav && nav.CurrentPage is MainPage mainPage)
-        {
-            _ = mainPage.OnAppResumedAsync();
-        }
+        window.Activated += async (_, _) => await mainPage.OnAppResumedAsync();
+        window.Deactivated += (_, _) => mainPage.OnAppDeactivated();
+        window.Stopped += (_, _) => mainPage.OnAppDeactivated();
+        return window;
     }
 
     public static void ApplyTheme(string theme)

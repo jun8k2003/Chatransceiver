@@ -1125,18 +1125,12 @@ public class SupabaseClientService
     /// </summary>
     public async Task MarkAsReadAsync(string roomId, string userId)
     {
-        try
+        using var req = CreateRequest(HttpMethod.Patch, $"/rest/v1/user_inboxes?room_id=eq.{roomId}&user_id=eq.{userId}&is_read=eq.false", JsonBody(new
         {
-            using var req = CreateRequest(HttpMethod.Patch, $"/rest/v1/user_inboxes?room_id=eq.{roomId}&user_id=eq.{userId}&is_read=eq.false", JsonBody(new
-            {
-                is_read = true
-            }));
-            await SendWithAuthAsync(req);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"MarkAsReadAsync error: {ex.Message}");
-        }
+            is_read = true
+        }));
+        using var res = await SendWithAuthAsync(req);
+        res.EnsureSuccessStatusCode();
     }
 
     /// <summary>

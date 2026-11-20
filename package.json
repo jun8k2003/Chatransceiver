@@ -9,6 +9,7 @@
     "build:android": "dotnet build android/Chatransceiver.Maui/Chatransceiver.Maui.csproj -c Release",
     "publish:android": "dotnet publish android/Chatransceiver.Maui/Chatransceiver.Maui.csproj -c Release",
     "test:badge": "node --test tests/app-badge.test.mjs",
+    "test:read": "node --test tests/chat-read.test.mjs",
     "preview": "vite preview",
     "deploy": "firebase deploy --only hosting"
   },

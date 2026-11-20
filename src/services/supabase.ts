@@ -873,7 +873,7 @@ export class SupabaseService {
       .eq('user_id', userId)
       .eq('is_read', false);
 
-    if (error) console.error('Failed to mark inbox items as read:', error);
+    if (error) throw error;
   }
 
   /**

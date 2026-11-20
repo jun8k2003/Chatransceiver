@@ -49,7 +49,19 @@ public class UnifiedListItem : INotifyPropertyChanged
     public string DisplayTitle { get; set; } = string.Empty;
     public string Subtitle { get; set; } = string.Empty;
     public bool IsOnline { get; set; }
-    public int UnreadCount { get; set; }
+    private int _unreadCount;
+    public int UnreadCount
+    {
+        get => _unreadCount;
+        set
+        {
+            if (_unreadCount == value) return;
+            _unreadCount = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasUnread));
+            OnPropertyChanged(nameof(UnreadBadgeText));
+        }
+    }
     public bool ShowUnreadBadge { get; set; } = true;
     public bool HasUnread => ShowUnreadBadge && UnreadCount > 0;
     public string UnreadBadgeText => UnreadCount > 99 ? "99+" : UnreadCount.ToString();

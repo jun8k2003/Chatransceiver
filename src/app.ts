@@ -31,6 +31,8 @@ export class App {
   private presenceSubscription: any = null;
   private communityMembersSubscription: any = null;
   private currentOnlineUserIds: string[] = [];
+  private readStateVersion = 0;
+  private loadedChatHistoryId: string | null = null;
 
   // アプリケーション・グローバルステート
   private state: UIState = {
@@ -136,7 +138,11 @@ export class App {
     // TTT: バックグラウンド復帰時にウェイクワード待機を再開する (DEC-028)
     // (Android はバックグラウンド移行時に SpeechRecognition を強制終了するため)
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') this.refreshAppBadge();
+      if (document.visibilityState === 'visible') {
+        this.refreshAppBadge();
+        const roomId = this.state.activeChatHistoryId;
+        if (roomId && this.isChatVisible(roomId)) void this.resyncRoomMessages(roomId);
+      }
       if (document.visibilityState === 'visible' && this.isTTTMode && !this.state.isRecording) {
         this.startTTTListening();
       }
@@ -330,9 +336,40 @@ export class App {
     );
   }
 
-  private async markAsRead(roomId: string, userId: string): Promise<void> {
-    await this.supabaseService.markAsRead(roomId, userId);
-    this.refreshAppBadge();
+  private isChatVisible(roomId: string): boolean {
+    return document.visibilityState === 'visible' &&
+      !!this.state.currentUser && !!this.state.currentCommunity && !this.state.isLoading &&
+      this.state.activeChatHistoryId === roomId &&
+      (!window.matchMedia('(max-width: 768px)').matches || this.state.mobileChatForceOpen);
+  }
+
+  private async markVisibleChatAsRead(): Promise<void> {
+    const roomId = this.state.activeChatHistoryId;
+    const userId = this.state.currentUser?.id;
+    const communityId = this.state.currentCommunity?.id;
+    const selectedUserIds = [...this.state.selectedUserIds];
+    if (!roomId || !userId || this.loadedChatHistoryId !== roomId || !this.isChatVisible(roomId)) return;
+
+    try {
+      await this.supabaseService.markAsRead(roomId, userId);
+      if (this.state.currentUser?.id !== userId || this.state.currentCommunity?.id !== communityId) return;
+
+      // 既読化前に開始された一覧取得で、古い未読件数を復活させない。
+      this.readStateVersion++;
+      const group = this.state.groups.find(g => g.id === roomId);
+      const member = selectedUserIds.length === 1
+        ? this.state.members.find(m => m.id === selectedUserIds[0]) : undefined;
+      const target = group ?? member;
+      if (target) {
+        target.unreadCount = 0;
+        target.latestUnreadTime = 0;
+      }
+      this.refreshAppBadge();
+      this.updateUI();
+    } catch (e) {
+      // 既読更新の失敗で履歴表示を妨げず、次の着信・復帰時に再試行する。
+      console.error('Failed to mark visible chat as read:', e);
+    }
   }
 
   /**
@@ -481,6 +518,7 @@ export class App {
    */
   private async loadCommunityData(): Promise<void> {
     if (!this.state.currentUser || !this.state.currentCommunity) return;
+    const readStateVersion = this.readStateVersion;
 
     try {
       const commId = this.state.currentCommunity.id;
@@ -509,6 +547,8 @@ export class App {
         }
         return a.userNumber - b.userNumber;
       });
+      if (readStateVersion !== this.readStateVersion ||
+          this.state.currentUser?.id !== myId || this.state.currentCommunity?.id !== commId) return;
       this.state.members = members;
 
       const groups = await this.supabaseService.getCommunityGroups(commId, myId);
@@ -522,6 +562,8 @@ export class App {
         }
         return bUnread - aUnread;
       });
+      if (readStateVersion !== this.readStateVersion ||
+          this.state.currentUser?.id !== myId || this.state.currentCommunity?.id !== commId) return;
       this.state.groups = groups;
       this.refreshAppBadge();
 
@@ -676,6 +718,7 @@ export class App {
    */
   private async handleUserCheckChange(userIds: string[]): Promise<void> {
     this.state.selectedUserIds = userIds;
+    this.loadedChatHistoryId = null;
 
     if (userIds.length === 0) {
       this.handleBackToSidebar();
@@ -695,18 +738,15 @@ export class App {
 
         const messages = await this.supabaseService.getRoomMessages(roomId);
         this.state.messages = messages;
+        this.loadedChatHistoryId = roomId;
 
-        await this.markAsRead(roomId, myId);
         this.subscribeRoomMessages(roomId);
-
-        // 未読バッジクリア用のローカル状態反映
-        const targetMember = this.state.members.find(m => m.id === targetId);
-        if (targetMember) targetMember.unreadCount = 0;
       } catch (e) {
         console.error('Failed to select individual chat:', e);
       } finally {
         this.state.isLoading = false;
         this.updateUI();
+        await this.markVisibleChatAsRead();
       }
     } else {
       // 複数人選択 (既存グループの自動判定)
@@ -726,7 +766,7 @@ export class App {
           this.state.activeChatHistoryId = matchedGroup.id;
           const messages = await this.supabaseService.getRoomMessages(matchedGroup.id);
           this.state.messages = messages;
-          await this.markAsRead(matchedGroup.id, this.state.currentUser!.id);
+          this.loadedChatHistoryId = matchedGroup.id;
           this.subscribeRoomMessages(matchedGroup.id);
         } finally {
           this.state.isLoading = false;
@@ -740,6 +780,7 @@ export class App {
         }
       }
       this.updateUI();
+      await this.markVisibleChatAsRead();
     }
   }
 
@@ -748,6 +789,7 @@ export class App {
    */
   private async handleGroupSelect(groupId: string | null): Promise<void> {
     this.state.activeChatHistoryId = groupId;
+    this.loadedChatHistoryId = null;
 
     if (groupId) {
       this.state.isLoading = true;
@@ -759,13 +801,9 @@ export class App {
         
         const messages = await this.supabaseService.getRoomMessages(groupId);
         this.state.messages = messages;
+        this.loadedChatHistoryId = groupId;
         
-        await this.markAsRead(groupId, this.state.currentUser!.id);
         this.subscribeRoomMessages(groupId);
-        
-        // 未読バッジクリア用のローカル状態反映
-        const targetGroup = this.state.groups.find(g => g.id === groupId);
-        if (targetGroup) targetGroup.unreadCount = 0;
       } finally {
         this.state.isLoading = false;
       }
@@ -779,6 +817,7 @@ export class App {
     }
 
     this.updateUI();
+    await this.markVisibleChatAsRead();
   }
 
   /**
@@ -857,12 +896,14 @@ export class App {
     this.roomSubscription = this.supabaseService.subscribeRoomMessages(
       roomId,
       (msg) => {
+        if (this.state.activeChatHistoryId !== roomId) return;
         if (!this.state.messages.some(m => m.id === msg.id)) {
           this.state.messages.push(msg);
           this.updateUI();
         }
       },
       (updatedMsg) => {
+        if (this.state.activeChatHistoryId !== roomId) return;
         const index = this.state.messages.findIndex(m => m.id === updatedMsg.id);
         if (index !== -1) {
           this.state.messages[index] = updatedMsg;
@@ -883,9 +924,11 @@ export class App {
   private async resyncRoomMessages(roomId: string): Promise<void> {
     // 再確立完了までに別ルームへ切り替わっていたら何もしない
     if (this.state.activeChatHistoryId !== roomId) return;
+    const userId = this.state.currentUser?.id;
 
     try {
       const fetched = await this.supabaseService.getRoomMessages(roomId);
+      if (this.state.activeChatHistoryId !== roomId || this.state.currentUser?.id !== userId) return;
 
       // id でマージ（取得分を正とし、ローカルにしか無い直近分は保持）→ 時系列で整列
       const byId = new Map<string, SupabaseMessage>();
@@ -897,7 +940,9 @@ export class App {
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
       this.state.messages = merged;
+      this.loadedChatHistoryId = roomId;
       this.updateUI();
+      await this.markVisibleChatAsRead();
     } catch (e) {
       console.error('Failed to resync room messages:', e);
     }
@@ -1398,8 +1443,9 @@ export class App {
       });
     }
 
-    if (this.state.activeChatHistoryId === roomId) {
-      void this.markAsRead(roomId, this.state.currentUser!.id);
+    if (this.isChatVisible(roomId)) {
+      // インボックスとルームのイベント到着順に依存せず、履歴を表示してから既読にする。
+      void this.resyncRoomMessages(roomId);
     } else {
       this.loadCommunityData().then(() => this.updateUI());
     }

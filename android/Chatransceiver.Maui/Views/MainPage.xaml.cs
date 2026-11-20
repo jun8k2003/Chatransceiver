@@ -17,6 +17,10 @@ public partial class MainPage : ContentPage
 
     private UnifiedListItem? _activeItem;
     private string? _activeRoomId;
+    private string? _loadedRoomId;
+    private bool _isAppActive;
+    private readonly Task _sessionInitializationTask;
+    private readonly SemaphoreSlim _unreadUpdateLock = new(1, 1);
     private RecordingResult? _stoppedRecordingResult;
     private int _busyDepth;
 
@@ -73,7 +77,7 @@ public partial class MainPage : ContentPage
         RealtimeService.Instance.NewRoomMessageArrived += OnRealtimeRoomMessageArrived;
         RealtimeService.Instance.CommunityUnreadUpdated += OnRealtimeUnreadUpdated;
 
-        _ = InitializeSessionAsync();
+        _sessionInitializationTask = InitializeSessionAsync();
     }
 
     private async Task InitializeSessionAsync()
@@ -103,8 +107,10 @@ public partial class MainPage : ContentPage
 
     public async Task OnAppResumedAsync()
     {
+        _isAppActive = true;
         try
         {
+            await _sessionInitializationTask;
             if (_currentUser == null && !LoginOverlay.IsVisible)
             {
                 await InitializeSessionAsync();
@@ -113,12 +119,16 @@ public partial class MainPage : ContentPage
             {
                 await SupabaseClientService.Instance.EnsureFreshSessionAsync();
             }
+            await RefreshVisibleRoomAsync();
+            await ReloadCommunityDataAsync();
         }
         catch
         {
             // 復帰時のバックグラウンド更新失敗は無視（次のAPI呼び出し時に401リトライされる）
         }
     }
+
+    public void OnAppDeactivated() => _isAppActive = false;
 
     private void OnAuthStateChanged(SupabaseUser user)
     {
@@ -263,13 +273,29 @@ public partial class MainPage : ContentPage
 
     private async Task ReloadCommunityDataAsync()
     {
+        await _unreadUpdateLock.WaitAsync();
+        try
+        {
+            await ReloadCommunityDataCoreAsync();
+        }
+        finally
+        {
+            _unreadUpdateLock.Release();
+        }
+    }
+
+    private async Task ReloadCommunityDataCoreAsync()
+    {
         if (_currentUser == null || _currentCommunity == null) return;
+        var userId = _currentUser.Id;
+        var communityId = _currentCommunity.Id;
 
         var membersTask = SupabaseClientService.Instance.GetCommunityMembersAsync(_currentCommunity.Id, _currentUser.Id);
         var unreadTask = SupabaseClientService.Instance.GetUnreadIndividualCountsAsync(_currentUser.Id, _currentCommunity.Id);
         var groupsTask = SupabaseClientService.Instance.GetCommunityGroupsAsync(_currentCommunity.Id, _currentUser.Id);
 
         await Task.WhenAll(membersTask, unreadTask, groupsTask);
+        if (_currentUser?.Id != userId || _currentCommunity?.Id != communityId) return;
 
         _members = membersTask.Result;
         var unreadMap = unreadTask.Result;
@@ -347,6 +373,7 @@ public partial class MainPage : ContentPage
         RealtimeService.Instance.StopForegroundSync();
         _currentCommunity = null;
         _activeRoomId = null;
+        _loadedRoomId = null;
         _activeItem = null;
         AppConfig.CurrentCommunitySlug = null;
         AppConfig.ActiveRoomId = null;
@@ -499,6 +526,7 @@ public partial class MainPage : ContentPage
             await RunWithBusyAsync("チャット履歴を読み込み中...", async () =>
             {
                 _activeItem = item;
+                _loadedRoomId = null;
                 string roomId;
                 if (item.IsGroup)
                 {
@@ -521,18 +549,15 @@ public partial class MainPage : ContentPage
                 EditGroupNameButton.IsVisible = item.IsGroup;
                 ClearRoomButton.IsVisible = true;
 
-                // チャットを開いた時点で既読化 (DEC-010)
-                await SupabaseClientService.Instance.MarkAsReadAsync(roomId, _currentUser.Id);
-                item.UnreadCount = 0;
-
                 var msgs = await SupabaseClientService.Instance.GetRoomMessagesAsync(roomId, _currentUser.Id);
                 RoomMessages.Clear();
                 foreach (var m in msgs) RoomMessages.Add(m);
+                _loadedRoomId = roomId;
 
                 RealtimeService.Instance.UpdateActiveRoom(roomId, msgs.Select(m => m.Id));
-                await ReloadCommunityDataAsync();
-
                 ShowPane(showChat: true);
+                await MarkVisibleRoomAsReadAsync();
+                await ReloadCommunityDataAsync();
             });
         }
         catch (Exception ex)
@@ -542,7 +567,86 @@ public partial class MainPage : ContentPage
     }
 
     private void OnShowListPaneClicked(object? sender, EventArgs e) => ShowPane(showChat: false);
-    private void OnShowChatPaneClicked(object? sender, EventArgs e) => ShowPane(showChat: true);
+    private async void OnShowChatPaneClicked(object? sender, EventArgs e)
+    {
+        ShowPane(showChat: true);
+        await RefreshVisibleRoomAsync();
+    }
+
+    private bool IsRoomVisible(string? roomId, string? userId) =>
+        _isAppActive && ChatPaneGrid.IsVisible && Navigation.ModalStack.Count == 0 &&
+        !string.IsNullOrEmpty(roomId) && _activeRoomId == roomId && _loadedRoomId == roomId &&
+        !string.IsNullOrEmpty(userId) && _currentUser?.Id == userId && _currentCommunity != null;
+
+    private async Task RefreshVisibleRoomAsync()
+    {
+        var roomId = _activeRoomId;
+        var userId = _currentUser?.Id;
+        if (!IsRoomVisible(roomId, userId)) return;
+
+        try
+        {
+            var msgs = await SupabaseClientService.Instance.GetRoomMessagesAsync(roomId!, userId!);
+            if (!IsRoomVisible(roomId, userId)) return;
+            RoomMessages.Clear();
+            foreach (var msg in msgs) RoomMessages.Add(msg);
+            RealtimeService.Instance.UpdateActiveRoom(roomId, msgs.Select(m => m.Id));
+            ScrollMessagesToBottom();
+            await MarkVisibleRoomAsReadAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"RefreshVisibleRoomAsync error: {ex.Message}");
+        }
+    }
+
+    private async Task MarkVisibleRoomAsReadAsync()
+    {
+        // 一覧の再取得と直列化し、既読化前の集計でバッジが復活するのを防ぐ。
+        await _unreadUpdateLock.WaitAsync();
+        try
+        {
+            var roomId = _activeRoomId;
+            var userId = _currentUser?.Id;
+            var communityId = _currentCommunity?.Id;
+            var item = _activeItem;
+            if (item == null || !IsRoomVisible(roomId, userId)) return;
+
+            await SupabaseClientService.Instance.MarkAsReadAsync(roomId!, userId!);
+            if (_currentUser?.Id != userId || _currentCommunity?.Id != communityId) return;
+
+            if (item.IsGroup)
+            {
+                var group = _groups.FirstOrDefault(g => g.Id == item.Id);
+                if (group != null)
+                {
+                    group.UnreadCount = 0;
+                    group.LatestUnreadTime = 0;
+                }
+            }
+            else
+            {
+                var member = _members.FirstOrDefault(m => m.Id == item.Id);
+                if (member != null)
+                {
+                    member.UnreadCount = 0;
+                    member.LatestUnreadTime = 0;
+                }
+            }
+            item.UnreadCount = 0;
+            foreach (var row in VisibleItems.Where(i => i.Id == item.Id && i.IsGroup == item.IsGroup))
+                row.UnreadCount = 0;
+        }
+        catch (Exception ex)
+        {
+            // 失敗時は未読を残し、次の同期周期で再試行する。
+            System.Diagnostics.Debug.WriteLine($"MarkVisibleRoomAsReadAsync error: {ex.Message}");
+        }
+        finally
+        {
+            _unreadUpdateLock.Release();
+        }
+    }
 
     private void ShowPane(bool showChat)
     {
@@ -1060,6 +1164,7 @@ public partial class MainPage : ContentPage
 
     private void OnRealtimeRoomMessageArrived(SupabaseMessage msg)
     {
+        if (msg.RoomId != _activeRoomId || msg.RoomId != _loadedRoomId) return;
         if (RoomMessages.Any(m => m.Id == msg.Id)) return;
         RoomMessages.Add(msg);
         ScrollMessagesToBottom(animate: true);
@@ -1079,6 +1184,7 @@ public partial class MainPage : ContentPage
         if (_currentUser != null && _currentCommunity != null)
         {
             int prevUnread = _members.Sum(m => m.UnreadCount) + _groups.Sum(g => g.UnreadCount);
+            await MarkVisibleRoomAsReadAsync();
             await ReloadCommunityDataAsync();
             int nextUnread = _members.Sum(m => m.UnreadCount) + _groups.Sum(g => g.UnreadCount);
             if (nextUnread > prevUnread)
