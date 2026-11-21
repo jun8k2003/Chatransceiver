@@ -91,6 +91,28 @@ public static class AudioDeviceService
         }
     }
 
+    public static bool IsInputRouteReady(AudioDeviceInfo? requested, AudioDeviceInfo? routed)
+    {
+        if (routed == null) return false;
+        if (requested == null) return true;
+        if (routed.Id != requested.Id && !IsSameAudioDevice(routed, requested)) return false;
+        if (!IsBluetoothInputDevice(requested)) return true;
+        if (!IsInputCommunicationActive) return false;
+        if (!OperatingSystem.IsAndroidVersionAtLeast(31)) return true;
+
+        var selected = GetAudioManager()?.CommunicationDevice;
+        return selected != null && IsSameAudioDevice(selected, requested);
+    }
+
+    private static bool IsSameAudioDevice(AudioDeviceInfo first, AudioDeviceInfo second)
+    {
+        if (first.Type != second.Type) return false;
+        if (OperatingSystem.IsAndroidVersionAtLeast(28) &&
+            !string.IsNullOrWhiteSpace(first.Address) && !string.IsNullOrWhiteSpace(second.Address))
+            return string.Equals(first.Address.Trim(), second.Address.Trim(), StringComparison.OrdinalIgnoreCase);
+        return BuildDeviceKey(first) == BuildDeviceKey(second);
+    }
+
     public static void EndInputRouting()
     {
         lock (RouteLock)
@@ -116,14 +138,11 @@ public static class AudioDeviceService
                 AudioDeviceInfo? match = null;
                 if (commDevices != null)
                 {
-                    match = commDevices.FirstOrDefault(d => BuildDeviceKey(d) == BuildDeviceKey(targetDevice))
-                         ?? commDevices.FirstOrDefault(d => d.Type == targetDevice.Type);
+                    match = commDevices.FirstOrDefault(d => IsSameAudioDevice(d, targetDevice));
                 }
 
-                if (match != null)
-                {
-                    am.SetCommunicationDevice(match);
-                }
+                if (match == null || !am.SetCommunicationDevice(match))
+                    throw new InvalidOperationException("The selected communication device is unavailable.");
             }
             else if (targetDevice.Type == AudioDeviceType.BluetoothSco)
             {
@@ -145,6 +164,7 @@ public static class AudioDeviceService
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"ApplyCommunicationDeviceLocked error: {ex.Message}");
+            ClearCommunicationRouteIfIdleLocked();
         }
     }
 

@@ -279,6 +279,12 @@ public class TransceiverForegroundService : Service
 
         if (_isStoppingAndSending) return;
 
+        if (NativeRecordingService.Instance.IsStarting)
+        {
+            await NativeRecordingService.Instance.CancelRecordingAsync();
+            return;
+        }
+
         // 画面上の🎤ボタン（録音モーダル表示中）で録音が開始されていた場合はUI側で停止・送信する
         if (NativeRecordingService.Instance.IsRecording && ForegroundUiStopRecordingRequested != null)
         {
@@ -303,9 +309,10 @@ public class TransceiverForegroundService : Service
         if (!NativeRecordingService.Instance.IsRecording)
         {
             // 1回目押下: 録音開始（開始ビープは HFP 通話モード切替完了後に StartRecordingAsync 内で再生される）
-            NativeAudioService.Instance.AcquireWakeLock(25000);
+            NativeAudioService.Instance.AcquireWakeLock(45000);
             AudioPlaybackQueue.Instance.Pause();
             NativeAudioService.Instance.StartSilentRecordingKeeper();
+            UpdateNotification("🎤 マイク接続準備中... 開始音の後に話してください");
 
             bool started = await NativeRecordingService.Instance.StartRecordingAsync();
             if (started)
@@ -320,6 +327,7 @@ public class TransceiverForegroundService : Service
             {
                 NativeAudioService.Instance.StopSilentRecordingKeeper();
                 NativeAudioService.Instance.BeepError();
+                UpdateNotification("⚠️ 録音を開始できませんでした。マイクの接続を確認してください");
                 AudioPlaybackQueue.Instance.Resume();
                 NativeAudioService.Instance.ReleaseWakeLock();
             }
@@ -387,6 +395,12 @@ public class TransceiverForegroundService : Service
                 {
                     AudioPlaybackQueue.Instance.EnqueueMessage(sent);
                 }
+            }
+            else
+            {
+                NativeAudioService.Instance.BeepError();
+                UpdateNotification("⚠️ 録音データを取得できなかったため送信しませんでした");
+                return;
             }
 
             UpdateNotification($"🎧 PTT待機中 ({AppConfig.ActiveRoomTitle ?? "送信準備OK"})");

@@ -2,6 +2,12 @@
 
 このファイルは、議論の末に決定した事項とその理由を記録します。
 
+## DEC-040: Android Bluetooth PTTの通話状態と録音準備の修正 (2026-11-21)
+* **背景**: Bluetoothマイクを指定してEC002のPlay/Pauseボタンを押すと電話の着信音が鳴り、次の押下で空のメッセージが送信される事象が報告された。REDMI Buds 8 Liteでは成功していた。
+* **通話手順**: `addNewIncomingCall`を廃止し、自己管理PhoneAccountを明示した`placeCall`を専用の`chatransceiver-ptt:` URIで呼び出す。電話番号への発信は行わない。Connection作成時はDialingで返し、Telecomからのフォーカス・音声経路通知後にActiveとする。`onCreateConnectionComplete`は古いAndroidでは公開APIではないため依存しない。応答は録音停止と区別し、終話のみを録音停止・送信へ接続する。[公式手順](https://developer.android.com/reference/android/telecom/ConnectionService#implementing-a-connection)
+* **録音準備**: 固定時間の経過を成功とはみなさず、選択した入力経路とPCM取得を確認してから開始音を鳴らす。開始音終了後に本録音と15秒タイマーを開始する。通話登録と入力準備にはそれぞれ8秒の上限を設け、拒否・タイムアウト・中止時はマイクと通話を解放する。準備中は録音中と区別し、再押下で送信しない。以前の録音タスクやWAVヘッダーのみのデータを新しいメッセージへ流用しない。
+* **検証**: `dotnet run --project android/Chatransceiver.Ptt.Tests/Chatransceiver.Ptt.Tests.csproj`は本番の通話・録音・ルーティングのソースをリンクし、Android API境界をスタブ化して状態遷移・遅延・中止・失敗を検証する。AndroidビルドCIでも実行する。Bluetooth実機の音声・ボタン信号の検証は別途必要。
+
 ## DEC-039: Incoming Webhook（外部からのメッセージ投稿）機能の導入 (2026-11-15)
 * **背景**: 外部の監視ツール・CI/CD・GAS・IoT機器などからHTTP POSTでチャットルームへメッセージを流し込み、Web版およびAndroidネイティブ版のTTS自動読み上げで音声通知として受け取れるようにしたい（仕様書: [incoming_webhook_spec.md](./incoming_webhook_spec.md)）。
 * **決定1（URLと権限・失効モデル）**: エンドポイントは `POST .../functions/v1/incoming-webhook/<secret_token>`（`verify_jwt = false`）とし、管理用の主キー `id` とURLパス用の `secret_token` を分離する。対象チャットルーム（`chat_room_members`）のメンバーなら誰でも作成・一時停止（`is_active`）・物理削除（完全失効）できるフラットな権限モデル（`DEC-023` と一貫）を採用する。

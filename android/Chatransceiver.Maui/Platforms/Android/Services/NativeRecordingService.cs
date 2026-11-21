@@ -24,11 +24,13 @@ public class NativeRecordingService
 
     private const int SampleRate = 16000;
     private const int MaxDurationSeconds = 15;
+    private const int ReadNonBlocking = 1; // AudioRecord.READ_NON_BLOCKING
 
     private AudioRecord? _audioRecord;
     private NoiseSuppressor? _noiseSuppressor;
     private CancellationTokenSource? _recordCts;
     private Task<byte[]>? _recordLoopTask;
+    private readonly SemaphoreSlim _recordingLock = new(1, 1);
 
     private SpeechRecognizer? _speechRecognizer;
     private ParcelFileDescriptor? _pipeRead;
@@ -38,6 +40,7 @@ public class NativeRecordingService
     private string _latestPartialTranscript = string.Empty;
 
     public bool IsRecording { get; private set; }
+    public bool IsStarting { get; private set; }
 
     public event Action<string>? PartialTranscriptUpdated;
     public event Action<int>? CountdownTick; // 残り秒数 (15 -> 0)
@@ -45,24 +48,30 @@ public class NativeRecordingService
 
     public async Task<bool> StartRecordingAsync()
     {
-        if (IsRecording) return false;
-
-        var mode = AppConfig.RecordingMode; // "both" | "audio_only" | "text_only"
-        _latestPartialTranscript = string.Empty;
-
-        int minBuf = AudioRecord.GetMinBufferSize(SampleRate, ChannelIn.Mono, Encoding.Pcm16bit);
-        int bufferSize = Math.Max(minBuf * 2, SampleRate); // 約0.5秒分バッファ
-
-        var preferredIn = AudioDeviceService.FindPreferredInputDevice();
-        bool isBtInput = AudioDeviceService.IsBluetoothInputDevice(preferredIn);
-        if (isBtInput)
+        if (!await _recordingLock.WaitAsync(0)) return false;
+        if (IsRecording)
         {
-            await PttConnectionService.StartPttCallAsync();
+            _recordingLock.Release();
+            return false;
         }
-        AudioDeviceService.BeginInputRouting(preferredIn);
 
+        IsStarting = true;
+        _recordCts = new CancellationTokenSource();
+        var token = _recordCts.Token;
+        _recordLoopTask = null;
+        _latestPartialTranscript = string.Empty;
+        bool started = false;
         try
         {
+            var mode = AppConfig.RecordingMode;
+            int minBuf = AudioRecord.GetMinBufferSize(SampleRate, ChannelIn.Mono, Encoding.Pcm16bit);
+            int bufferSize = Math.Max(minBuf * 2, SampleRate);
+            var preferredIn = AudioDeviceService.FindPreferredInputDevice();
+            bool isBtInput = AudioDeviceService.IsBluetoothInputDevice(preferredIn);
+            if (isBtInput && !await PttConnectionService.StartPttCallAsync(token)) return false;
+            token.ThrowIfCancellationRequested();
+            AudioDeviceService.BeginInputRouting(preferredIn);
+
             bool noiseSuppression = AppConfig.NoiseSuppressionEnabled;
             var audioSource = noiseSuppression ? AudioSource.VoiceCommunication : AudioSource.Mic;
 
@@ -85,105 +94,80 @@ public class NativeRecordingService
             }
 
             if (_audioRecord.State != State.Initialized)
-            {
-                _audioRecord.Release();
-                _audioRecord = null;
-                AudioDeviceService.EndInputRouting();
-                PttConnectionService.EndPttCall();
-                return false;
-            }
+                throw new InvalidOperationException("AudioRecord initialization failed.");
 
-            if (preferredIn != null)
-            {
-                _audioRecord.SetPreferredDevice(preferredIn);
-            }
+            if (preferredIn != null && !_audioRecord.SetPreferredDevice(preferredIn))
+                throw new InvalidOperationException("The selected microphone is unavailable.");
 
             ApplyNoiseSuppression(_audioRecord.AudioSessionId, noiseSuppression);
+
+            NativeAudioService.Instance.StartSilentRecordingKeeper();
+            _audioRecord.StartRecording();
+            await WarmupAndPlayStartToneAsync(preferredIn,
+                mode != "audio_only" && Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu, token);
+            token.ThrowIfCancellationRequested();
+
+            // 開始音が終わるまでは準備中。以前の録音タスクも再利用しない。
+            var recorder = _audioRecord;
+            _recordLoopTask = Task.Run(() => CapturePcmLoop(recorder, token));
+            IsRecording = true;
+            started = true;
+            _ = RunCountdownLoopAsync(token);
+            return true;
         }
+        catch (System.OperationCanceledException) { return false; }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"AudioRecord init failed: {ex.Message}");
-            ReleaseNoiseSuppressor();
-            AudioDeviceService.EndInputRouting();
-            PttConnectionService.EndPttCall();
+            System.Diagnostics.Debug.WriteLine($"StartRecordingAsync failed: {ex.Message}");
             return false;
         }
-
-        // Android 13 (API 33+) かつ文字起こし有効モードの場合は パイプ経由の SpeechRecognizer を起動
-        if (mode != "audio_only" && Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+        finally
         {
-            await StartPipedSpeechRecognizerOnMainThreadAsync();
+            if (!started) ReleaseRecordingResources();
+            IsStarting = false;
+            _recordingLock.Release();
         }
-
-        IsRecording = true;
-        NativeAudioService.Instance.StartSilentRecordingKeeper();
-        _recordCts = new CancellationTokenSource();
-        var token = _recordCts.Token;
-
-        _audioRecord.StartRecording();
-
-        // Bluetooth HFP/SCO 通話モードへのハードウェア切替完了を待ってから開始ビープを鳴らし、
-        // ビープ再生終了直後から本録音を開始することで「音抜け」と「冒頭の頭切れ」を同時に解消する
-        await WarmupAndPlayStartToneAsync(isBtInput, preferredIn, token);
-        if (token.IsCancellationRequested || !IsRecording)
-        {
-            return false;
-        }
-
-        _recordLoopTask = Task.Run(() => CapturePcmLoop(token), token);
-        _ = RunCountdownLoopAsync(token);
-
-        return true;
     }
 
     private async Task WarmupAndPlayStartToneAsync(
-        bool isBtInput,
         AudioDeviceInfo? preferredIn,
+        bool transcribe,
         CancellationToken token)
     {
+        var recorder = _audioRecord!;
         bool draining = true;
-        var drainTask = Task.Run(() =>
+        var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var drainTask = Task.Run(async () =>
         {
-            byte[] discard = new byte[1600]; // 50ms @ 16kHz 16bit mono
-            while (Volatile.Read(ref draining) && !token.IsCancellationRequested && _audioRecord != null)
+            byte[] discard = new byte[1600];
+            try
             {
-                try
+                while (Volatile.Read(ref draining) && !token.IsCancellationRequested)
                 {
-                    int r = _audioRecord.Read(discard, 0, discard.Length);
-                    if (r <= 0) break;
-                }
-                catch
-                {
-                    break;
+                    // 接続待ちのReadで永久に止まらないよう、ノンブロッキングで排出する。
+                    int read = recorder.Read(discard, 0, discard.Length, ReadNonBlocking);
+                    if (read < 0) throw new IOException($"AudioRecord warmup failed: {read}");
+                    if (read > 0 && AudioDeviceService.IsInputRouteReady(preferredIn, recorder.RoutedDevice))
+                        ready.TrySetResult(true);
+                    await Task.Delay(10, token);
                 }
             }
+            catch (System.OperationCanceledException) { }
+            catch (Exception ex) { ready.TrySetException(ex); }
         });
 
         try
         {
-            if (isBtInput)
-            {
-                // AudioRecord.Read() により HAL の SCO 入力が開くのを促しつつ、
-                // Bluetoothイヤフォンの A2DP -> HFP 通話モード切替完了 (約500ms) を待機
-                await Task.Delay(150, token);
-                AudioDeviceService.BeginInputRouting(preferredIn);
-                await Task.Delay(350, token);
-            }
-
-            if (!token.IsCancellationRequested)
-            {
-                await NativeAudioService.Instance.BeepStartAsync();
-            }
+            // 機種ごとの切替時間を許容し、入力経路とPCM取得を確認してから開始音を鳴らす。
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(8), token);
+            if (transcribe) await StartPipedSpeechRecognizerOnMainThreadAsync();
+            token.ThrowIfCancellationRequested();
+            await NativeAudioService.Instance.BeepStartAsync();
         }
-        catch (TaskCanceledException) { }
         finally
         {
             Volatile.Write(ref draining, false);
-            try
-            {
-                await drainTask;
-            }
-            catch { }
+            await drainTask;
         }
     }
 
@@ -258,14 +242,14 @@ public class NativeRecordingService
         return tcs.Task;
     }
 
-    private byte[] CapturePcmLoop(CancellationToken token)
+    private byte[] CapturePcmLoop(AudioRecord recorder, CancellationToken token)
     {
         using var pcmStream = new MemoryStream(SampleRate * 2 * MaxDurationSeconds);
         byte[] buffer = new byte[3200]; // 100ms @ 16kHz 16bit mono
 
-        while (!token.IsCancellationRequested && _audioRecord != null)
+        while (!token.IsCancellationRequested)
         {
-            int read = _audioRecord.Read(buffer, 0, buffer.Length);
+            int read = recorder.Read(buffer, 0, buffer.Length, ReadNonBlocking);
             if (read > 0)
             {
                 pcmStream.Write(buffer, 0, read);
@@ -279,10 +263,12 @@ public class NativeRecordingService
                     // SpeechRecognizer側が先にパイプを閉じた場合は無視して録音は継続
                 }
             }
-            else
+            else if (read < 0)
             {
-                break;
+                if (token.IsCancellationRequested) break;
+                throw new IOException($"AudioRecord capture failed: {read}");
             }
+            else if (token.WaitHandle.WaitOne(10)) break;
         }
 
         return BuildWavBytes(pcmStream.ToArray(), SampleRate);
@@ -314,90 +300,71 @@ public class NativeRecordingService
     /// </summary>
     public async Task<RecordingResult> StopRecordingAsync(bool playEndTone = true)
     {
-        if (!IsRecording)
+        // 準備中の停止はキャンセルとし、本録音が始まるまで待って送信しない。
+        try { _recordCts?.Cancel(); } catch (ObjectDisposedException) { }
+        await _recordingLock.WaitAsync();
+        try
         {
+            if (!IsRecording) return new RecordingResult();
+            IsRecording = false;
             NativeAudioService.Instance.StopSilentRecordingKeeper();
-            return new RecordingResult();
+
+            try { _audioRecord?.Stop(); } catch { }
+            ClosePipe();
+
+            byte[]? wavBytes = null;
+            if (_recordLoopTask != null)
+            {
+                try { wavBytes = await _recordLoopTask; }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Capture failed: {ex.Message}"); }
+            }
+
+            // 通話ルートを閉じる前に終了音を鳴らす。
+            if (playEndTone) await NativeAudioService.Instance.BeepEndAsync();
+
+            string transcript = _latestPartialTranscript;
+            if (_speechResultTcs != null)
+            {
+                try { transcript = await _speechResultTcs.Task.WaitAsync(TimeSpan.FromMilliseconds(1500)); }
+                catch (TimeoutException) { }
+            }
+
+            var mode = AppConfig.RecordingMode;
+            bool includeAudio = mode != "text_only";
+            bool hasAudio = wavBytes is { Length: > 44 };
+            bool hasTranscript = mode != "audio_only" && !string.IsNullOrWhiteSpace(transcript);
+            return new RecordingResult
+            {
+                WavBytes = includeAudio && hasAudio ? wavBytes : null,
+                Transcript = hasTranscript ? transcript : (includeAudio && hasAudio ? "🎤 音声メッセージ" : string.Empty),
+                NeedsTranscription = includeAudio && hasAudio && (mode == "audio_only" || !hasTranscript)
+            };
         }
+        finally
+        {
+            ReleaseRecordingResources();
+            _recordingLock.Release();
+        }
+    }
+
+    public async Task CancelRecordingAsync() => await StopRecordingAsync(playEndTone: false);
+
+    private void ReleaseRecordingResources()
+    {
         IsRecording = false;
         NativeAudioService.Instance.StopSilentRecordingKeeper();
-
-        try
-        {
-            _recordCts?.Cancel();
-        }
-        catch { }
-
-        try
-        {
-            _audioRecord?.Stop();
-        }
-        catch { }
-
-        // パイプ書き込み側を閉じて SpeechRecognizer に発話終了 (EOF) を通知
-        ClosePipe();
-
-        byte[]? wavBytes = null;
-        if (_recordLoopTask != null)
-        {
-            try
-            {
-                wavBytes = await _recordLoopTask;
-            }
-            catch { }
-        }
-
-        try
-        {
-            _audioRecord?.Release();
-            _audioRecord?.Dispose();
-        }
-        catch { }
+        try { _recordCts?.Cancel(); } catch (ObjectDisposedException) { }
+        try { _audioRecord?.Stop(); } catch { }
+        try { _audioRecord?.Release(); _audioRecord?.Dispose(); } catch { }
         _audioRecord = null;
+        _recordLoopTask = null;
+        _recordCts?.Dispose();
+        _recordCts = null;
         ReleaseNoiseSuppressor();
-
-        // Bluetooth HFP通話モードを閉じる前に終了ビープを鳴らすことで、HFP->A2DP切替による終了音の消失を防ぐ
-        if (playEndTone)
-        {
-            await NativeAudioService.Instance.BeepEndAsync();
-        }
-
+        ClosePipe();
+        CleanupSpeechRecognizerOnMainThread();
         AudioDeviceService.EndInputRouting();
         PttConnectionService.EndPttCall();
-
-        string transcript = _latestPartialTranscript;
-        if (_speechResultTcs != null)
-        {
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
-            await using var reg = timeoutCts.Token.Register(() => _speechResultTcs.TrySetResult(_latestPartialTranscript));
-            try
-            {
-                transcript = await _speechResultTcs.Task;
-            }
-            catch { }
-        }
-
-        CleanupSpeechRecognizerOnMainThread();
-
-        var mode = AppConfig.RecordingMode;
-        bool includeAudio = mode != "text_only";
-        bool hasTranscript = !string.IsNullOrWhiteSpace(transcript);
-
-        // DEC-036 準拠:
-        // - audio_only モードは常に needs_transcription = true (サーバー側STT対象)
-        // - both モードは端末側文字起こしが成功していれば false、空だった場合のみ true
-        bool needsTranscription = mode == "audio_only" || (mode == "both" && !hasTranscript);
-
-        var finalText = mode == "audio_only"
-            ? "🎤 音声メッセージ"
-            : (hasTranscript ? transcript : "🎤 音声メッセージ");
-
-        return new RecordingResult
-        {
-            WavBytes = includeAudio ? wavBytes : null,
-            Transcript = finalText,
-            NeedsTranscription = includeAudio && needsTranscription
-        };
     }
 
     private void ApplyNoiseSuppression(int audioSessionId, bool enabled)
@@ -445,16 +412,17 @@ public class NativeRecordingService
 
     private void CleanupSpeechRecognizerOnMainThread()
     {
+        var recognizer = _speechRecognizer;
+        _speechRecognizer = null;
+        _speechResultTcs = null;
         MainThread.BeginInvokeOnMainThread(() =>
         {
             try
             {
-                _speechRecognizer?.Destroy();
-                _speechRecognizer?.Dispose();
+                recognizer?.Destroy();
+                recognizer?.Dispose();
             }
             catch { }
-            _speechRecognizer = null;
-            _speechResultTcs = null;
         });
     }
 

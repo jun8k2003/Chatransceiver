@@ -859,26 +859,32 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        if (NativeRecordingService.Instance.IsRecording) return;
+        if (NativeRecordingService.Instance.IsRecording || NativeRecordingService.Instance.IsStarting) return;
 
         _stoppedRecordingResult = null;
         AudioPlaybackQueue.Instance.Pause();
 
-        RecordingStatusTitleLabel.Text = "🔴 音声録音中...";
-        RecordingTimerLabel.Text = "00:15";
+        RecordingStatusTitleLabel.Text = "🎤 マイク接続準備中... 開始音の後に話してください";
+        RecordingTimerLabel.Text = "--:--";
         RecordingProgressBar.Progress = 1.0;
         TranscriptPreviewLabel.Text = "（発話するとここに文字起こしが表示されます）";
-        ModalStopBtn.IsEnabled = true;
+        ModalStopBtn.IsEnabled = false;
         ModalStopBtn.Text = "⏹️ 停止して確認";
-        ModalSendBtn.IsEnabled = true;
+        ModalSendBtn.IsEnabled = false;
         RecordingModalOverlay.IsVisible = true;
 
         bool ok = await NativeRecordingService.Instance.StartRecordingAsync();
-        if (!ok)
+        if (ok)
+        {
+            RecordingStatusTitleLabel.Text = "🔴 音声録音中...";
+            ModalStopBtn.IsEnabled = true;
+            ModalSendBtn.IsEnabled = true;
+        }
+        else if (RecordingModalOverlay.IsVisible)
         {
             ResetRecordingUi();
             AudioPlaybackQueue.Instance.Resume();
-            await DisplayAlert("マイクエラー", "マイクの初期化に失敗しました。マイク権限が許可されているか確認してください。", "OK");
+            await DisplayAlert("マイクエラー", "録音を開始できませんでした。マイクの接続と権限を確認してください。", "OK");
         }
     }
 
@@ -966,6 +972,10 @@ public partial class MainPage : ContentPage
                     }
                 });
             }
+            else
+            {
+                await DisplayAlert("録音エラー", "録音データを取得できなかったため送信しませんでした。", "OK");
+            }
         }
         catch (Exception ex)
         {
@@ -982,9 +992,10 @@ public partial class MainPage : ContentPage
 
     private async void OnCancelRecordingClicked(object? sender, EventArgs e)
     {
-        if (NativeRecordingService.Instance.IsRecording)
+        RecordingModalOverlay.IsVisible = false;
+        if (NativeRecordingService.Instance.IsRecording || NativeRecordingService.Instance.IsStarting)
         {
-            _ = await NativeRecordingService.Instance.StopRecordingAsync(playEndTone: false);
+            await NativeRecordingService.Instance.CancelRecordingAsync();
         }
         _stoppedRecordingResult = null;
         ResetRecordingUi();

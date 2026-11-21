@@ -3,15 +3,14 @@ using Android.Content;
 using Android.OS;
 using Android.Telecom;
 using Java.Lang;
+using Presentation = Android.Telecom.Presentation;
 
 namespace Chatransceiver.Maui.Platforms.Android.Services;
 
 /// <summary>
-/// PttConnectionService
-/// Bluetoothマイク (HFP/SCO) を使用したPTT録音中、Bluetoothイヤフォン本体は「電話通話中 (HFP)」モードに遷移し、
-/// イヤフォンのボタン押下は AVRCP Play/Pause ではなく HFP の終話/フック信号 (AT+CHUP / AT+CHLD) として送出される。
-/// Android OS は HFP 終話信号を TelecomManager 上のアクティブな Connection にのみ配送するため、
-/// 録音中（最大15秒間）のみ Self-Managed Connection をアクティブ化してイヤフォンボタンによる録音停止を捕捉する。
+/// PTT中だけ自己管理の発信通話を登録し、Bluetoothの終話ボタンを受け取る。
+/// 作成コールバックでは接続を返すだけにし、Telecomからの通知後にActiveへ移す。
+/// https://developer.android.com/reference/android/telecom/ConnectionService
 /// </summary>
 [Service(
     Name = "com.chatransceiver.app.Platforms.Android.Services.PttConnectionService",
@@ -21,204 +20,233 @@ namespace Chatransceiver.Maui.Platforms.Android.Services;
 public class PttConnectionService : ConnectionService
 {
     private const string AccountId = "ChatransceiverPttCall";
+    private const string PttScheme = "chatransceiver-ptt";
     private static readonly object SyncLock = new();
     private static PttConnection? _activeConnection;
     private static TaskCompletionSource<bool>? _connectTcs;
+    private static string? _requestId;
     private static bool _accountRegistered;
-    private static long _callStartedMs;
+    private bool _hasCallFocus;
 
-    private static PhoneAccountHandle GetAccountHandle(Context context)
-    {
-        var component = new ComponentName(context, Class.FromType(typeof(PttConnectionService)));
-        return new PhoneAccountHandle(component, AccountId);
-    }
+    private static PhoneAccountHandle GetAccountHandle(Context context) =>
+        new(new ComponentName(context, Class.FromType(typeof(PttConnectionService))), AccountId);
 
     public static void EnsurePhoneAccountRegistered(Context context)
     {
-        if (!OperatingSystem.IsAndroidVersionAtLeast(26)) return;
         if (_accountRegistered) return;
-
         try
         {
             var tm = (TelecomManager?)context.GetSystemService(Context.TelecomService);
             if (tm == null) return;
-
-            var handle = GetAccountHandle(context);
-            var builder = PhoneAccount.InvokeBuilder(handle, "Chatransceiver PTT")
-                ?.SetCapabilities((int)PhoneAccountCapability.SelfManaged);
-            var account = builder?.Build();
-            if (account != null)
-            {
-                tm.RegisterPhoneAccount(account);
-                _accountRegistered = true;
-            }
+            var account = PhoneAccount.InvokeBuilder(GetAccountHandle(context), "Chatransceiver PTT")
+                ?.SetCapabilities((int)PhoneAccountCapability.SelfManaged)
+                ?.SetSupportedUriSchemes(new[] { PttScheme })
+                ?.Build();
+            if (account == null) return;
+            tm.RegisterPhoneAccount(account);
+            _accountRegistered = true;
         }
         catch (System.Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"EnsurePhoneAccountRegistered error: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"RegisterPttPhoneAccount failed: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Bluetoothマイク録音開始時に Self-Managed 通話セッションを開始し、HFP終話ボタンを捕捉可能にする
-    /// </summary>
-    public static async Task StartPttCallAsync()
+    public static async Task<bool> StartPttCallAsync(CancellationToken token = default)
     {
-        if (!OperatingSystem.IsAndroidVersionAtLeast(26)) return;
-
-        try
-        {
-            var context = global::Android.App.Application.Context;
-            EnsurePhoneAccountRegistered(context);
-
-            var tm = (TelecomManager?)context.GetSystemService(Context.TelecomService);
-            if (tm == null) return;
-
-            TaskCompletionSource<bool> tcs;
-            lock (SyncLock)
-            {
-                CleanupActiveConnectionLocked();
-                tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                _connectTcs = tcs;
-                _callStartedMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            }
-
-            var handle = GetAccountHandle(context);
-            var extras = new Bundle();
-            tm.AddNewIncomingCall(handle, extras);
-
-            await Task.WhenAny(tcs.Task, Task.Delay(400));
-        }
-        catch (System.Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"StartPttCallAsync error: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// 録音終了時に Self-Managed 通話セッションを終了・破棄する
-    /// </summary>
-    public static void EndPttCall()
-    {
+        var requestId = Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (SyncLock)
         {
             CleanupActiveConnectionLocked();
+            _requestId = requestId;
+            _connectTcs = tcs;
         }
+
+        try
+        {
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                token.ThrowIfCancellationRequested();
+                var context = global::Android.App.Application.Context;
+                EnsurePhoneAccountRegistered(context);
+                if (!_accountRegistered) throw new InvalidOperationException("PTT phone account registration failed.");
+                var tm = (TelecomManager?)context.GetSystemService(Context.TelecomService)
+                    ?? throw new InvalidOperationException("Telecom service is unavailable.");
+                var extras = new Bundle();
+                extras.PutParcelable(TelecomManager.ExtraPhoneAccountHandle, GetAccountHandle(context));
+                // 専用URI + 自己管理PhoneAccountなので、電話番号への発信は行わない。
+                tm.PlaceCall(global::Android.Net.Uri.FromParts(PttScheme, requestId, null), extras);
+            });
+
+            if (await tcs.Task.WaitAsync(TimeSpan.FromSeconds(8), token)) return true;
+        }
+        catch (System.Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"StartPttCallAsync failed: {ex.Message}");
+        }
+
+        lock (SyncLock)
+        {
+            if (_requestId == requestId) CleanupActiveConnectionLocked();
+        }
+        return false;
+    }
+
+    public static void EndPttCall()
+    {
+        lock (SyncLock) CleanupActiveConnectionLocked();
     }
 
     private static void CleanupActiveConnectionLocked()
     {
-        var conn = _activeConnection;
+        var connection = _activeConnection;
         _activeConnection = null;
+        _requestId = null;
         _connectTcs?.TrySetResult(false);
         _connectTcs = null;
-
-        if (conn != null)
-        {
-            try
-            {
-                conn.MarkLocalClosing();
-                conn.SetDisconnected(new DisconnectCause(Causes.Local));
-                conn.Destroy();
-            }
-            catch { }
-        }
+        connection?.CloseLocally();
     }
 
     public override Connection OnCreateIncomingConnection(
-        PhoneAccountHandle? connectionManagerPhoneAccount,
-        ConnectionRequest? request)
-    {
-        return CreateAndActivatePttConnection();
-    }
+        PhoneAccountHandle? connectionManagerPhoneAccount, ConnectionRequest? request) =>
+        Connection.CreateFailedConnection(new DisconnectCause(Causes.Rejected))!;
 
     public override Connection OnCreateOutgoingConnection(
-        PhoneAccountHandle? connectionManagerPhoneAccount,
-        ConnectionRequest? request)
+        PhoneAccountHandle? connectionManagerPhoneAccount, ConnectionRequest? request)
     {
-        return CreateAndActivatePttConnection();
+        lock (SyncLock)
+        {
+            // 中止・タイムアウト後に届いた作成通知を、新しい録音へ結び付けない。
+            if (_connectTcs == null || request?.Address?.Scheme != PttScheme ||
+                request.Address.SchemeSpecificPart != _requestId || _activeConnection != null)
+                return Connection.CreateFailedConnection(new DisconnectCause(Causes.Canceled))!;
+
+            var connection = new PttConnection(this)
+            {
+                ConnectionProperties = ConnectionProperties.SelfManaged,
+                AudioModeIsVoip = true
+            };
+            connection.SetAddress(request.Address, Presentation.Allowed);
+            connection.SetCallerDisplayName("Chatransceiver PTT", Presentation.Allowed);
+            connection.SetDialing();
+            _activeConnection = connection;
+            // SetActive、ルート操作、完了通知はここでは実行しない。
+            return connection;
+        }
     }
 
-    private static Connection CreateAndActivatePttConnection()
+    public override void OnCreateOutgoingConnectionFailed(
+        PhoneAccountHandle? connectionManagerPhoneAccount, ConnectionRequest? request)
     {
-        var conn = new PttConnection();
-        if (OperatingSystem.IsAndroidVersionAtLeast(26))
+        lock (SyncLock)
         {
-            conn.ConnectionProperties = ConnectionProperties.SelfManaged;
+            if (request?.Address?.SchemeSpecificPart == _requestId)
+                CleanupActiveConnectionLocked();
         }
-        conn.ConnectionCapabilities = ConnectionCapability.Hold | ConnectionCapability.SupportHold;
-        conn.SetInitializing();
-        conn.SetActive();
+    }
 
+    public override void OnConnectionServiceFocusGained()
+    {
+        lock (SyncLock)
+        {
+            _hasCallFocus = true;
+            ActivateRegisteredConnectionLocked(_activeConnection);
+        }
+    }
+
+    public override async void OnConnectionServiceFocusLost()
+    {
+        lock (SyncLock) _hasCallFocus = false;
         try
         {
-            if (OperatingSystem.IsAndroidVersionAtLeast(26))
-            {
-#pragma warning disable CA1422
-                conn.SetAudioRoute(CallAudioRoute.Bluetooth);
-#pragma warning restore CA1422
-            }
-            var preferredIn = AudioDeviceService.FindPreferredInputDevice();
-            if (preferredIn != null)
-            {
-                AudioDeviceService.BeginInputRouting(preferredIn);
-            }
+            // 他の電話等にフォーカスを譲る場合は送信せず、マイクを解放する。
+            await NativeRecordingService.Instance.CancelRecordingAsync();
         }
-        catch { }
-
-        lock (SyncLock)
+        catch (System.Exception ex)
         {
-            _activeConnection = conn;
-            _callStartedMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            _connectTcs?.TrySetResult(true);
+            System.Diagnostics.Debug.WriteLine($"ReleasePttCallResources failed: {ex.Message}");
         }
-
-        return conn;
+        finally
+        {
+            if (OperatingSystem.IsAndroidVersionAtLeast(28)) ConnectionServiceFocusReleased();
+        }
     }
 
-    internal static void OnHeadsetCallButtonAction(PttConnection source)
+    private static void ActivateRegisteredConnectionLocked(PttConnection? connection)
     {
-        long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if (connection == null || !ReferenceEquals(connection, _activeConnection) ||
+            connection.IsClosing || !connection.RegistrationConfirmed ||
+            (OperatingSystem.IsAndroidVersionAtLeast(28) && !connection.HasCallFocus) ||
+            _connectTcs == null || _connectTcs.Task.IsCompleted) return;
+
+        // 対象Connectionの音声経路通知で登録を確認し、API 28以降はFocus取得も待つ。
+        connection.SetActive();
+        _connectTcs.TrySetResult(true);
+    }
+
+    private static void OnHeadsetDisconnect(PttConnection connection, bool sendRecording)
+    {
         lock (SyncLock)
         {
-            // 接続直後（HFP切替・開始トーン再生中）の初期状態遷移ノイズを無視
-            if (now - _callStartedMs < 500) return;
-            source.MarkLocalClosing();
+            if (!ReferenceEquals(connection, _activeConnection) || connection.IsClosing) return;
+            connection.IsClosing = true;
+            _connectTcs?.TrySetResult(false);
         }
 
-        if (NativeRecordingService.Instance.IsRecording)
-        {
-            // StopRecordingAsync 内で終了ビープ (BeepEndAsync) を再生した後に EndPttCall() で切断する
+        if (sendRecording && NativeRecordingService.Instance.IsRecording)
             TransceiverForegroundService.TryHandleMediaButtonToggle();
-        }
         else
-        {
-            EndPttCall();
-        }
+            _ = NativeRecordingService.Instance.CancelRecordingAsync();
     }
 
     internal sealed class PttConnection : Connection
     {
-        private bool _isLocalClosing;
+        private readonly PttConnectionService _service;
+        public PttConnection(PttConnectionService service) => _service = service;
+        public bool HasCallFocus => _service._hasCallFocus;
+        public bool IsClosing { get; set; }
+        public bool RegistrationConfirmed { get; private set; }
 
-        public void MarkLocalClosing() => _isLocalClosing = true;
-
-        private void HandleRemoteButtonIfNotClosing()
+        public void CloseLocally()
         {
-            if (_isLocalClosing) return;
-            OnHeadsetCallButtonAction(this);
+            IsClosing = true;
+            try
+            {
+                SetDisconnected(new DisconnectCause(Causes.Local));
+                Destroy();
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ClosePttConnection error: {ex.Message}");
+            }
         }
 
-        public override void OnDisconnect() => HandleRemoteButtonIfNotClosing();
+#pragma warning disable CA1422 // API 26-33の公開コールバックとして必要
+        public override void OnCallAudioStateChanged(CallAudioState? state)
+        {
+            ConfirmRegistration();
+        }
+#pragma warning restore CA1422
 
-        public override void OnHold() => HandleRemoteButtonIfNotClosing();
+        public override void OnCallEndpointChanged(CallEndpoint? endpoint)
+        {
+            ConfirmRegistration();
+        }
 
-        public override void OnUnhold() => HandleRemoteButtonIfNotClosing();
+        private void ConfirmRegistration()
+        {
+            lock (SyncLock)
+            {
+                RegistrationConfirmed = true;
+                ActivateRegisteredConnectionLocked(this);
+            }
+        }
 
-        public override void OnAnswer() => HandleRemoteButtonIfNotClosing();
-
-        public override void OnReject() => HandleRemoteButtonIfNotClosing();
-
-        public override void OnAbort() => HandleRemoteButtonIfNotClosing();
+        // 応答は録音停止として扱わない。PTTは発信通話なので着信応答は不要。
+        public override void OnAnswer() { }
+        public override void OnDisconnect() => OnHeadsetDisconnect(this, sendRecording: true);
+        public override void OnAbort() => OnHeadsetDisconnect(this, sendRecording: false);
+        public override void OnReject() => OnHeadsetDisconnect(this, sendRecording: false);
     }
 }

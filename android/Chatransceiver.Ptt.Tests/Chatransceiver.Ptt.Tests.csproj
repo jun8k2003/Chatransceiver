@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Chatransceiver.Maui/Platforms/Android/Services/PttConnectionService.cs" Link="PttConnectionService.cs" />
+    <Compile Include="../Chatransceiver.Maui/Platforms/Android/Services/NativeRecordingService.cs" Link="NativeRecordingService.cs" />
+    <Compile Include="../Chatransceiver.Maui/Platforms/Android/Services/AudioDeviceService.cs" Link="AudioDeviceService.cs" />
+  </ItemGroup>
+</Project>
